@@ -1,12 +1,13 @@
 /* MAGIC HS - vista Gestione (amministratori): utenti e richieste, regole di registrazione, piani e pagamenti,
-   dati TARIC, uso dell'IA, registro degli eventi, posta non inviata. */
+   dati TARIC, uso dell'IA, registro degli eventi, posta non inviata.
+   Nel programma sul PC (chi pubblica per i colleghi): cartella condivisa, intelligenza artificiale, dati TARIC, registro. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
   var el = document.getElementById('view-gestione');
   var vista = T.viste = T.viste || {};
   var st = { sotto: 'utenti', riep: null, utenti: [], imp: null, dati: null, uso: [], eventi: [], posta: null, aperto: null,
-             link: {}, msg: {}, registro: null, timer: null, pag: null };
+             link: {}, msg: {}, registro: null, timer: null, pag: null, loc: null, cambiaChiave: false };
 
   var STATI = { attivo: 'attivo', in_attesa: 'in attesa', email_da_confermare: 'email da confermare', sospeso: 'sospeso', rifiutato: 'rifiutato' };
   var ESITI = { ok: 'riuscito', errore: 'errore', non_disponibile: 'non ancora disponibile', in_corso: 'in corso', interrotto: 'interrotto' };
@@ -20,8 +21,10 @@
     admin_da_riga_di_comando: 'Amministratore da riga di comando', pulizia: 'Pulizia automatica', dati_ok: 'Dati TARIC installati',
     dati_errore: 'Aggiornamento dati non riuscito', dati_non_disponibile: 'Estrazione non ancora disponibile', dati_versione_attivata: 'Versione dati cambiata',
     backup_creato: 'Backup creato', backup_scaricato: 'Backup scaricato', pagamento_avviato: 'Pagina di pagamento aperta',
-    pro_pass: 'Pro: pass pagato', pro_abbonamento: 'Pro: abbonamento', pro_manuale: 'Pro concesso a mano'
+    pro_pass: 'Pro: pass pagato', pro_abbonamento: 'Pro: abbonamento', pro_manuale: 'Pro concesso a mano',
+    impostazioni_ia: 'Intelligenza artificiale cambiata', programma_pubblicato: 'Nuova versione del programma pubblicata'
   };
+  var FORNITORI = [['', 'Nessuno: solo consultazione'], ['openai', 'Azure OpenAI o altro servizio compatibile OpenAI'], ['gemini', 'Google Gemini'], ['anthropic', 'Anthropic Claude']];
   var MOVIMENTI = { pass: 'Pass', abbonamento: 'Abbonamento: prima fattura', rinnovo: 'Rinnovo', stato_abbonamento: 'Abbonamento', in_attesa: 'Pagamento in attesa' };
   var PIANI = { giorno: '1 giorno', settimana: '1 settimana', mese: 'mensile', anno: 'annuale' };
   function euro(c) { return (c / 100).toFixed(2).replace('.', ',') + ' €'; }
@@ -32,10 +35,15 @@
   function msg(dove, testo, ok) { st.msg[dove] = testo ? { testo: testo, ok: !!ok } : null; }
   function errore(e) { return (e && e.errore) || 'Operazione non riuscita.'; }
 
-  vista.gestione = { mostra: function () { disegna(); carica(); } };
+  /* programma sul PC: niente utenti, registrazioni, pagamenti e posta; ci sono la cartella condivisa e l'IA */
+  function locale() { var u = io(); return !!(u && u.locale); }
+  var SCHEDE_LOCALI = ['condivisa', 'ia', 'dati', 'registro'];
+
+  vista.gestione = { mostra: function () { if (locale() && SCHEDE_LOCALI.indexOf(st.sotto) < 0) st.sotto = 'condivisa'; disegna(); carica(); } };
 
   function carica() {
     var chiamate = [T.api('GET', '/api/admin/riepilogo').then(function (r) { st.riep = r; })];
+    if (locale() && (st.sotto === 'condivisa' || st.sotto === 'ia' || st.sotto === 'dati')) chiamate.push(T.api('GET', '/api/admin/locale').then(function (r) { st.loc = r; }));
     if (st.sotto === 'utenti') chiamate.push(T.api('GET', '/api/admin/utenti').then(function (r) { st.utenti = r.utenti; }));
     if (st.sotto === 'regole') chiamate.push(T.api('GET', '/api/admin/impostazioni').then(function (r) { st.imp = r; }));
     if (st.sotto === 'pagamenti') chiamate.push(T.api('GET', '/api/admin/pagamenti').then(function (r) { st.pag = r; }));
@@ -50,18 +58,27 @@
   function disegna() {
     var r = st.riep, h = '';
     var attesa = r ? (r.utenti.in_attesa || 0) : 0;
-    h += '<div class="sotto" role="tablist">' + [['utenti', 'Utenti' + (attesa ? '<span class="conta">' + attesa + '</span>' : ''), 'utenti'], ['regole', 'Regole di registrazione', 'regole'],
-      ['pagamenti', 'Piani e pagamenti', 'timbro'], ['dati', 'Dati TARIC', 'database'], ['uso', 'Uso dell\'IA', 'grafico'], ['registro', 'Registro', 'registro'], ['posta', 'Posta', 'posta']].map(function (x) {
+    var schede = locale() ? [['condivisa', 'Cartella condivisa', 'cartella'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['registro', 'Registro', 'registro']]
+      : [['utenti', 'Utenti' + (attesa ? '<span class="conta">' + attesa + '</span>' : ''), 'utenti'], ['regole', 'Regole di registrazione', 'regole'],
+        ['pagamenti', 'Piani e pagamenti', 'timbro'], ['dati', 'Dati TARIC', 'database'], ['uso', 'Uso dell\'IA', 'grafico'], ['registro', 'Registro', 'registro'], ['posta', 'Posta', 'posta']];
+    h += '<div class="sotto" role="tablist">' + schede.map(function (x) {
       return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
     if (r) h += avvisi(r);
-    h += { utenti: utenti, regole: regole, pagamenti: pagamenti, dati: dati, uso: uso, registro: registro, posta: posta }[st.sotto]();
+    h += { utenti: utenti, regole: regole, pagamenti: pagamenti, dati: dati, uso: uso, registro: registro, posta: posta, condivisa: condivisa, ia: iaLocale }[st.sotto]();
     el.innerHTML = h;
     pianificaRinfresco();
   }
 
   function avvisi(r) {
     var a = [];
+    if (locale()) {
+      if (st.loc && !st.loc.raggiungibile) a.push('Non trovo la cartella condivisa: controlla che OneDrive sia attivo e sincronizzato.');
+      else if (st.loc && !st.loc.editore) a.push('Da questo PC non puoi scrivere nella cartella condivisa, quindi non puoi pubblicare.');
+      if (!r.ia && st.sotto !== 'ia') a.push('La classificazione assistita è spenta per tutti: scegli un servizio nella scheda Intelligenza artificiale.');
+      if (!r.dati) a.push('Non ci sono ancora dati TARIC: vai su Dati TARIC.');
+      return a.length ? '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Da sistemare</div>' + a.map(function (t) { return '<p class="avviso">' + esc(t) + '</p>'; }).join('') + '</div></div>' : '';
+    }
     if (!r.ia) a.push('La classificazione assistita è spenta: imposta GEMINI_API_KEY (oppure ANTHROPIC_API_KEY o un servizio compatibile OpenAI) nella configurazione del server e riavvialo.');
     if (!r.posta) a.push('La posta non è configurata: le email (conferme, avvisi, link) restano nella scheda Posta e le nuove registrazioni aspettano sempre la tua approvazione, perché l\'indirizzo non si può verificare.');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC installati: vai su Dati TARIC.');
@@ -166,7 +183,10 @@
       (att.avvisi && att.avvisi.length ? '<p class="avviso">' + esc(att.avvisi.join(' · ')) + '</p>' : '');
     else h += '<p class="avviso">Nessun dato installato.</p>';
     if (d.in_corso) h += '<p class="esito-ok">Aggiornamento di ' + esc(d.in_corso.mese) + ' in corso: ' + esc(d.in_corso.fase) + '…</p>';
-    h += '<p class="nota">' + (d.automatico ? 'Aggiornamento automatico attivo: dal giorno 1 a ogni inizio mese il server controlla la fonte e installa la nuova estrazione dopo i controlli.' : 'Aggiornamento automatico spento (TARIC_AGGIORNAMENTO_AUTOMATICO).') +
+    if (locale() && st.loc) h += '<p class="nota">Pubblicati per i colleghi nella cartella condivisa: <b>' + esc(st.loc.dati.pubblicati ? st.loc.dati.pubblicati.split('-').reverse().join('/') : 'nessuno') + '</b>.</p>';
+    if (locale()) h += '<p class="nota">A ogni inizio mese, quando MAGIC HS è aperto su questo PC, scarica la nuova estrazione dalla fonte, la controlla e la pubblica da solo nella cartella condivisa; i colleghi la ricevono da OneDrive.' +
+      (d.prossimo ? ' Prossimo tentativo per ' + esc(d.prossimo) + ' entro mezz\'ora.' : '') + '</p></div>';
+    else h += '<p class="nota">' + (d.automatico ? 'Aggiornamento automatico attivo: dal giorno 1 a ogni inizio mese il server controlla la fonte e installa la nuova estrazione dopo i controlli.' : 'Aggiornamento automatico spento (TARIC_AGGIORNAMENTO_AUTOMATICO).') +
       (d.prossimo ? ' Prossimo tentativo per ' + esc(d.prossimo) + ' entro mezz\'ora.' : '') + '</p></div>';
     h += '<div class="box s4"><div class="lab">' + T.icona('aggiorna') + 'Aggiorna adesso</div><form class="modulo" data-g="aggiorna"><label>Mese (vuoto = corrente)<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Scarica e installa</button></div>' + riga('aggiorna') + '</form></div></div>';
@@ -190,6 +210,7 @@
       }).join('') + '</tbody></table></div>' + (d.ultimi.length ? '' : '<p class="vuoto">Nessun aggiornamento ancora.</p>') +
       (st.registro ? '<div class="lab" style="margin-top:8px">' + esc(st.registro.titolo) + '<span class="dx"><button class="link" type="button" data-g="chiudi-registro">chiudi</button></span></div><pre class="registro">' + esc(st.registro.testo) + '</pre>' : '') + '</div></div>';
 
+    if (locale()) return h;
     var bk = d.backup || [];
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scarica') + 'Backup del database</div><p class="nota">Il backup contiene utenti, password (cifrate), storico, preferiti, regole e registro; i dati TARIC non servono perché si riscaricano. ' +
       (d.backup_copie ? 'Il server ne fa uno da solo ogni giorno e tiene gli ultimi ' + d.backup_copie + '.' : 'Il backup automatico è spento (TARIC_BACKUP_COPIE=0).') +
@@ -204,6 +225,56 @@
   }
 
   function peso(n) { return n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+
+  /* ---------- programma sul PC: cartella condivisa ---------- */
+  function data(v) { return v ? v.split('-').reverse().join('/') : 'nessuno'; }
+  function condivisa() {
+    var L = st.loc;
+    if (!L) return '<p class="vuoto">Carico…</p>';
+    var h = '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('cartella') + 'Cartella condivisa</div>' +
+      '<p class="cosa percorso">' + esc(L.condivisa) + '</p>' +
+      '<p class="nota">' + (L.editore ? 'Da questo PC puoi pubblicare: quello che metti qui (nuove versioni del programma, dati del mese, intelligenza artificiale) arriva ai colleghi tramite OneDrive.' :
+        'Da questo PC la cartella è in sola lettura.') + '</p>' +
+      '<table class="tab compatta"><thead><tr><th></th><th>Su questo PC</th><th>Pubblicato per tutti</th></tr></thead><tbody>' +
+      '<tr><td>Programma</td><td data-l="Su questo PC">' + esc(L.programma.in_uso) + '</td><td data-l="Per tutti">' + esc(L.programma.pubblicato || 'nessuno') + '</td></tr>' +
+      '<tr><td>Dati TARIC</td><td data-l="Su questo PC">' + esc(data(L.dati.in_uso)) + '</td><td data-l="Per tutti">' + esc(data(L.dati.pubblicati)) + '</td></tr></tbody></table></div>';
+    h += '<div class="box s4"><div class="lab">' + T.icona('utenti') + 'Aggiungere un collega</div><ol class="passi">' +
+      '<li>In OneDrive condividi la cartella con il collega, con il solo permesso di visualizzazione.</li>' +
+      '<li>Il collega apre la cartella condivisa sul sito di OneDrive e sceglie «Aggiungi collegamento a I miei file».</li>' +
+      '<li>Sul suo PC fa doppio clic su <b>Avvia MAGIC HS</b> nella cartella (la prima volta ci vuole un minuto). Per comodità può creare un collegamento sul desktop.</li></ol></div></div>';
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Nuova versione del programma</div>' +
+      '<p class="nota">Scarica il file <b>magic-hs-windows-….zip</b> dalla pagina delle versioni di MAGIC HS su GitHub e caricalo qui: va nella cartella condivisa e i colleghi la usano dalla prossima volta che aprono MAGIC HS. Su questo PC chiudi e riapri MAGIC HS.</p>' +
+      '<form class="modulo" data-g="programma"><label>Pacchetto .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
+      '<div class="fila"><button class="btn pri" type="submit"' + (L.editore ? '' : ' disabled') + '>' + T.icona('carica') + 'Pubblica per tutti</button></div>' + riga('programma') + '</form></div></div>';
+    return h;
+  }
+
+  /* ---------- programma sul PC: intelligenza artificiale per tutti ---------- */
+  function iaLocale() {
+    var L = st.loc;
+    if (!L) return '<p class="vuoto">Carico…</p>';
+    var ia = L.ia, f = ia.fornitore;
+    var h = '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('scintille') + 'Intelligenza artificiale per tutti' +
+      '<span class="dx"><span class="st ' + (L.attiva ? 'ok' : 'sospeso') + '">' + (L.attiva ? 'attiva' : 'spenta') + '</span></span></div>' +
+      '<form class="modulo" data-g="ia-locale">' +
+      '<label>Servizio<select class="campo" name="fornitore" data-g="fornitore">' + FORNITORI.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === f ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>';
+    if (f) {
+      if (f === 'openai') h += '<label>Indirizzo del servizio<input class="campo" name="url" value="' + esc(ia.url) + '" placeholder="https://nome-risorsa.openai.azure.com/openai/v1" required></label>';
+      h += '<div class="due"><label>Modello' + (f === 'openai' ? ' (per Azure: nome della distribuzione)' : ' (vuoto = predefinito)') + '<input class="campo" name="modello" value="' + esc(ia.modello) + '"' + (f === 'openai' ? ' required' : '') + '></label>' +
+        '<label>Modello rapido (vuoto = lo stesso)<input class="campo" name="modello_rapido" value="' + esc(ia.modello_rapido) + '"></label></div>';
+      if (ia.chiave && !st.cambiaChiave) h += '<div class="fila"><span class="nota">Chiave salvata: ' + esc(ia.chiave) + '</span><button class="btn sm" type="button" data-g="cambia-chiave">Cambia chiave</button></div>';
+      else h += '<label>Chiave del servizio<input class="campo" type="password" name="chiave" autocomplete="off"' + (f === 'openai' ? '' : ' required') + '></label>';
+    }
+    h += '<label>Richieste all\'IA al mese per persona (vuoto = senza limite)<input class="campo" type="number" min="0" max="100000" name="quota" value="' + (L.quota === null ? '' : esc(L.quota)) + '"></label>' +
+      '<div class="fila"><button class="btn pri" type="submit">Salva per tutti</button>' + (L.attiva ? '<button class="btn" type="button" data-g="prova-ia">Prova</button>' : '') + '</div>' + riga('ia') +
+      (L.aggiornate ? '<p class="nota">Ultima modifica: ' + esc(T.dataOra(L.aggiornate)) + (L.da ? ', ' + esc(L.da) : '') + '.</p>' : '') + '</form></div>';
+    h += '<div class="box s4"><div class="lab">' + T.icona('info') + 'Da sapere</div>' +
+      '<p class="nota">Le impostazioni vanno nella cartella condivisa e valgono per tutti i colleghi. <b>La chiave è leggibile da chi ha accesso alla cartella</b>: usa una chiave dedicata a MAGIC HS e imposta un tetto di spesa sul servizio.</p>' +
+      '<p class="nota">Con <b>Azure OpenAI</b> dell\'azienda: indirizzo https://&lt;risorsa&gt;.openai.azure.com/openai/v1, chiave della risorsa e nome della distribuzione come modello.</p>' +
+      '<p class="nota"><b>Copilot di Microsoft 365</b> non si può collegare direttamente: per i programmi serve la licenza Microsoft 365 Copilot per ogni persona e una registrazione fatta dall\'IT.</p>' +
+      '<p class="nota">Senza servizio IA MAGIC HS resta utilizzabile: nomenclatura, misure, ricerca per codice, storico e preferiti.</p></div></div>';
+    return h;
+  }
 
   /* ---------- uso dell'IA ---------- */
   function uso() {
@@ -337,10 +408,37 @@
     } else if (g === 'aggiorna') {
       T.api('POST', '/api/admin/dati/aggiorna', { mese: String(d.get('mese') || '').trim() })
         .then(function (r) { msg('aggiorna', 'Aggiornamento di ' + r.mese + ' avviato: segui l\'avanzamento qui sopra.', true); }, function (e) { msg('aggiorna', errore(e)); }).then(carica);
+    } else if (g === 'ia-locale') {
+      var qq = String(d.get('quota') || '').trim(), corpo2 = {
+        fornitore: String(d.get('fornitore') || ''), url: String(d.get('url') || '').trim(), modello: String(d.get('modello') || '').trim(),
+        modello_rapido: String(d.get('modello_rapido') || '').trim(), quota: qq === '' ? null : parseInt(qq, 10)
+      };
+      if (d.has('chiave')) corpo2.chiave = String(d.get('chiave') || '');
+      T.api('PUT', '/api/admin/locale/ia', corpo2).then(function (r) {
+        st.cambiaChiave = false;
+        msg('ia', r.attiva ? 'Salvato per tutti: ' + r.ia_nome + '. Premi Prova per controllare che risponda.' : 'Salvato per tutti: classificazione assistita spenta.', true);
+        return app().aggiornaIo();
+      }, function (e) { msg('ia', errore(e)); }).then(carica);
+    } else if (g === 'programma') {
+      msg('programma', 'Caricamento in corso…', true); disegna();
+      T.api('POST', '/api/admin/locale/programma', d).then(function (r) { msg('programma', 'Versione ' + r.versione + ' pubblicata: i colleghi la useranno dalla prossima apertura. Su questo PC chiudi e riapri MAGIC HS.', true); },
+        function (e) { msg('programma', errore(e)); }).then(carica);
     } else if (g === 'carica') {
       msg('carica', 'Caricamento in corso…', true); disegna();
       T.api('POST', '/api/admin/dati/carica', d).then(function (r) { msg('carica', 'Archivio caricato: installazione di ' + r.mese + ' avviata.', true); },
         function (e) { msg('carica', errore(e)); }).then(carica);
+    }
+  });
+
+  el.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (t.getAttribute('data-g') === 'fornitore' && st.loc) {      // i campi dipendono dal servizio scelto
+      var f = t.form, q = f && f.elements.quota ? f.elements.quota.value : '';
+      var sal = st.loc.salvata || (st.loc.salvata = JSON.parse(JSON.stringify(st.loc.ia)));
+      st.loc.ia = t.value === sal.fornitore ? JSON.parse(JSON.stringify(sal)) : { fornitore: t.value, url: '', modello: '', modello_rapido: '', chiave: '' };
+      st.cambiaChiave = false; disegna();
+      var f2 = el.querySelector('form[data-g="ia-locale"]');
+      if (f2 && f2.elements.quota) f2.elements.quota.value = q;
     }
   });
 
@@ -349,6 +447,12 @@
     if (!b || b.tagName === 'FORM') return;
     var g = b.getAttribute('data-g'), id = b.getAttribute('data-id'), v = b.getAttribute('data-v');
     if (g === 'sotto') { st.sotto = v; st.registro = null; disegna(); carica(); }
+    else if (g === 'cambia-chiave') { st.cambiaChiave = true; disegna(); }
+    else if (g === 'prova-ia') {
+      b.disabled = true; msg('ia', 'Provo il servizio…', true); disegna();
+      T.api('POST', '/api/admin/locale/ia/prova').then(function (r) { msg('ia', 'Il servizio risponde (' + r.modello + ', ' + String(r.secondi).replace('.', ',') + ' secondi).', true); },
+        function (e) { msg('ia', errore(e)); }).then(disegna);
+    }
     else if (g === 'backup') {
       b.disabled = true;
       T.api('POST', '/api/admin/backup').then(function () { msg('backup', 'Backup creato: lo trovi qui sotto.', true); }, function (e) { msg('backup', errore(e)); }).then(carica);

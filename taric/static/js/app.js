@@ -255,12 +255,15 @@ function creaIA() {
   };
 }
 function impostaIA() {
-  var ia = state.utente && state.utente.ia;
+  var ia = state.utente && state.utente.ia, loc = state.utente && state.utente.locale;
+  var chi = loc ? 'a chi gestisce MAGIC HS' : 'all\'amministratore';
   sampleFn = null; state.ai = 'no';
-  if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva su questo server (manca la chiave del servizio di intelligenza artificiale). Puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
-  else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi all\'amministratore. Puoi comunque aprire un codice scrivendone le cifre.';
+  if (!ia || !ia.configurata) state.aiMotivo = loc
+    ? 'La classificazione assistita non è attiva: ' + (loc.editore ? 'scegli un servizio di intelligenza artificiale in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio di intelligenza artificiale.') + ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.'
+    : 'La classificazione assistita non è attiva su questo server (manca la chiave del servizio di intelligenza artificiale). Puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
+  else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi ' + chi + '. Puoi comunque aprire un codice scrivendone le cifre.';
   else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' richieste all\'IA di questo mese. ' +
-    (state.utente.piano && state.utente.piano.pagamenti ? 'Con il piano Pro sono illimitate: lo attivi da Profilo. ' : 'Per averne altre chiedi all\'amministratore. ') +
+    (state.utente.piano && state.utente.piano.pagamenti ? 'Con il piano Pro sono illimitate: lo attivi da Profilo. ' : 'Per averne altre chiedi ' + chi + '. ') +
     'Nomenclatura e misure restano consultabili.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
 }
@@ -1244,15 +1247,44 @@ document.addEventListener('taric:tema', function (ev) {
 });
 
 $('#esci').addEventListener('click', function () {
+  if (state.utente && state.utente.locale) {
+    T.api('POST', '/api/locale/chiudi', null, { resta: true }).then(function () { chiuso(false); }, function () { chiuso(true); });
+    return;
+  }
   function via() { location.href = '/accedi'; }
   T.api('POST', '/api/esci', null, { resta: true }).then(via, via);
 });
+
+/* programma sul PC: il server si chiude da solo quando non si usa; la pagina lo tiene vivo e avvisa se non c'è più */
+function chiuso(daSolo) {
+  if (state.chiuso) return;
+  state.chiuso = true;
+  if (vivoT) { clearInterval(vivoT); vivoT = null; }
+  $('main').innerHTML = '<div class="foglio"><div class="box chiuso" role="status"><div class="lab">' + T.icona('spegni') + 'MAGIC HS è chiuso</div>' +
+    '<p class="cosa">' + (daSolo ? 'Il programma si è chiuso perché non lo usavi da un po\' o perché è arrivata una nuova versione.' : 'Puoi chiudere questa scheda del browser.') + '</p>' +
+    '<p class="nota">Per riaprirlo fai doppio clic su <b>Avvia MAGIC HS</b>, nella cartella condivisa di OneDrive o sul desktop. Storico e preferiti restano salvati su questo computer.</p></div></div>';
+  ['#tab-classifica', '#tab-nomenclatura', '#tab-profilo', '#tab-gestione', '#esci'].forEach(function (s) { var e = $(s); if (e) e.hidden = true; });
+}
+var vivoT = null;
+function tieniVivo() {
+  function ping() {
+    if (state.chiuso) return;
+    fetch('/api/locale/ping', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { if (!r.ok) throw r; }).catch(function () { chiuso(true); });
+  }
+  vivoT = setInterval(ping, 120000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') ping(); });
+}
 
 T.api('GET', '/api/io').then(function (u) {
   state.utente = u;
   $('#chi-nome').textContent = u.nome;
   $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
-  $('#chi-iniziali').parentNode.title = u.nome + ' (' + u.email + ')';
+  $('#chi-iniziali').parentNode.title = u.locale ? u.nome : u.nome + ' (' + u.email + ')';
+  if (u.locale) {
+    var e = $('#esci');
+    e.title = 'Chiudi MAGIC HS'; e.setAttribute('aria-label', 'Chiudi MAGIC HS'); e.innerHTML = T.icona('spegni');
+    tieniVivo();
+  }
   if (u.ia && u.ia.nome) $('#ia-nome').textContent = ' (' + u.ia.nome.replace(/ \((.+)\)$/, ' di $1') + ')';
   $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
   T.tema(u.preferenze.tema);

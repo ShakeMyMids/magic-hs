@@ -455,3 +455,11 @@ details.piu[open]::details-content{height:auto}
   .stato .ico,.avanza i{animation:none !important}
   ::view-transition-old(root),::view-transition-new(root){animation:none !important}
 }
+
+/* programma sul PC: cartella condivisa, passi per i colleghi, programma chiuso */
+.percorso{font-size:15px;overflow-wrap:anywhere;margin-bottom:6px}
+.tab.compatta{margin-top:10px}
+.tab.compatta td:first-child{font-weight:600;color:var(--secondario)}
+.passi{margin:0;padding-left:22px;display:grid;gap:8px;font-size:14px;line-height:1.5;color:var(--inchiostro)}
+.passi li::marker{color:var(--accento-forte);font-weight:650}
+.box.chiuso .lab .ico{color:var(--rosso)}

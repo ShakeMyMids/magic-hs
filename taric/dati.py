@@ -16,7 +16,7 @@ import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -52,6 +52,8 @@ class GestoreDati:
         self._lock = threading.Lock()
         self.in_corso: dict[str, Any] | None = None
         self._fermo = threading.Event()
+        # chiamata dopo l'installazione di una versione che diventa quella in uso (programma locale: pubblicazione)
+        self.dopo_installazione: Callable[[str], None] | None = None
         with db.connessione() as c:   # un aggiornamento rimasto "in corso" e' stato interrotto da un riavvio
             c.execute("UPDATE aggiornamenti SET esito = 'interrotto', finito = ? WHERE esito = 'in_corso'", (iso(),))
 
@@ -158,12 +160,14 @@ class GestoreDati:
             it_lavoro = cartella / "nomenclatura_it.json"
             shutil.copyfile(self.it, it_lavoro)
             att = self.attiva()
-            cmd = [sys.executable, "-I", str(AGGIORNA), "--src", str(cartella / "xlsx"), "--out", str(cartella / "out" / "data"),
+            cmd = [sys.executable, "-I", "-X", "utf8", str(AGGIORNA), "--src", str(cartella / "xlsx"), "--out", str(cartella / "out" / "data"),
                    "--it", str(it_lavoro), "--data", f"{mese}-01"]
             if att and att <= f"{mese}-01":
                 cmd += ["--prec", str(self.versioni / att / "versione.json")]
             self._fase("genero e controllo i dati (circa un minuto)")
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, cwd=cartella)
+            senza_finestra = getattr(subprocess, "CREATE_NO_WINDOW", 0)      # Windows: niente finestra nera
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800,
+                               cwd=cartella, creationflags=senza_finestra)
             registro = (p.stdout + ("\n" + p.stderr if p.stderr else ""))[-12000:]
             righe = [r for r in p.stdout.splitlines() if r.strip()]
             if p.returncode != 0 or not righe or righe[-1].strip() != "CONTROLLI OK":
@@ -188,6 +192,11 @@ class GestoreDati:
             if att is None or dest.name >= att:
                 self.imposta_attiva(dest.name)
             self._pota()
+            if self.dopo_installazione and self.attiva() == dest.name:
+                try:
+                    self.dopo_installazione(dest.name)
+                except Exception:
+                    log.exception("dopo l'installazione di %s", dest.name)
             messaggio = (f"Installati i dati TARIC di {mese}: {info.get('righe', '?')} righe, {info.get('dichiarabili', '?')} codici "
                          f"dichiarabili, {info.get('misure_import', '?')} misure all'importazione.")
             if info.get("avvisi"):
@@ -208,6 +217,8 @@ class GestoreDati:
             self.db.evento(c, "dati_" + esito, autore_id=autore_id, dettagli=f"{mese}: {messaggio}")
             amministratori = [r["email"] for r in c.execute("SELECT email FROM utenti WHERE ruolo = 'amministratore' AND stato = 'attivo'")]
         avvisa = esito == "ok" or esito == "errore" or (esito == "non_disponibile" and self._giorno_locale() >= 8 and autore_id is None)
+        if self.cfg.locale:
+            avvisa = False                    # programma sul PC: niente email, l'esito si vede in Gestione
         if avvisa:
             oggetto = {"ok": f"MAGIC HS: dati di {mese} installati", "errore": f"MAGIC HS: aggiornamento dei dati di {mese} NON riuscito",
                        "non_disponibile": f"MAGIC HS: l'estrazione di {mese} non è ancora disponibile"}[esito]
@@ -271,7 +282,7 @@ class GestoreDati:
         ora = self._ora_locale()
         mese = ora.strftime("%Y-%m")
         att = self.attiva()
-        if att and att[:7] >= mese:
+        if not self.cfg.scarica_dati or (att and att[:7] >= mese):
             return None
         if att and not self.cfg.aggiornamento_automatico:
             return None
@@ -286,11 +297,17 @@ class GestoreDati:
                 return None
         return mese
 
-    def avvia_pianificatore(self, registrazioni: Any, backup: Any = None, ogni_6_ore: list[Any] | None = None) -> None:
+    def avvia_pianificatore(self, registrazioni: Any, backup: Any = None, ogni_6_ore: list[Any] | None = None,
+                            ogni_ciclo: list[Any] | None = None, attesa: float = 1800) -> None:
         def ciclo() -> None:
             ultima_pulizia = 0.0
             self._fermo.wait(10)
             while not self._fermo.is_set():
+                for compito in ogni_ciclo or []:
+                    try:
+                        compito()
+                    except Exception:
+                        log.exception("compito periodico")
                 if time.time() - ultima_pulizia > 6 * 3600:
                     for compito in ogni_6_ore or []:
                         try:
@@ -320,7 +337,7 @@ class GestoreDati:
                             self.esegui(mese, "automatico")
                 except Exception:
                     log.exception("pianificatore")
-                self._fermo.wait(1800)
+                self._fermo.wait(attesa)
         threading.Thread(target=ciclo, name="taric-pianificatore", daemon=True).start()
 
     def ferma(self) -> None:

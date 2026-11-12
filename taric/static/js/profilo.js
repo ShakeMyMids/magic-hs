@@ -36,13 +36,15 @@
     var io = u(); if (!io) return;
     var p = io.preferenze, ia = io.ia, h = '';
 
-    h += piano(io);
+    h += io.locale ? usoLocale(io) : piano(io);
 
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utente') + 'Il tuo account<span class="dx">' + esc(io.ruolo === 'amministratore' ? 'amministratore' : 'utente') + '</span></div>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utente') + (io.locale ? 'Il tuo nome' : 'Il tuo account') +
+      '<span class="dx">' + esc(io.locale ? (io.locale.editore ? 'gestisci MAGIC HS' : '') : io.ruolo === 'amministratore' ? 'amministratore' : 'utente') + '</span></div>' +
       '<form class="modulo" data-p="salva-account"><div class="due">' +
       '<label>Nome e cognome<input class="campo" name="nome" required minlength="2" maxlength="100" value="' + esc(io.nome) + '"></label>' +
       '<label>Azienda<input class="campo" name="azienda" maxlength="150" value="' + esc(io.azienda) + '"></label></div>' +
-      '<label>Email (per cambiarla chiedi all\'amministratore)<input class="campo" value="' + esc(io.email) + '" disabled></label>' +
+      (io.locale ? '<p class="nota">Storico, preferiti e preferenze restano su questo computer, nella tua cartella di Windows.</p>'
+        : '<label>Email (per cambiarla chiedi all\'amministratore)<input class="campo" value="' + esc(io.email) + '" disabled></label>') +
       '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div></div>';
 
 
@@ -70,7 +72,7 @@
     else h += '<div class="elenco">' + st.preferiti.map(rigaPreferito).join('') + '</div>';
     h += '</div></div>';
 
-    h += '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('chiave') + 'Cambia password</div>' +
+    if (!io.locale) h += '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('chiave') + 'Cambia password</div>' +
       '<form class="modulo" data-p="password"><div class="due">' +
       '<label>Password attuale<input class="campo" type="password" name="attuale" autocomplete="current-password" required></label>' +
       '<label>Nuova password (almeno 10 caratteri)<input class="campo" type="password" name="nuova" autocomplete="new-password" required minlength="10"></label></div>' +
@@ -79,6 +81,21 @@
       '<div class="fila"><button class="btn" type="button" data-p="esci-ovunque">Esci dagli altri dispositivi</button></div>' + riga('dispositivi') + '</div></div>';
 
     el.innerHTML = h;
+  }
+
+  /* ------------------------------------------------------------------ programma sul PC: solo l'uso dell'IA */
+  function usoLocale(io) {
+    var ia = io.ia, h = '<div class="foglio"><div class="box piano"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita</div>';
+    if (!ia.configurata) h += '<p class="nota">Non è attiva: ' + (io.locale.editore ? 'scegli un servizio in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio di intelligenza artificiale.') +
+      ' Nomenclatura e misure sono consultabili senza limiti.</p>';
+    else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + ' richieste a ' + esc(meseIt(ia.mese)) + '</p><p class="nota">Senza limite mensile. Una classificazione usa di solito 2 o 3 richieste.</p>';
+    else {
+      var perc = ia.limite ? Math.min(100, Math.round(ia.usate / ia.limite * 100)) : 100;
+      h += '<p class="cosa">' + ia.usate + ' di ' + ia.limite + ' richieste all\'IA usate a ' + esc(meseIt(ia.mese)) + '</p>' +
+        '<div class="metro' + (perc >= 100 ? ' pieno' : '') + '"><i style="width:' + perc + '%"></i></div>' +
+        '<p class="nota">Una classificazione usa di solito 2 o 3 richieste e il conteggio riparte il primo del mese. Per averne di più chiedi a chi gestisce MAGIC HS.</p>';
+    }
+    return h + '</div></div>';
   }
 
   /* ------------------------------------------------------------------ piano Gratis / Pro */

@@ -16,6 +16,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -36,6 +37,7 @@ class ErroreIA(Exception):
         self.codice = codice
         self.stato_http = stato_http
         self.dettaglio = dettaglio
+        self.corpo = ""                   # inizio della risposta d'errore del servizio, se c'e'
 
 
 @dataclass
@@ -70,6 +72,12 @@ def estrai_json(testo: str) -> Any:
 
 def _errore_http(r: httpx.Response, modello: str) -> ErroreIA:
     """Traduce le risposte d'errore dei tre fornitori in codici comuni."""
+    e = _codice_http(r, modello)
+    e.corpo = r.text[:800]
+    return e
+
+
+def _codice_http(r: httpx.Response, modello: str) -> ErroreIA:
     testo = r.text[:800]
     basso = testo.lower()
     log.error("servizio IA: HTTP %s %s", r.status_code, testo[:400])
@@ -121,7 +129,8 @@ class ServizioIA:
             return None
         if utente["quota_ia"] is not None:
             return int(utente["quota_ia"])
-        return int(self.db.impostazioni(c)["quota_predefinita"])
+        q = self.db.impostazioni(c)["quota_predefinita"]
+        return None if q is None else int(q)            # None: senza limite (programma locale, se lo sceglie l'editore)
 
     def tetto(self, c: sqlite3.Connection, utente: sqlite3.Row) -> int | None:
         """Tetto di sicurezza delle richieste nelle ultime 24 ore per il piano Pro (contro l'uso automatico)."""
@@ -141,6 +150,21 @@ class ServizioIA:
                          (utente_id, mese or mese_corrente())).fetchone()[0]
 
     # ------------------------------------------------------------------ chiamata
+    def prova(self) -> dict[str, Any]:
+        """Breve richiesta di prova al servizio configurato (pannello del programma locale); non consuma la quota."""
+        if not self.disponibile:
+            raise ErroreIA("not_configured", 503)
+        chiama = {"gemini": self._gemini, "anthropic": self._anthropic, "openai": self._openai}[self.cfg.ia_fornitore]
+        inizio = adesso()
+        r = chiama(self.cfg.modello_rapido, 'Rispondi con questo oggetto JSON: {"ok": true}', 1024)
+        if r.rifiutata:
+            raise ErroreIA("refused", 422)
+        valore = estrai_json(r.testo) if r.testo.strip() else None
+        if valore is None:
+            raise ErroreIA("empty_completion", 502)
+        return {"risposta": valore, "secondi": round((adesso() - inizio).total_seconds(), 1),
+                "modello": self.cfg.modello_rapido, "token_in": r.token_in, "token_out": r.token_out}
+
     def chiedi(self, utente: sqlite3.Row, prompt: str, livello: str) -> dict[str, Any]:
         if not self.disponibile:
             raise ErroreIA("not_configured", 503)
@@ -238,14 +262,22 @@ class ServizioIA:
         intestazioni = {"content-type": "application/json"}
         if self.cfg.ia_chiave:
             intestazioni["authorization"] = f"Bearer {self.cfg.ia_chiave}"
+            if urlsplit(self.cfg.ia_url).hostname and str(urlsplit(self.cfg.ia_url).hostname).endswith(".azure.com"):
+                intestazioni["api-key"] = self.cfg.ia_chiave     # Azure OpenAI accetta la chiave anche in questa intestazione
         url = f"{self.cfg.ia_url}/chat/completions"
-        try:
-            d = self._post(url, corpo, intestazioni, modello)
-        except ErroreIA as e:
-            if e.codice != "upstream_error":
-                raise
-            del corpo["response_format"]                # alcuni servizi non conoscono la modalita' JSON: si riprova senza
-            d = self._post(url, corpo, intestazioni, modello)
+        for _ in range(3):
+            try:
+                d = self._post(url, corpo, intestazioni, modello)
+                break
+            except ErroreIA as e:
+                if e.codice != "upstream_error":
+                    raise
+                if "max_tokens" in corpo and "max_completion_tokens" in e.corpo:
+                    corpo["max_completion_tokens"] = corpo.pop("max_tokens")   # modelli recenti di OpenAI e Azure
+                elif "response_format" in corpo:
+                    del corpo["response_format"]        # alcuni servizi non conoscono la modalita' JSON: si riprova senza
+                else:
+                    raise
         uso = d.get("usage") or {}
         scelta = (d.get("choices") or [{}])[0]
         testo = (scelta.get("message") or {}).get("content") or ""

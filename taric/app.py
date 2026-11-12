@@ -4,9 +4,11 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import os
 import re
 import secrets
 import sqlite3
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,8 +23,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
+from . import __version__
 from . import sicurezza as S
 from .backup import Backup, ErroreBackup
+from .condivisa import Condivisa, ErroreCondivisa, ia_da_impostazioni
 from .config import Config
 from .dati import GestoreDati
 from .db import Database, iso
@@ -33,6 +37,12 @@ from .registrazioni import Registrazioni
 
 log = logging.getLogger("taric")
 STATIC = Path(__file__).with_name("static")
+EMAIL_LOCALE = "utente@magic-hs.locale"          # l'unico utente del programma sul PC
+# pagine e funzioni del sito che nel programma sul PC non servono (accesso, registrazione, pagamenti)
+SOLO_SITO = ("/accedi", "/registrati", "/conferma-email", "/password-dimenticata", "/reimposta-password", "/configura",
+             "/condizioni", "/api/registrazione", "/api/conferma-email", "/api/accedi", "/api/esci", "/api/password-dimenticata",
+             "/api/reimposta-password", "/api/configurazione-iniziale", "/api/stripe/", "/api/pagamento/", "/api/io/password",
+             "/api/io/esci-ovunque", "/api/admin/utenti", "/api/admin/pagamenti", "/api/admin/posta", "/api/admin/backup")
 RE_CODICE = re.compile(r"^\d{10}$")
 RE_DOMINIO = re.compile(r"^(?=.{3,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
 RE_AREA = re.compile(r"^[A-Z0-9]{2,4}$")
@@ -196,9 +206,25 @@ class Versione(BaseModel):
     versione: str = Field(pattern=r"^\d{4}-\d{2}-01$")
 
 
+class ImpostazioniIA(BaseModel):
+    """Servizio IA per tutti i colleghi (programma sul PC), salvato nella cartella condivisa."""
+    fornitore: Literal["", "gemini", "anthropic", "openai"] = ""
+    chiave: Optional[str] = Field(default=None, max_length=500)       # None = tiene quella salvata
+    url: str = Field(default="", max_length=300)
+    modello: str = Field(default="", max_length=120)
+    modello_rapido: str = Field(default="", max_length=120)
+    quota: Optional[int] = Field(default=None, ge=0, le=100000)       # richieste al mese per persona; None = senza limite
+
+
+class ChiaveIstanza(BaseModel):
+    chiave: str = Field(max_length=200)
+
+
 # ------------------------------------------------------------------ applicazione
 def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
-             client_stripe: httpx.Client | None = None) -> FastAPI:
+             client_stripe: httpx.Client | None = None, chiave_ingresso: str = "", istanza: str = "") -> FastAPI:
+    """Crea l'applicazione. Con cfg.locale e' il programma sul PC (vedi programma.py): un solo utente, che entra
+    con la chiave dell'avvio (chiave_ingresso), e versioni, dati e impostazioni dalla cartella condivisa."""
     db = Database(cfg.dati / "taric.db")
     posta = Posta(cfg)
     reg = Registrazioni(db, posta)
@@ -207,17 +233,72 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     ia.pro = pag.pro_attivo
     dati = GestoreDati(cfg, db, posta)
     copie = Backup(cfg.dati, cfg.backup_copie)
+    locale = cfg.locale
+    condivisa = Condivisa(cfg.condivisa) if locale and cfg.condivisa else None
+    editore = bool(condivisa and condivisa.scrivibile())       # sul PC di chi pubblica per tutti
+    cookie = "magic_hs_locale" if locale else S.COOKIE_SESSIONE
+
+    # ------------------------------------------------------------------ programma sul PC: cartella condivisa
+    def applica_impostazioni() -> None:
+        """Servizio IA e limite mensile scelti dall'editore (impostazioni.json della cartella condivisa)."""
+        imp = condivisa.impostazioni() if condivisa else {}
+        if not imp:
+            return
+        cfg.imposta_ia(ia_da_impostazioni(imp))
+        quota = imp.get("quota", 50)
+        if quota is not None and not (isinstance(quota, int) and quota >= 0):
+            quota = 50
+        with db.transazione() as c:
+            if db.impostazioni(c)["quota_predefinita"] != quota:
+                db.salva_impostazioni(c, {"quota_predefinita": quota})
+
+    def allinea_dati() -> None:
+        """L'editore pubblica la versione dei dati installata sul suo PC se e' piu' recente di quella nella cartella;
+        tutti gli altri (e l'editore, se qualcuno ha pubblicato dopo di lui) installano quella della cartella."""
+        if condivisa is None or not condivisa.raggiungibile() or not dati._lock.acquire(blocking=False):
+            return
+        try:
+            att, pubb = dati.attiva(), condivisa.dati_pubblicati()
+            if editore and att and (not pubb or att > pubb or (att == pubb and not (condivisa.dati / f"{att}.zip").is_file())):
+                condivisa.pubblica_dati(att, dati.versioni / att)
+            elif condivisa.ricevi_dati(dati.versioni, dati.imposta_attiva, att):
+                dati._pota()
+        except (OSError, ErroreCondivisa):
+            log.exception("allineamento dei dati con la cartella condivisa")
+        finally:
+            dati._lock.release()
+
+    if locale:
+        if not editore:
+            cfg.scarica_dati = False      # i dati arrivano dalla cartella: li scarica dalla fonte solo chi pubblica
+        with db.transazione() as c:
+            nome = (os.environ.get("USERNAME") or os.environ.get("USER") or "").strip()[:100]
+            c.execute("INSERT INTO utenti(email, nome, ruolo, stato, email_confermata, creato, aggiornato) "
+                      "VALUES (?, ?, ?, 'attivo', 1, ?, ?) ON CONFLICT(email) DO UPDATE SET ruolo = excluded.ruolo, stato = 'attivo'",
+                      (EMAIL_LOCALE, nome if len(nome) >= 2 else "Utente", "amministratore" if editore else "utente", iso(), iso()))
+        applica_impostazioni()
+        allinea_dati()
+        if editore and condivisa is not None:
+            def pubblica(v: str, _c: Condivisa = condivisa) -> None:
+                _c.pubblica_dati(v, dati.versioni / v)
+            dati.dopo_installazione = pubblica
 
     @asynccontextmanager
     async def vita(_app: FastAPI) -> AsyncIterator[None]:
         if pianificatore:
-            dati.avvia_pianificatore(reg, copie, [pag.sincronizza_scadenze])
+            if locale:
+                dati.avvia_pianificatore(reg, copie, ogni_ciclo=[applica_impostazioni, allinea_dati], attesa=600)
+            else:
+                dati.avvia_pianificatore(reg, copie, [pag.sincronizza_scadenze])
         yield
         dati.ferma()
 
     app = FastAPI(title="MAGIC HS", docs_url=None, redoc_url=None, openapi_url=None, lifespan=vita)
     app.state.cfg, app.state.db, app.state.posta, app.state.dati, app.state.ia, app.state.reg = cfg, db, posta, dati, ia, reg
     app.state.pagamenti = pag
+    app.state.condivisa = condivisa
+    app.state.ultimo_contatto = time.monotonic()      # programma sul PC: si chiude da solo dopo un periodo senza richieste
+    app.state.ferma = lambda: None                    # programma sul PC: lo imposta programma.py
     codice_file = cfg.dati / "codice-configurazione.txt"
 
     def ci_sono_admin(c: sqlite3.Connection) -> bool:
@@ -233,7 +314,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return codice_file.read_text(encoding="utf-8").strip()
 
     with db.connessione() as c0:
-        if not ci_sono_admin(c0):
+        if not locale and not ci_sono_admin(c0):
             host = "localhost" if cfg.host in ("0.0.0.0", "::", "") else cfg.host
             log.warning("NESSUN AMMINISTRATORE: apri %s/configura e inserisci il codice %s",
                         cfg.url_pubblico or f"http://{host}:{cfg.porta}", codice_configurazione())
@@ -249,12 +330,12 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return cfg.cookie_sicuro == "si" or (cfg.cookie_sicuro == "auto" and request.url.scheme == "https")
 
     def imposta_cookie(resp: Response, request: Request, gettone: str, durata: int, ricordami: bool) -> None:
-        resp.set_cookie(S.COOKIE_SESSIONE, gettone, max_age=durata if ricordami else None, httponly=True,
+        resp.set_cookie(cookie, gettone, max_age=durata if ricordami else None, httponly=True,
                         secure=cookie_sicuro(request), samesite="lax", path="/")
 
     def utente_corrente(request: Request) -> sqlite3.Row | None:
         with db.connessione() as c:
-            return S.utente_da_sessione(c, request.cookies.get(S.COOKIE_SESSIONE))
+            return S.utente_da_sessione(c, request.cookies.get(cookie))
 
     def richiede_utente(request: Request) -> sqlite3.Row:
         u = utente_corrente(request)
@@ -271,8 +352,19 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return {"ok": True, **kw}
 
     # ------------------------------------------------------------------ middleware: intestazioni di sicurezza e CSRF
+    host_locali = {f"127.0.0.1:{cfg.porta}", f"localhost:{cfg.porta}"}
+
     @app.middleware("http")
     async def protezioni(request: Request, call_next: Any) -> Response:
+        if locale:
+            # solo dal PC stesso e con il suo indirizzo (contro i siti che puntano a 127.0.0.1 con un altro nome)
+            if request.headers.get("host", "") not in host_locali:
+                return PlainTextResponse("Richiesta non consentita.", status_code=403)
+            app.state.ultimo_contatto = time.monotonic()
+            if request.url.path.startswith(SOLO_SITO):
+                if request.url.path.startswith("/api/"):
+                    return JSONResponse({"errore": "Funzione non disponibile nel programma sul PC.", "codice": "non_disponibile"}, status_code=404)
+                return RedirectResponse("/", 303)
         if (request.url.path.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS")
                 and request.url.path != "/api/stripe/webhook"):
             origine = request.headers.get("origin")
@@ -309,11 +401,15 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     @app.get("/", include_in_schema=False)
     def home(request: Request) -> Response:
-        with db.connessione() as c:
-            if not ci_sono_admin(c):
-                return RedirectResponse("/configura", 303)
-        if utente_corrente(request) is None:
-            return RedirectResponse("/accedi", 303)
+        if locale:
+            if utente_corrente(request) is None:
+                return pagina("locale.html")
+        else:
+            with db.connessione() as c:
+                if not ci_sono_admin(c):
+                    return RedirectResponse("/configura", 303)
+            if utente_corrente(request) is None:
+                return RedirectResponse("/accedi", 303)
         v = dati.attiva()
         if v is None:
             return pagina("attesa.html")
@@ -384,7 +480,46 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             configurato = ci_sono_admin(c)
         return {"configurato": configurato, "registrazione_aperta": bool(imp["registrazione_aperta"]),
                 "posta": posta.configurata, "dati_pronti": dati.attiva() is not None,
-                "aggiornamento": (dati.in_corso or {}).get("fase")}
+                "aggiornamento": (dati.in_corso or {}).get("fase"), "locale": locale, "editore": editore}
+
+    # ------------------------------------------------------------------ programma sul PC: ingresso e chiusura
+    if locale:
+        @app.get("/entra", include_in_schema=False)
+        def entra(request: Request, k: str = "") -> Response:
+            """Indirizzo aperto dall'avvio nel browser: la chiave e' nel file dell'istanza, leggibile solo dall'utente di Windows."""
+            if not chiave_ingresso or not hmac.compare_digest(k.encode(), chiave_ingresso.encode()):
+                return pagina("locale.html")
+            resp = RedirectResponse("/", 303)
+            if utente_corrente(request) is None:
+                with db.transazione() as c:
+                    uid = c.execute("SELECT id FROM utenti WHERE email = ?", (EMAIL_LOCALE,)).fetchone()["id"]
+                    gettone, durata = S.crea_sessione(c, uid, "127.0.0.1", request.headers.get("user-agent", ""), True)
+                imposta_cookie(resp, request, gettone, durata, True)
+            return resp
+
+        @app.get("/api/locale/ping")
+        def locale_ping() -> dict[str, Any]:
+            return {"app": "magic-hs", "istanza": istanza, "versione": __version__}
+
+        @app.post("/api/locale/ferma")
+        def locale_ferma(body: ChiaveIstanza) -> dict[str, Any]:
+            """Chiamata da un avvio di una versione diversa del programma, che prende il posto di questa."""
+            if not chiave_ingresso or not hmac.compare_digest(body.chiave.encode(), chiave_ingresso.encode()):
+                raise Errore(403, "Chiave non valida.", "vietato")
+            app.state.ferma()
+            return json_ok()
+
+        @app.post("/api/locale/chiudi")
+        def locale_chiudi(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+            app.state.ferma()
+            return json_ok()
+
+        @app.post("/api/locale/sincronizza")
+        def locale_sincronizza(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+            """Controlla subito la cartella condivisa (pagina d'attesa dei dati)."""
+            applica_impostazioni()
+            allinea_dati()
+            return json_ok(dati=dati.attiva())
 
     # ------------------------------------------------------------------ configurazione iniziale
     @app.post("/api/configurazione-iniziale")
@@ -496,9 +631,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.post("/api/esci")
     def esci(request: Request) -> Response:
         with db.transazione() as c:
-            S.chiudi_sessione(c, request.cookies.get(S.COOKIE_SESSIONE))
+            S.chiudi_sessione(c, request.cookies.get(cookie))
         resp = JSONResponse(json_ok())
-        resp.delete_cookie(S.COOKIE_SESSIONE, path="/")
+        resp.delete_cookie(cookie, path="/")
         return resp
 
     @app.post("/api/password-dimenticata")
@@ -557,7 +692,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 "ia": {"disponibile": ia.disponibile and lim != 0, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
                        "usate": ia.usate(c, u["id"]), "mese": mese_corrente(), "tetto_giorno": ia.tetto(c, u)},
                 "piano": {**pag.stato(c, u["id"]), "pagamenti": pag.attivi},
-                "dati": {"versione": v, "aggiornamento": (dati.in_corso or {}).get("fase")}}
+                "dati": {"versione": v, "aggiornamento": (dati.in_corso or {}).get("fase")},
+                "locale": {"editore": editore, "versione": __version__} if locale else None}
 
     @app.get("/api/io")
     def io(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
@@ -588,14 +724,14 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             raise Errore(422, p, "password")
         with db.transazione() as c:
             c.execute("UPDATE utenti SET hash_password = ?, aggiornato = ? WHERE id = ?", (S.hash_password(body.nuova), iso(), u["id"]))
-            S.chiudi_tutte(c, u["id"], tranne=request.cookies.get(S.COOKIE_SESSIONE))
+            S.chiudi_tutte(c, u["id"], tranne=request.cookies.get(cookie))
             db.evento(c, "password_cambiata", u["id"], u["id"])
         return json_ok()
 
     @app.post("/api/io/esci-ovunque")
     def esci_ovunque(request: Request, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
         with db.transazione() as c:
-            S.chiudi_tutte(c, u["id"], tranne=request.cookies.get(S.COOKIE_SESSIONE))
+            S.chiudi_tutte(c, u["id"], tranne=request.cookies.get(cookie))
         return json_ok()
 
     # ------------------------------------------------------------------ storico
@@ -1023,11 +1159,99 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             dati.imposta_attiva(body.versione)
         except ValueError:
             raise Errore(404, "Versione non disponibile.", "non_trovato")
+        if editore and condivisa is not None:
+            try:
+                condivisa.pubblica_dati(body.versione, dati.versioni / body.versione)
+            except (OSError, ErroreCondivisa) as e:
+                raise Errore(409, f"Versione in uso su questo PC, ma non riesco a pubblicarla nella cartella condivisa: {e}", "condivisa")
         with db.transazione() as c:
             db.evento(c, "dati_versione_attivata", autore_id=a["id"], dettagli=body.versione)
         return json_ok()
 
+    # ------------------------------------------------------------------ programma sul PC: pannello dell'editore
+    if locale:
+        def serve_editore() -> Condivisa:
+            if condivisa is None or not editore:
+                raise Errore(409, "Da questo PC non si può scrivere nella cartella condivisa.", "condivisa")
+            return condivisa
+
+        @app.get("/api/admin/locale")
+        def admin_locale(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            imp = condivisa.impostazioni() if condivisa else {}
+            ia_imp = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
+            chiave = str(ia_imp.get("chiave") or "")
+            return {"condivisa": str(cfg.condivisa or ""), "raggiungibile": bool(condivisa and condivisa.raggiungibile()),
+                    "editore": editore,
+                    "programma": {"in_uso": __version__, "pubblicato": condivisa.versione_programma() if condivisa else ""},
+                    "dati": {"in_uso": dati.attiva() or "", "pubblicati": condivisa.dati_pubblicati() if condivisa else ""},
+                    "ia": {"fornitore": str(ia_imp.get("fornitore") or ""), "url": str(ia_imp.get("url") or ""),
+                           "modello": str(ia_imp.get("modello") or ""), "modello_rapido": str(ia_imp.get("modello_rapido") or ""),
+                           "chiave": ("…" + chiave[-4:]) if len(chiave) > 8 else ("impostata" if chiave else "")},
+                    "attiva": ia.disponibile, "ia_nome": cfg.ia_nome,
+                    "quota": imp.get("quota", 50) if imp else 50, "aggiornate": imp.get("aggiornate", ""), "da": imp.get("da", "")}
+
+        @app.put("/api/admin/locale/ia")
+        def admin_locale_ia(body: ImpostazioniIA, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            cond = serve_editore()
+            imp = cond.impostazioni()
+            vecchia = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
+            chiave = str(vecchia.get("chiave") or "") if body.chiave is None else body.chiave.strip()
+            url = body.url.strip().rstrip("/")
+            if url and not re.match(r"^https?://[^\s/]+(/\S*)?$", url):
+                raise Errore(422, "Indirizzo del servizio non valido: deve iniziare con https://.", "url")
+            if body.fornitore == "openai" and not url:
+                raise Errore(422, "Indica l'indirizzo del servizio (per Azure OpenAI: https://<risorsa>.openai.azure.com/openai/v1).", "url")
+            if body.fornitore == "openai" and not body.modello.strip():
+                raise Errore(422, "Indica il modello (per Azure OpenAI: il nome della distribuzione).", "modello")
+            if body.fornitore in ("gemini", "anthropic") and not chiave:
+                raise Errore(422, "Inserisci la chiave del servizio.", "chiave")
+            nuove = {**imp, "ia": {"fornitore": body.fornitore, "chiave": chiave if body.fornitore else "",
+                                   "url": url if body.fornitore else "", "modello": body.modello.strip() if body.fornitore else "",
+                                   "modello_rapido": body.modello_rapido.strip() if body.fornitore else ""},
+                     "quota": body.quota, "aggiornate": iso(), "da": a["nome"]}
+            try:
+                cond.salva_impostazioni(nuove)
+            except OSError as e:
+                raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
+            applica_impostazioni()
+            with db.transazione() as c:
+                db.evento(c, "impostazioni_ia", autore_id=a["id"], dettagli=body.fornitore or "nessuna")
+            return json_ok(attiva=ia.disponibile, ia_nome=cfg.ia_nome)
+
+        @app.post("/api/admin/locale/ia/prova")
+        def admin_locale_prova(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            try:
+                return json_ok(**ia.prova())
+            except ErroreIA as e:
+                messaggio = MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
+                if e.codice == "not_configured":
+                    messaggio = "Nessun servizio IA impostato: scegline uno e salva."
+                raise Errore(e.stato_http, messaggio, e.codice)
+
+        @app.post("/api/admin/locale/programma")
+        async def admin_locale_programma(file: UploadFile = File(...), a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            cond = serve_editore()
+            dest = dati.lavoro / f"programma-{secrets.token_hex(6)}.zip"
+            try:
+                totale = 0
+                with open(dest, "wb") as f:
+                    while blocco := await file.read(1 << 20):
+                        totale += len(blocco)
+                        if totale > 400 * 1024 * 1024:
+                            raise Errore(413, "File troppo grande (massimo 400 MB).", "troppo_grande")
+                        f.write(blocco)
+                versione = await run_in_threadpool(cond.pubblica_programma, dest)
+            except ErroreCondivisa as e:
+                raise Errore(422, f"Il file non va bene: {e}.", "pacchetto")
+            except OSError as e:
+                raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
+            finally:
+                dest.unlink(missing_ok=True)
+            with db.transazione() as c:
+                db.evento(c, "programma_pubblicato", autore_id=a["id"], dettagli=versione)
+            return json_ok(versione=versione)
+
     return app
 
 
-__all__ = ["crea_app"]
+__all__ = ["crea_app", "EMAIL_LOCALE"]

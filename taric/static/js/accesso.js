@@ -115,7 +115,7 @@
   }
 
   if (pagina === 'attesa') {
-    var fase = document.getElementById('fase');
+    var fase = document.getElementById('fase'), giri = 0;
     document.getElementById('esci').addEventListener('click', function () {
       function via() { location.href = '/accedi'; }
       T.api('POST', '/api/esci', null, { resta: true }).then(via, via);
@@ -135,6 +135,14 @@
     var controlla = function () {
       T.api('GET', '/api/stato', null, { resta: true }).then(function (s) {
         if (s.dati_pronti) { location.href = '/'; return; }
+        if (s.locale) document.getElementById('esci').hidden = true;
+        if (s.locale && !s.editore) {
+          // programma sul PC di un collega: i dati arrivano solo dalla cartella condivisa
+          fase.textContent = 'I dati TARIC arrivano dalla cartella condivisa di OneDrive. Se l\'hai aggiunta da poco, aspetta che OneDrive finisca di scaricarla: ' +
+            'la pagina si apre da sola. Se l\'attesa si prolunga, chiedi a chi gestisce MAGIC HS di aprirlo sul suo PC per pubblicare i dati.';
+          if (giri++ % 3 === 0) T.api('POST', '/api/locale/sincronizza', null, { resta: true }).catch(function () { /* riprova al giro dopo */ });
+          return;
+        }
         if (s.aggiornamento) fase.textContent = 'In corso: ' + s.aggiornamento + '…';
         else fase.textContent = 'Nessun download in corso in questo momento. Il server riprova da solo ogni mezz\'ora' +
           (document.getElementById('admin').hidden ? '; se l\'attesa si prolunga avvisa l\'amministratore.' : ', oppure usa i pulsanti qui sotto.');

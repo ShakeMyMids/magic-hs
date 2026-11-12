@@ -68,6 +68,9 @@ class Config:
     venditore_piva: str = ""
     venditore_indirizzo: str = ""
     venditore_email: str = ""
+    locale: bool = False                   # programma per Windows sul PC: un solo utente, senza accesso (vedi programma.py)
+    condivisa: Path | None = None          # cartella condivisa (OneDrive) da cui il programma riceve versioni, dati e impostazioni
+    scarica_dati: bool = True              # scarica da solo i dati TARIC dalla fonte (spento sui PC che li ricevono dalla cartella)
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -83,6 +86,10 @@ class Config:
     @property
     def posta_configurata(self) -> bool:
         return bool(self.smtp_host and self.smtp_mittente)
+
+    def imposta_ia(self, valori: dict[str, str]) -> None:
+        """Cambia il servizio IA mentre il programma è in funzione (impostazioni della cartella condivisa)."""
+        self.ia_fornitore, self.ia_chiave, self.ia_url, self.modello_rapido, self.modello = _ia(valori)
 
 
 # modelli e indirizzi predefiniti per fornitore: (rapido, principale, url)
@@ -162,5 +169,8 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         venditore_piva=v.get("TARIC_VENDITORE_PIVA", "").strip(),
         venditore_indirizzo=v.get("TARIC_VENDITORE_INDIRIZZO", "").strip(),
         venditore_email=v.get("TARIC_VENDITORE_EMAIL", "").strip(),
+        locale=_bool(v.get("TARIC_LOCALE"), False),
+        condivisa=Path(v["TARIC_CONDIVISA"]) if v.get("TARIC_CONDIVISA") else None,
+        scarica_dati=_bool(v.get("TARIC_SCARICA_DATI"), True),
         extra=v,
     )
