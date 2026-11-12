@@ -24,8 +24,10 @@ senza framework. Tutti i testi per l'utente, i commenti e i nomi sono in **itali
   utente (blocco su file e `istanza.json` in `%LOCALAPPDATA%\MAGIC HS`), porta su 127.0.0.1, browser con chiave d'ingresso
   (`/entra?k=`), chiusura dopo l'inattività. Con `TARIC_LOCALE` l'app ha un solo utente, controlla l'host e spegne le
   funzioni del sito (`app.SOLO_SITO`).
-- `taric/condivisa.py`: cartella condivisa (OneDrive) del programma: chi può scriverci (editore) pubblica programma, dati e
-  `impostazioni.json` (IA per tutti), gli altri li ricevono. I file possono arrivare in ordine qualsiasi: chi legge controlla.
+- `taric/condivisa.py`: cartella condivisa (OneDrive) del programma: pubblica (programma, dati, `impostazioni.json` con l'IA
+  per tutti) solo chi è nell'elenco `editori` (nomi utente di Windows) e può scrivere; gli altri ricevono e non scrivono mai.
+  Per il collegamento OneDrive serve il permesso di modifica, quindi la scrittura da sola non distingue l'editore. Il primo
+  editore lo indica «Gestisco io MAGIC HS». I file possono arrivare in ordine qualsiasi: chi legge controlla.
 - `windows/`: `Avvia MAGIC HS.cmd` (solo ASCII, niente blocchi tra parentesi: i percorsi possono contenere `( ) &`) e
   `LEGGIMI.txt`; `strumenti/pacchetto_windows.py` costruisce i pacchetti (Python di python-build-standalone + librerie
   Windows), il flusso `.github/workflows/windows.yml` li prova su Windows e li pubblica per i tag `v*`.

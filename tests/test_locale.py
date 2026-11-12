@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from taric.app import crea_app
-from taric.condivisa import Condivisa, ErroreCondivisa, estrai_dati, versione_pacchetto
+from taric.condivisa import Condivisa, ErroreCondivisa, editori, estrai_dati, versione_pacchetto
 from taric.config import carica
 
 from conftest import FintoClaude
@@ -34,12 +34,21 @@ def dati_finti(cartella: Path, versione: str, testo: str = "") -> Path:
     return d
 
 
+def imposta_editori(condivisa: Path, *nomi: str) -> None:
+    c = Condivisa(condivisa)
+    c.salva_impostazioni({**c.impostazioni(), "editori": list(nomi)})
+
+
 class PC:
-    """Un PC con MAGIC HS: l'editore puo' scrivere nella cartella condivisa, un collega no."""
+    """Un PC con MAGIC HS. Il nome e' anche il nome utente di Windows. editore=True lo mette nell'elenco di chi
+    pubblica; tutti possono scrivere nella cartella (OneDrive chiede il permesso di modifica per il collegamento),
+    tranne con sola_lettura=True (raccolta di SharePoint sincronizzata in sola lettura)."""
 
     def __init__(self, tmp: Path, condivisa: Path, nome: str, mp: pytest.MonkeyPatch, editore: bool = True,
-                 versioni: tuple[str, ...] = ()):
+                 versioni: tuple[str, ...] = (), sola_lettura: bool = False):
         self.cartella = tmp / nome
+        if editore:
+            imposta_editori(condivisa, *dict.fromkeys(editori(Condivisa(condivisa).impostazioni()) + [nome]))
         for v in versioni:                                    # dati gia' installati su questo PC prima dell'avvio
             dati_finti(self.cartella / "dati" / "taric" / "versioni", v)
             (self.cartella / "dati" / "taric" / "attiva.txt").write_text(v)
@@ -47,7 +56,8 @@ class PC:
                            "TARIC_HOST": "127.0.0.1", "TARIC_PORTA": "8765"})
         self.claude = FintoClaude()
         with mp.context() as m:
-            if not editore:
+            m.setenv("USERNAME", nome)
+            if sola_lettura:
                 m.setattr(Condivisa, "scrivibile", lambda self: False)
             self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False,
                                 chiave_ingresso=CHIAVE, istanza="prova")
@@ -93,7 +103,7 @@ def test_ingresso_solo_con_la_chiave_dell_avvio(ambiente):
     assert r.status_code == 200 and "magic_hs_locale" not in r.cookies
     c = pc.entra()
     io_ = c.get("/api/io").json()
-    assert io_["locale"] == {"editore": True, "versione": io_["locale"]["versione"]} and io_["ruolo"] == "amministratore"
+    assert io_["locale"]["editore"] and io_["locale"]["utente"] == "editore" and io_["ruolo"] == "amministratore"
     assert io_["email"] == "utente@magic-hs.locale"
     assert "/data/2026-11-01/" in c.get("/").text
     # aprire di nuovo il programma non crea un'altra sessione
@@ -379,3 +389,91 @@ def test_file_di_avvio_per_windows():
     assert salti and salti <= etichette
     assert '-I -m taric.programma --condivisa "%CONDIVISA%"' in testo
     assert "pythonw.exe" in testo and 'set "CONDIVISA=%CONDIVISA:~0,-1%"' in testo   # niente \ prima delle virgolette
+
+
+# ------------------------------------------------------------------ chi pubblica
+def test_collega_con_permesso_di_modifica_non_pubblica(ambiente):
+    tmp, cond, mp = ambiente
+    PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",))
+    prima = sorted(p.relative_to(cond).as_posix() for p in cond.rglob("*"))
+    collega = PC(tmp, cond, "lbianchi", mp, editore=False)          # puo' scrivere, ma non e' nell'elenco
+    assert sorted(p.relative_to(cond).as_posix() for p in cond.rglob("*")) == prima     # non ha scritto niente
+    c = collega.entra()
+    io_ = c.get("/api/io").json()
+    assert io_["ruolo"] == "utente" and not io_["locale"]["editore"] and not io_["locale"]["puo_gestire"]
+    assert io_["locale"]["utente"] == "lbianchi" and not collega.cfg.scarica_dati
+    assert collega.app.state.dati.dopo_installazione is None
+    assert c.post("/api/locale/gestisco-io").status_code == 409
+    assert c.put("/api/admin/locale/editori", json={"editori": ["lbianchi"]}).status_code == 403
+
+
+def test_il_primo_editore_lo_dice_dal_suo_pc(ambiente):
+    tmp, cond, mp = ambiente
+    Condivisa(cond).pubblica_dati("2026-11-01", dati_finti(tmp / "kit", "2026-11-01"))     # cartella appena estratta
+    pc = PC(tmp, cond, "mrossi", mp, editore=False)
+    c = pc.entra()
+    io_ = c.get("/api/io").json()
+    assert io_["locale"]["puo_gestire"] and not io_["locale"]["editore"] and io_["dati"]["versione"] == "2026-11-01"
+    r = c.post("/api/locale/gestisco-io")
+    assert r.status_code == 200 and r.json()["editore"], r.text
+    assert editori(Condivisa(cond).impostazioni()) == ["mrossi"]
+    io_ = c.get("/api/io").json()
+    assert io_["ruolo"] == "amministratore" and io_["locale"]["editore"] and not io_["locale"]["puo_gestire"]
+    assert pc.cfg.scarica_dati and pc.app.state.dati.dopo_installazione is not None
+    assert c.post("/api/locale/gestisco-io").status_code == 409          # c'e' gia' chi gestisce
+    altro = PC(tmp, cond, "lbianchi", mp, editore=False).entra()
+    assert not altro.get("/api/io").json()["locale"]["puo_gestire"]
+
+
+def test_cartella_in_sola_lettura(ambiente):
+    tmp, cond, mp = ambiente
+    PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",))
+    imposta_editori(cond, "mrossi", "lbianchi")
+    pc = PC(tmp, cond, "lbianchi", mp, editore=False, sola_lettura=True)       # nell'elenco ma senza permesso di scrittura
+    io_ = pc.entra().get("/api/io").json()
+    assert not io_["locale"]["editore"] and pc.attiva() == "2026-11-01"
+
+
+def test_editori_aggiunti_e_tolti(ambiente):
+    tmp, cond, mp = ambiente
+    ed = PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",))
+    collega = PC(tmp, cond, "lbianchi", mp, editore=False)
+    ce, cc = ed.entra(), collega.entra()
+    loc = ce.get("/api/admin/locale").json()
+    assert loc["editori"] == ["mrossi"] and loc["utente"] == "mrossi" and loc["scrivibile"]
+    assert ce.put("/api/admin/locale/editori", json={"editori": ["mrossi", "a/b"]}).status_code == 422
+    assert ce.put("/api/admin/locale/editori", json={"editori": []}).status_code == 422
+    r = ce.put("/api/admin/locale/editori", json={"editori": ["mrossi", " LBianchi "]})
+    assert r.status_code == 200 and r.json()["editori"] == ["mrossi", "lbianchi"]
+    cc.post("/api/locale/sincronizza")                                       # come al giro successivo del pianificatore
+    assert cc.get("/api/io").json()["locale"]["editore"] and cc.get("/api/admin/locale").status_code == 200
+    # chi si toglie dall'elenco smette subito di pubblicare
+    r = ce.put("/api/admin/locale/editori", json={"editori": ["lbianchi"]})
+    assert r.status_code == 200 and r.json()["editore"] is False
+    assert ce.get("/api/admin/locale").status_code == 403 and ce.get("/api/io").json()["ruolo"] == "utente"
+
+
+def test_messaggi_ia_nel_programma_sul_pc(ambiente):
+    tmp, cond, mp = ambiente
+    ed = PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",))
+    ce = ed.entra()
+    ce.put("/api/admin/locale/ia", json={"fornitore": "openai", "url": "https://esempio.it/v1", "modello": "m", "chiave": "k", "quota": 0})
+    collega = PC(tmp, cond, "lbianchi", mp, editore=False)
+    r = collega.entra().post("/api/ia", json={"prompt": "ciao", "livello": "rapido"})
+    assert r.status_code == 429 and "chi gestisce MAGIC HS" in r.json()["errore"] and "amministratore" not in r.json()["errore"]
+
+
+def test_non_riscarica_un_mese_gia_installato(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Se l'amministratore torna alla versione precedente, il pianificatore non reinstalla da solo quella nuova."""
+    from datetime import datetime
+
+    from conftest import Sito
+    monkeypatch.setenv("TARIC_CONFIG", str(tmp_path / "nessuno.env"))
+    sito = Sito(tmp_path, {"TARIC_AGGIORNAMENTO_AUTOMATICO": "si"})
+    dati = sito.app.state.dati
+    monkeypatch.setattr(dati, "_ora_locale", lambda: datetime(2026, 12, 5, 9, 0))
+    sito.versione_finta("2026-11-01")
+    assert dati.da_fare() == "2026-12"
+    sito.versione_finta("2026-12-01")
+    sito.app.state.dati.imposta_attiva("2026-11-01")
+    assert dati.da_fare() is None

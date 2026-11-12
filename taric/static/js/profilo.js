@@ -43,7 +43,7 @@
       '<form class="modulo" data-p="salva-account"><div class="due">' +
       '<label>Nome e cognome<input class="campo" name="nome" required minlength="2" maxlength="100" value="' + esc(io.nome) + '"></label>' +
       '<label>Azienda<input class="campo" name="azienda" maxlength="150" value="' + esc(io.azienda) + '"></label></div>' +
-      (io.locale ? '<p class="nota">Storico, preferiti e preferenze restano su questo computer, nella tua cartella di Windows.</p>'
+      (io.locale ? '<p class="nota">Storico, preferiti e preferenze restano su questo computer, nella tua cartella di Windows. Il tuo nome utente di Windows è <b>' + esc(io.locale.utente || '?') + '</b>: serve a chi gestisce MAGIC HS se deve darti il permesso di pubblicare.</p>'
         : '<label>Email (per cambiarla chiedi all\'amministratore)<input class="campo" value="' + esc(io.email) + '" disabled></label>') +
       '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div></div>';
 

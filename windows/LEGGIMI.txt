@@ -25,11 +25,14 @@ SE NON SI APRE
 ------------------------------------------------------------------------------------------
 PER CHI GESTISCE MAGIC HS (chi può modificare questa cartella)
 
+La prima volta apri MAGIC HS dal tuo PC e premi «Gestisco io MAGIC HS»: da quel momento pubblichi tu
+per tutti. Altre persone si aggiungono in Gestione > Cartella condivisa > Chi può pubblicare.
+
 La cartella contiene:
   Avvia MAGIC HS.cmd   l'avvio, per tutti
   programma\           il programma per Windows (versione.txt dice quale usare)
   dati\                i dati TARIC del mese (attiva.txt dice quale usare)
-  impostazioni.json    il servizio di intelligenza artificiale per tutti (si cambia dal programma)
+  impostazioni.json    chi pubblica e il servizio di intelligenza artificiale (si cambiano dal programma)
 
 Non modificare i file a mano: si gestisce tutto dal programma, scheda Gestione.
 - Dati TARIC: a ogni inizio mese, quando apri MAGIC HS sul tuo PC, scarica la nuova estrazione,
@@ -38,5 +41,7 @@ Non modificare i file a mano: si gestisce tutto dal programma, scheda Gestione.
   questa cartella: usane una dedicata, con un tetto di spesa.
 - Nuova versione del programma: scarica magic-hs-windows-<versione>.zip dalla pagina delle versioni
   su GitHub e caricala in Gestione > Cartella condivisa.
-- Colleghi: condividi la cartella con il solo permesso di visualizzazione; ognuno sceglie
-  «Aggiungi collegamento a I miei file» sul sito di OneDrive e poi apre «Avvia MAGIC HS».
+- Colleghi: condividi la cartella con il permesso «Può modificare» (OneDrive lo chiede per aggiungere
+  il collegamento); ognuno sceglie «Aggiungi collegamento a I miei file» sul sito di OneDrive e poi
+  apre «Avvia MAGIC HS». Pubblica solo chi è nell'elenco, ma con il permesso di modifica un collega
+  potrebbe cancellare dei file per sbaglio: si recuperano dal cestino di OneDrive.

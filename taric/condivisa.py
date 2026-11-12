@@ -1,7 +1,9 @@
 """Cartella condivisa del programma per Windows (per esempio una cartella di OneDrive aziendale).
 
-Chi può scrivere nella cartella (l'«editore») pubblica qui programma, dati TARIC e impostazioni; i colleghi la
-ricevono da OneDrive in sola lettura e il programma ne copia il contenuto sul proprio PC. Struttura:
+Pubblica chi è nell'elenco degli editori (nomi utente di Windows in impostazioni.json) e può scrivere nella
+cartella: per aggiungere il collegamento a una cartella di OneDrive serve il permesso di modifica, quindi la
+scrittura da sola non basta a distinguere chi gestisce MAGIC HS dai colleghi. Il primo editore si indica dal
+programma («Gestisco io MAGIC HS»). Gli altri ricevono tutto da OneDrive e non scrivono mai nella cartella. Struttura:
 
     Avvia MAGIC HS.cmd                  avvio (doppio clic)
     LEGGIMI.txt
@@ -9,7 +11,7 @@ ricevono da OneDrive in sola lettura e il programma ne copia il contenuto sul pr
     programma/magic-hs-<versione>.zip   Python, librerie e programma per Windows
     dati/attiva.txt                     versione dei dati TARIC da usare (AAAA-MM-01)
     dati/<AAAA-MM-01>.zip               file generati da aggiorna.py
-    impostazioni.json                   servizio IA e limite mensile, scritti dall'editore
+    impostazioni.json                   chi pubblica (editori), servizio IA e limite mensile
 
 OneDrive può consegnare i file in un ordine qualsiasi e tenerli bloccati mentre li carica: chi legge controlla
 che i file siano completi e, se non lo sono, riprova al giro successivo; chi scrive passa da un file temporaneo
@@ -17,6 +19,7 @@ e ritenta la sostituzione.
 """
 from __future__ import annotations
 
+import getpass
 import json
 import logging
 import os
@@ -33,6 +36,8 @@ from .dati import RE_FILE, RE_VERSIONE
 log = logging.getLogger("taric.condivisa")
 
 RE_VERSIONE_PROGRAMMA = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.\-]{0,39}$")
+# nome utente di Windows: niente caratteri che Windows non ammette (" / \ [ ] : ; | = , + * ? < >)
+RE_UTENTE = re.compile(r'^[^"/\\\[\]:;|=,+*?<>\x00-\x1f]{1,64}$')
 NOME_AVVIO = "Avvia MAGIC HS.cmd"
 VERSIONI_DATI_TENUTE = 3
 VERSIONI_PROGRAMMA_TENUTE = 2
@@ -227,6 +232,28 @@ class Condivisa:
         scrivi_testo(self.file_impostazioni, json.dumps(imp, ensure_ascii=False, indent=2) + "\n")
 
 
+def utente_windows() -> str:
+    """Nome utente di Windows di chi usa il programma, in minuscolo (Windows non distingue le maiuscole)."""
+    try:
+        nome = os.environ.get("USERNAME") or getpass.getuser()
+    except Exception:
+        nome = ""
+    return nome.strip().lower()
+
+
+def editori(imp: dict[str, Any]) -> list[str]:
+    """Nomi utente di Windows di chi può pubblicare per tutti."""
+    elenco = imp.get("editori")
+    if not isinstance(elenco, list):
+        return []
+    out: list[str] = []
+    for x in elenco:
+        n = str(x).strip().lower()
+        if RE_UTENTE.match(n) and n not in out:
+            out.append(n)
+    return out
+
+
 def ia_da_impostazioni(imp: dict[str, Any]) -> dict[str, str]:
     """Valori della configurazione (come in taric.env) per il servizio IA scelto dall'editore."""
     ia = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
@@ -235,4 +262,5 @@ def ia_da_impostazioni(imp: dict[str, Any]) -> dict[str, str]:
             "TARIC_IA_MODELLO": v["modello"], "TARIC_IA_MODELLO_RAPIDO": v["modello_rapido"]}
 
 
-__all__ = ["Condivisa", "ErroreCondivisa", "estrai_dati", "ia_da_impostazioni", "versione_pacchetto", "NOME_AVVIO"]
+__all__ = ["Condivisa", "ErroreCondivisa", "editori", "estrai_dati", "ia_da_impostazioni", "utente_windows", "versione_pacchetto",
+           "NOME_AVVIO", "RE_UTENTE"]

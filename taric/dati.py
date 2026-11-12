@@ -284,6 +284,8 @@ class GestoreDati:
         att = self.attiva()
         if not self.cfg.scarica_dati or (att and att[:7] >= mese):
             return None
+        if (self.versioni / f"{mese}-01" / "nomenclatura.js").is_file():
+            return None                       # gia' installato: se e' in uso una versione precedente, l'ha scelta l'amministratore
         if att and not self.cfg.aggiornamento_automatico:
             return None
         with self.db.connessione() as c:
@@ -296,6 +298,21 @@ class GestoreDati:
             if (adesso() - da_iso(tentativi[0]["finito"])).total_seconds() < attesa_ore * 3600:
                 return None
         return mese
+
+    def controlla_mese(self) -> None:
+        """Scarica e installa il mese corrente se le regole automatiche lo prevedono (sincrono)."""
+        mese = self.da_fare()
+        if not mese or self.in_corso is not None:
+            return
+        if self.attiva() is None:
+            # primo avvio: se il mese corrente non c'e' ancora, si parte da quello precedente
+            r = self.esegui(mese, "automatico")
+            if r["esito"] == "non_disponibile":
+                ora = self._ora_locale()
+                prec = f"{ora.year - (ora.month == 1)}-{(ora.month - 2) % 12 + 1:02d}"
+                self.esegui(prec, "automatico")
+        else:
+            self.esegui(mese, "automatico")
 
     def avvia_pianificatore(self, registrazioni: Any, backup: Any = None, ogni_6_ore: list[Any] | None = None,
                             ogni_ciclo: list[Any] | None = None, attesa: float = 1800) -> None:
@@ -324,17 +341,7 @@ class GestoreDati:
                         with self.db.transazione() as c:
                             registrazioni.pulizia(c)
                         ultima_pulizia = time.time()
-                    mese = self.da_fare()
-                    if mese and self.in_corso is None:
-                        if self.attiva() is None:
-                            # primo avvio: se il mese corrente non c'e' ancora, si parte da quello precedente
-                            r = self.esegui(mese, "automatico")
-                            if r["esito"] == "non_disponibile":
-                                ora = self._ora_locale()
-                                prec = f"{ora.year - (ora.month == 1)}-{(ora.month - 2) % 12 + 1:02d}"
-                                self.esegui(prec, "automatico")
-                        else:
-                            self.esegui(mese, "automatico")
+                    self.controlla_mese()
                 except Exception:
                     log.exception("pianificatore")
                 self._fermo.wait(attesa)

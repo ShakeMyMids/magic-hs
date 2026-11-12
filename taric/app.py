@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -26,7 +27,7 @@ from pydantic import BaseModel, Field
 from . import __version__
 from . import sicurezza as S
 from .backup import Backup, ErroreBackup
-from .condivisa import Condivisa, ErroreCondivisa, ia_da_impostazioni
+from .condivisa import RE_UTENTE, Condivisa, ErroreCondivisa, editori, ia_da_impostazioni, utente_windows
 from .config import Config
 from .dati import GestoreDati
 from .db import Database, iso
@@ -220,6 +221,10 @@ class ChiaveIstanza(BaseModel):
     chiave: str = Field(max_length=200)
 
 
+class Editori(BaseModel):
+    editori: list[str] = Field(min_length=1, max_length=50)
+
+
 # ------------------------------------------------------------------ applicazione
 def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
              client_stripe: httpx.Client | None = None, chiave_ingresso: str = "", istanza: str = "") -> FastAPI:
@@ -235,8 +240,19 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     copie = Backup(cfg.dati, cfg.backup_copie)
     locale = cfg.locale
     condivisa = Condivisa(cfg.condivisa) if locale and cfg.condivisa else None
-    editore = bool(condivisa and condivisa.scrivibile())       # sul PC di chi pubblica per tutti
+    utente_pc = utente_windows() if locale else ""
+    # programma sul PC: pubblica per tutti solo chi e' nell'elenco degli editori e puo' scrivere nella cartella
+    ruolo_pc: dict[str, Any] = {"editore": False, "puo_gestire": False, "editori": [], "scrivibile": None}
     cookie = "magic_hs_locale" if locale else S.COOKIE_SESSIONE
+
+    def editore() -> bool:
+        return bool(ruolo_pc["editore"])
+
+    def scrivibile() -> bool:
+        """Prova di scrittura nella cartella, una volta sola: ogni prova crea e cancella un file su OneDrive."""
+        if ruolo_pc["scrivibile"] is None:
+            ruolo_pc["scrivibile"] = bool(condivisa and condivisa.scrivibile())
+        return bool(ruolo_pc["scrivibile"])
 
     # ------------------------------------------------------------------ programma sul PC: cartella condivisa
     def applica_impostazioni() -> None:
@@ -252,6 +268,23 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             if db.impostazioni(c)["quota_predefinita"] != quota:
                 db.salva_impostazioni(c, {"quota_predefinita": quota})
 
+    def pubblica(v: str) -> None:
+        if condivisa is not None:
+            condivisa.pubblica_dati(v, dati.versioni / v)
+
+    def aggiorna_ruolo() -> None:
+        """Rilegge l'elenco degli editori: chi viene aggiunto o tolto cambia ruolo entro un giro del pianificatore."""
+        if condivisa is None:
+            return
+        elenco = editori(condivisa.impostazioni())
+        e = utente_pc in elenco and scrivibile()
+        ruolo_pc.update(editore=e, editori=elenco, puo_gestire=not elenco and scrivibile())
+        cfg.scarica_dati = e                    # i dati arrivano dalla cartella: li scarica dalla fonte solo chi pubblica
+        dati.dopo_installazione = pubblica if e else None
+        with db.transazione() as c:
+            c.execute("UPDATE utenti SET ruolo = ? WHERE email = ? AND ruolo != ?",
+                      ("amministratore" if e else "utente", EMAIL_LOCALE, "amministratore" if e else "utente"))
+
     def allinea_dati() -> None:
         """L'editore pubblica la versione dei dati installata sul suo PC se e' piu' recente di quella nella cartella;
         tutti gli altri (e l'editore, se qualcuno ha pubblicato dopo di lui) installano quella della cartella."""
@@ -259,7 +292,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             return
         try:
             att, pubb = dati.attiva(), condivisa.dati_pubblicati()
-            if editore and att and (not pubb or att > pubb or (att == pubb and not (condivisa.dati / f"{att}.zip").is_file())):
+            if editore() and att and (not pubb or att > pubb or (att == pubb and not (condivisa.dati / f"{att}.zip").is_file())):
                 condivisa.pubblica_dati(att, dati.versioni / att)
             elif condivisa.ricevi_dati(dati.versioni, dati.imposta_attiva, att):
                 dati._pota()
@@ -269,25 +302,21 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             dati._lock.release()
 
     if locale:
-        if not editore:
-            cfg.scarica_dati = False      # i dati arrivano dalla cartella: li scarica dalla fonte solo chi pubblica
+        cfg.scarica_dati = False
         with db.transazione() as c:
             nome = (os.environ.get("USERNAME") or os.environ.get("USER") or "").strip()[:100]
             c.execute("INSERT INTO utenti(email, nome, ruolo, stato, email_confermata, creato, aggiornato) "
-                      "VALUES (?, ?, ?, 'attivo', 1, ?, ?) ON CONFLICT(email) DO UPDATE SET ruolo = excluded.ruolo, stato = 'attivo'",
-                      (EMAIL_LOCALE, nome if len(nome) >= 2 else "Utente", "amministratore" if editore else "utente", iso(), iso()))
+                      "VALUES (?, ?, 'utente', 'attivo', 1, ?, ?) ON CONFLICT(email) DO UPDATE SET stato = 'attivo'",
+                      (EMAIL_LOCALE, nome if len(nome) >= 2 else "Utente", iso(), iso()))
+        aggiorna_ruolo()
         applica_impostazioni()
         allinea_dati()
-        if editore and condivisa is not None:
-            def pubblica(v: str, _c: Condivisa = condivisa) -> None:
-                _c.pubblica_dati(v, dati.versioni / v)
-            dati.dopo_installazione = pubblica
 
     @asynccontextmanager
     async def vita(_app: FastAPI) -> AsyncIterator[None]:
         if pianificatore:
             if locale:
-                dati.avvia_pianificatore(reg, copie, ogni_ciclo=[applica_impostazioni, allinea_dati], attesa=600)
+                dati.avvia_pianificatore(reg, copie, ogni_ciclo=[aggiorna_ruolo, applica_impostazioni, allinea_dati], attesa=600)
             else:
                 dati.avvia_pianificatore(reg, copie, [pag.sincronizza_scadenze])
         yield
@@ -480,7 +509,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             configurato = ci_sono_admin(c)
         return {"configurato": configurato, "registrazione_aperta": bool(imp["registrazione_aperta"]),
                 "posta": posta.configurata, "dati_pronti": dati.attiva() is not None,
-                "aggiornamento": (dati.in_corso or {}).get("fase"), "locale": locale, "editore": editore}
+                "aggiornamento": (dati.in_corso or {}).get("fase"), "locale": locale, "editore": editore()}
 
     # ------------------------------------------------------------------ programma sul PC: ingresso e chiusura
     if locale:
@@ -517,9 +546,34 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         @app.post("/api/locale/sincronizza")
         def locale_sincronizza(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
             """Controlla subito la cartella condivisa (pagina d'attesa dei dati)."""
+            aggiorna_ruolo()
             applica_impostazioni()
             allinea_dati()
             return json_ok(dati=dati.attiva())
+
+        @app.post("/api/locale/gestisco-io")
+        def locale_gestisco_io(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+            """Il primo editore: chi ha creato la cartella lo dice una volta dal suo PC."""
+            if condivisa is None or not condivisa.raggiungibile():
+                raise Errore(409, "Non trovo la cartella condivisa.", "condivisa")
+            imp = condivisa.impostazioni()
+            if editori(imp):
+                raise Errore(409, "MAGIC HS ha già chi lo gestisce: chiedigli di aggiungerti in Gestione, «Cartella condivisa».", "editori")
+            if not scrivibile():
+                raise Errore(409, "Da questo PC non puoi scrivere nella cartella condivisa: serve il permesso di modifica.", "condivisa")
+            if not RE_UTENTE.match(utente_pc):
+                raise Errore(409, "Non riesco a leggere il tuo nome utente di Windows.", "utente")
+            try:
+                condivisa.salva_impostazioni({**imp, "editori": [utente_pc]})
+            except OSError as e:
+                raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
+            aggiorna_ruolo()
+            allinea_dati()
+            if dati.da_fare():                             # cartella senza i dati del mese: si scaricano subito
+                threading.Thread(target=dati.controlla_mese, name="taric-primo-mese", daemon=True).start()
+            with db.transazione() as c:
+                db.evento(c, "editori", autore_id=u["id"], dettagli=utente_pc)
+            return json_ok(editore=editore())
 
     # ------------------------------------------------------------------ configurazione iniziale
     @app.post("/api/configurazione-iniziale")
@@ -693,7 +747,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                        "usate": ia.usate(c, u["id"]), "mese": mese_corrente(), "tetto_giorno": ia.tetto(c, u)},
                 "piano": {**pag.stato(c, u["id"]), "pagamenti": pag.attivi},
                 "dati": {"versione": v, "aggiornamento": (dati.in_corso or {}).get("fase")},
-                "locale": {"editore": editore, "versione": __version__} if locale else None}
+                "locale": {"editore": editore(), "versione": __version__, "utente": utente_pc,
+                           "puo_gestire": bool(ruolo_pc["puo_gestire"])} if locale else None}
 
     @app.get("/api/io")
     def io(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
@@ -809,6 +864,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             return JSONResponse(ia.chiedi(u, body.prompt, body.livello))
         except ErroreIA as e:
             messaggio = MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
+            if locale:
+                messaggio = messaggio.replace(" su questo server", "").replace("Il server non riesce", "MAGIC HS non riesce") \
+                    .replace("all'amministratore", "a chi gestisce MAGIC HS").replace("l'amministratore", "chi gestisce MAGIC HS")
             if e.codice == "quota_esaurita" and pag.attivi and u["quota_ia"] != 0:
                 messaggio = ("Hai usato tutte le richieste gratuite all'IA di questo mese. Con il piano Pro sono illimitate: "
                              "lo attivi da Profilo, «Il tuo piano». Nomenclatura e misure restano consultabili.")
@@ -1159,7 +1217,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             dati.imposta_attiva(body.versione)
         except ValueError:
             raise Errore(404, "Versione non disponibile.", "non_trovato")
-        if editore and condivisa is not None:
+        if editore() and condivisa is not None:
             try:
                 condivisa.pubblica_dati(body.versione, dati.versioni / body.versione)
             except (OSError, ErroreCondivisa) as e:
@@ -1171,7 +1229,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     # ------------------------------------------------------------------ programma sul PC: pannello dell'editore
     if locale:
         def serve_editore() -> Condivisa:
-            if condivisa is None or not editore:
+            if condivisa is None or not editore():
                 raise Errore(409, "Da questo PC non si può scrivere nella cartella condivisa.", "condivisa")
             return condivisa
 
@@ -1181,7 +1239,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             ia_imp = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
             chiave = str(ia_imp.get("chiave") or "")
             return {"condivisa": str(cfg.condivisa or ""), "raggiungibile": bool(condivisa and condivisa.raggiungibile()),
-                    "editore": editore,
+                    "editore": editore(), "scrivibile": scrivibile(), "utente": utente_pc, "editori": editori(imp),
                     "programma": {"in_uso": __version__, "pubblicato": condivisa.versione_programma() if condivisa else ""},
                     "dati": {"in_uso": dati.attiva() or "", "pubblicati": condivisa.dati_pubblicati() if condivisa else ""},
                     "ia": {"fornitore": str(ia_imp.get("fornitore") or ""), "url": str(ia_imp.get("url") or ""),
@@ -1217,6 +1275,25 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             with db.transazione() as c:
                 db.evento(c, "impostazioni_ia", autore_id=a["id"], dettagli=body.fornitore or "nessuna")
             return json_ok(attiva=ia.disponibile, ia_nome=cfg.ia_nome)
+
+        @app.put("/api/admin/locale/editori")
+        def admin_locale_editori(body: Editori, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            cond = serve_editore()
+            elenco: list[str] = []
+            for x in body.editori:
+                n = x.strip().lower()
+                if not RE_UTENTE.match(n):
+                    raise Errore(422, f"Nome utente di Windows non valido: «{x.strip()[:64]}».", "editori")
+                if n not in elenco:
+                    elenco.append(n)
+            try:
+                cond.salva_impostazioni({**cond.impostazioni(), "editori": elenco})
+            except OSError as e:
+                raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
+            aggiorna_ruolo()
+            with db.transazione() as c:
+                db.evento(c, "editori", autore_id=a["id"], dettagli=", ".join(elenco))
+            return json_ok(editori=elenco, editore=editore())
 
         @app.post("/api/admin/locale/ia/prova")
         def admin_locale_prova(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:

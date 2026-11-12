@@ -1266,13 +1266,30 @@ function chiuso(daSolo) {
   ['.schede', '#esci'].forEach(function (s) { var e = $(s); if (e) e.hidden = true; });
 }
 var vivoT = null;
+function controllaVivo() {
+  if (state.chiuso) return;
+  fetch('/api/locale/ping', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { if (!r.ok) throw r; }).catch(function () { chiuso(true); });
+}
 function tieniVivo() {
-  function ping() {
-    if (state.chiuso) return;
-    fetch('/api/locale/ping', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { if (!r.ok) throw r; }).catch(function () { chiuso(true); });
-  }
-  vivoT = setInterval(ping, 120000);
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') ping(); });
+  vivoT = setInterval(controllaVivo, 120000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') controllaVivo(); });
+  T.alOffline = controllaVivo;
+}
+/* programma sul PC: nessuno ha ancora detto di gestire MAGIC HS per i colleghi */
+function proponiGestione() {
+  var v = $('#view-classifica');
+  if (!v || $('#gestisco-io')) return;
+  var d = document.createElement('div');
+  d.className = 'foglio'; d.id = 'gestisco-io';
+  d.innerHTML = '<div class="box"><div class="lab">' + T.icona('cartella') + 'Chi gestisce MAGIC HS?</div>' +
+    '<p class="nota">Nessuno pubblica ancora gli aggiornamenti per i colleghi. Se sei tu a gestire MAGIC HS (hai creato tu la cartella condivisa), premi il pulsante: da questo PC pubblicherai i dati di ogni mese, l\'intelligenza artificiale e le nuove versioni. Se sei un collega, ignora questo messaggio.</p>' +
+    '<div class="fila"><button class="btn pri" type="button" id="gestisco-io-si">' + T.icona('spunta') + 'Gestisco io MAGIC HS</button></div><div id="gestisco-io-esito"></div></div>';
+  v.insertBefore(d, v.firstChild);
+  $('#gestisco-io-si').addEventListener('click', function () {
+    this.disabled = true;
+    T.api('POST', '/api/locale/gestisco-io').then(function () { location.hash = '#gestione'; location.reload(); },
+      function (e) { $('#gestisco-io-esito').innerHTML = '<p class="errore">' + esc(e.errore || 'Non è stato possibile.') + '</p>'; $('#gestisco-io-si').disabled = false; });
+  });
 }
 
 T.api('GET', '/api/io').then(function (u) {
@@ -1284,6 +1301,7 @@ T.api('GET', '/api/io').then(function (u) {
     var e = $('#esci');
     e.title = 'Chiudi MAGIC HS'; e.setAttribute('aria-label', 'Chiudi MAGIC HS'); e.innerHTML = T.icona('spegni');
     tieniVivo();
+    if (u.locale.puo_gestire) proponiGestione();
   }
   if (u.ia && u.ia.nome) $('#ia-nome').textContent = ' (' + u.ia.nome.replace(/ \((.+)\)$/, ' di $1') + ')';
   $('#tab-gestione').hidden = u.ruolo !== 'amministratore';

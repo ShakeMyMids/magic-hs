@@ -28,6 +28,7 @@
       });
     }, function (e) {
       if (e && e.name === 'AbortError') throw e;
+      if (T.alOffline) T.alOffline();            // programma sul PC: forse si è chiuso
       throw { stato: 0, codice: 'offline', errore: 'Server non raggiungibile: controlla la connessione e riprova.' };
     });
   };

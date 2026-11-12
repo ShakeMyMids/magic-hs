@@ -22,7 +22,8 @@
     dati_errore: 'Aggiornamento dati non riuscito', dati_non_disponibile: 'Estrazione non ancora disponibile', dati_versione_attivata: 'Versione dati cambiata',
     backup_creato: 'Backup creato', backup_scaricato: 'Backup scaricato', pagamento_avviato: 'Pagina di pagamento aperta',
     pro_pass: 'Pro: pass pagato', pro_abbonamento: 'Pro: abbonamento', pro_manuale: 'Pro concesso a mano',
-    impostazioni_ia: 'Intelligenza artificiale cambiata', programma_pubblicato: 'Nuova versione del programma pubblicata'
+    impostazioni_ia: 'Intelligenza artificiale cambiata', programma_pubblicato: 'Nuova versione del programma pubblicata',
+    editori: 'Chi può pubblicare cambiato'
   };
   var FORNITORI = [['', 'Nessuno: solo consultazione'], ['openai', 'Azure OpenAI o altro servizio compatibile OpenAI'], ['gemini', 'Google Gemini'], ['anthropic', 'Anthropic Claude']];
   var MOVIMENTI = { pass: 'Pass', abbonamento: 'Abbonamento: prima fattura', rinnovo: 'Rinnovo', stato_abbonamento: 'Abbonamento', in_attesa: 'Pagamento in attesa' };
@@ -74,7 +75,7 @@
     var a = [];
     if (locale()) {
       if (st.loc && !st.loc.raggiungibile) a.push('Non trovo la cartella condivisa: controlla che OneDrive sia attivo e sincronizzato.');
-      else if (st.loc && !st.loc.editore) a.push('Da questo PC non puoi scrivere nella cartella condivisa, quindi non puoi pubblicare.');
+      else if (st.loc && !st.loc.scrivibile) a.push('Da questo PC non puoi scrivere nella cartella condivisa: serve il permesso di modifica per pubblicare.');
       if (!r.ia && st.sotto !== 'ia') a.push('La classificazione assistita è spenta per tutti: scegli un servizio nella scheda Intelligenza artificiale.');
       if (!r.dati) a.push('Non ci sono ancora dati TARIC: vai su Dati TARIC.');
       return a.length ? '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Da sistemare</div>' + a.map(function (t) { return '<p class="avviso">' + esc(t) + '</p>'; }).join('') + '</div></div>' : '';
@@ -239,14 +240,31 @@
       '<tr><td>Programma</td><td data-l="Su questo PC">' + esc(L.programma.in_uso) + '</td><td data-l="Per tutti">' + esc(L.programma.pubblicato || 'nessuno') + '</td></tr>' +
       '<tr><td>Dati TARIC</td><td data-l="Su questo PC">' + esc(data(L.dati.in_uso)) + '</td><td data-l="Per tutti">' + esc(data(L.dati.pubblicati)) + '</td></tr></tbody></table></div>';
     h += '<div class="box s4"><div class="lab">' + T.icona('utenti') + 'Aggiungere un collega</div><ol class="passi">' +
-      '<li>In OneDrive condividi la cartella con il collega, con il solo permesso di visualizzazione.</li>' +
-      '<li>Il collega apre la cartella condivisa sul sito di OneDrive e sceglie «Aggiungi collegamento a I miei file».</li>' +
-      '<li>Sul suo PC fa doppio clic su <b>Avvia MAGIC HS</b> nella cartella (la prima volta ci vuole un minuto). Per comodità può creare un collegamento sul desktop.</li></ol></div></div>';
+      '<li>In OneDrive condividi la cartella con il collega con il permesso <b>Può modificare</b>: senza, OneDrive non gli lascia aggiungere il collegamento. Pubblica comunque solo chi è in «Chi può pubblicare».</li>' +
+      '<li>Il collega apre la cartella sul sito di OneDrive (Condivisi con me) e sceglie «Aggiungi collegamento a I miei file».</li>' +
+      '<li>Sul suo PC fa doppio clic su <b>Avvia MAGIC HS</b> nella cartella (la prima volta ci vuole un minuto). Per comodità può creare un collegamento sul desktop.</li></ol>' +
+      '<p class="nota">Con il permesso di modifica un collega potrebbe cancellare per sbaglio dei file della cartella: li recuperi dal cestino di OneDrive. Per una cartella davvero in sola lettura usa una raccolta di SharePoint o di Teams, con permesso di lettura per i colleghi e il pulsante «Sincronizza».</p></div></div>';
+    var ed = L.editori || [];
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scudo') + 'Chi può pubblicare<span class="dx">' + ed.length + '</span></div>' +
+      '<p class="nota">Nomi utente di Windows di chi pubblica per tutti dati, intelligenza artificiale e nuove versioni. Ognuno vede il proprio in Profilo; serve anche il permesso di modifica sulla cartella. Le modifiche valgono sugli altri PC entro dieci minuti.</p>' +
+      '<div class="elenco">' + ed.map(function (n) {
+        return '<div class="voce"><div><b>' + esc(n) + '</b>' + (n === L.utente ? ' <span class="st ok">tu</span>' : '') + '</div><div class="azioni">' +
+          (ed.length > 1 ? '<button class="btn sm" type="button" data-g="editore-togli" data-v="' + esc(n) + '">Togli</button>' : '') + '</div></div>';
+      }).join('') + '</div>' +
+      '<form class="fila" data-g="editore-aggiungi"><input class="campo" name="utente" maxlength="64" required placeholder="Nome utente di Windows del collega" aria-label="Nome utente di Windows del collega">' +
+      '<button class="btn" type="submit"' + (L.editore ? '' : ' disabled') + '>' + T.icona('piu') + 'Aggiungi</button></form>' + riga('editori') + '</div></div>';
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Nuova versione del programma</div>' +
       '<p class="nota">Scarica il file <b>magic-hs-windows-….zip</b> dalla pagina delle versioni di MAGIC HS su GitHub e caricalo qui: va nella cartella condivisa e i colleghi la usano dalla prossima volta che aprono MAGIC HS. Su questo PC chiudi e riapri MAGIC HS.</p>' +
       '<form class="modulo" data-g="programma"><label>Pacchetto .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (L.editore ? '' : ' disabled') + '>' + T.icona('carica') + 'Pubblica per tutti</button></div>' + riga('programma') + '</form></div></div>';
     return h;
+  }
+
+  function salvaEditori(elenco, testo) {
+    T.api('PUT', '/api/admin/locale/editori', { editori: elenco }).then(function (r) {
+      msg('editori', testo, true);
+      if (!r.editore) { T.avviso('Non pubblichi più da questo PC: ricarico la pagina.'); setTimeout(function () { location.hash = '#classifica'; location.reload(); }, 900); }
+    }, function (e) { msg('editori', errore(e)); }).then(carica);
   }
 
   /* ---------- programma sul PC: intelligenza artificiale per tutti ---------- */
@@ -419,6 +437,9 @@
         msg('ia', r.attiva ? 'Salvato per tutti: ' + r.ia_nome + '. Premi Prova per controllare che risponda.' : 'Salvato per tutti: classificazione assistita spenta.', true);
         return app().aggiornaIo();
       }, function (e) { msg('ia', errore(e)); }).then(carica);
+    } else if (g === 'editore-aggiungi') {
+      var nuovo = String(d.get('utente') || '').trim();
+      salvaEditori((st.loc.editori || []).concat([nuovo]), 'Aggiunto: ' + nuovo + '.');
     } else if (g === 'programma') {
       msg('programma', 'Caricamento in corso…', true); disegna();
       T.api('POST', '/api/admin/locale/programma', d).then(function (r) { msg('programma', 'Versione ' + r.versione + ' pubblicata: i colleghi la useranno dalla prossima apertura. Su questo PC chiudi e riapri MAGIC HS.', true); },
@@ -448,6 +469,10 @@
     var g = b.getAttribute('data-g'), id = b.getAttribute('data-id'), v = b.getAttribute('data-v');
     if (g === 'sotto') { st.sotto = v; st.registro = null; disegna(); carica(); }
     else if (g === 'cambia-chiave') { st.cambiaChiave = true; disegna(); }
+    else if (g === 'editore-togli') {
+      if (v === st.loc.utente && !window.confirm('Togliendo te stesso non potrai più pubblicare da questo PC. Continuare?')) return;
+      salvaEditori(st.loc.editori.filter(function (n) { return n !== v; }), 'Tolto: ' + v + '.');
+    }
     else if (g === 'prova-ia') {
       b.disabled = true; msg('ia', 'Provo il servizio…', true); disegna();
       T.api('POST', '/api/admin/locale/ia/prova').then(function (r) { msg('ia', 'Il servizio risponde (' + r.modello + ', ' + (r.secondi < 1 ? 'in meno di un secondo' : 'in ' + String(r.secondi).replace('.', ',') + ' secondi') + ').', true); },
