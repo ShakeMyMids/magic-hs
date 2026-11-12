@@ -1223,9 +1223,11 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             try:
                 return json_ok(**ia.prova())
             except ErroreIA as e:
-                messaggio = MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
-                if e.codice == "not_configured":
-                    messaggio = "Nessun servizio IA impostato: scegline uno e salva."
+                messaggio = {
+                    "not_configured": "Nessun servizio IA impostato: scegline uno e salva.",
+                    "server_misconfigured": "Il servizio rifiuta la chiave o non trova il modello: controlla chiave, indirizzo e nome del modello.",
+                    "upstream_error": "Non riesco a raggiungere il servizio: controlla l'indirizzo e, se in azienda c'è un proxy, chiedi all'IT.",
+                }.get(e.codice) or MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
                 raise Errore(e.stato_http, messaggio, e.codice)
 
         @app.post("/api/admin/locale/programma")

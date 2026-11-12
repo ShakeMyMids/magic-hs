@@ -148,7 +148,7 @@ class Condivisa:
                 tmp_avvio = self.percorso / f".avvio.{secrets.token_hex(4)}.tmp"
                 tmp_avvio.write_bytes(z.read(NOME_AVVIO))
                 sostituisci(tmp_avvio, self.percorso / NOME_AVVIO)
-        scrivi_testo(self.programma / "versione.txt", versione + "\n")
+        scrivi_testo(self.programma / "versione.txt", versione + "\r\n")       # a capo di Windows, per «set /p» dell'avvio
         pacchetti = sorted(self.programma.glob("magic-hs-*.zip"), key=lambda f: f.stat().st_mtime, reverse=True)
         for vecchio in pacchetti[VERSIONI_PROGRAMMA_TENUTE:]:
             if vecchio != dest:

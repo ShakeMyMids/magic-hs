@@ -196,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--senza-browser", action="store_true", help="non aprire il browser (prove)")
     ap.add_argument("--console", action="store_true", help="scrivi il registro anche sulla console")
     a = ap.parse_args(argv)
+    a.senza_browser = a.senza_browser or os.environ.get("MAGIC_HS_SENZA_BROWSER") == "1"     # prove automatiche
     cartella = Path(a.cartella) if a.cartella else cartella_utente()
     try:
         # certificati di Windows (anche quelli aziendali dei proxy che ispezionano HTTPS) per IA e download dei dati

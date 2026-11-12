@@ -4,6 +4,8 @@ Sito per cercare le voci doganali in modo più rapido di AIDA. Descrivi la merce
 
 È un sito completo con server proprio: account con email e password, registrazione automatica, profili e pannello di amministrazione. I dati si aggiornano da soli ogni mese. Puoi farlo girare sul tuo computer oggi e su un server con un dominio domani, con Docker o con Python.
 
+C'è anche un **programma per Windows** per i colleghi di un'azienda, senza server né dominio: si distribuisce e si aggiorna da una cartella condivisa di OneDrive (vedi [Programma per Windows con OneDrive](#programma-per-windows-con-onedrive)).
+
 > Strumento non ufficiale e senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.
 
 ## Che cosa fa
@@ -31,6 +33,30 @@ Sito per cercare le voci doganali in modo più rapido di AIDA. Descrivi la merce
   - dati TARIC: versioni, aggiornamento immediato, caricamento manuale, ritorno alla versione precedente;
   - uso dell'IA per utente, registro degli eventi, posta non inviata.
 - **Aggiornamento mensile**: dal primo giorno di ogni mese il server scarica la nuova estrazione TARIC. La installa solo se supera tutti i controlli; altrimenti resta la versione precedente e gli amministratori ricevono un avviso.
+
+## Programma per Windows con OneDrive
+
+Per usare MAGIC HS in azienda senza un server: ognuno lo esegue sul proprio PC, e chi lo gestisce (l'«editore») aggiorna tutti dal suo PC tramite una cartella di OneDrive condivisa in sola lettura con i colleghi.
+
+**Prima volta (editore)**
+
+1. Dalla pagina delle versioni del progetto su GitHub scarica `MAGIC-HS-cartella-<versione>.zip`. Prima di estrarlo: tasto destro > Proprietà > spunta «Annulla blocco» (così Windows non chiede conferme per il file di avvio).
+2. Estrai la cartella **MAGIC HS** dentro il tuo OneDrive aziendale.
+3. Fai doppio clic su **Avvia MAGIC HS**: il programma si copia sul PC (circa un minuto la prima volta), si apre nel browser e, se nella cartella non ci sono ancora i dati del mese, li scarica dalla fonte, li controlla e li pubblica nella cartella.
+4. In Gestione > Intelligenza artificiale scegli il servizio IA per tutti (facoltativo: senza IA restano nomenclatura, misure, ricerca per codice, storico e preferiti).
+5. Condividi la cartella **MAGIC HS** con i colleghi con il solo permesso di visualizzazione.
+
+**Colleghi**: sul sito di OneDrive aprono la cartella condivisa e scelgono «Aggiungi collegamento a I miei file»; poi doppio clic su **Avvia MAGIC HS** (conviene un collegamento sul desktop). Storico, preferiti e uso dell'IA restano sul loro PC, in `%LOCALAPPDATA%\MAGIC HS`.
+
+**Aggiornamenti dal PC dell'editore**
+
+- *Dati TARIC*: a ogni inizio mese, quando l'editore apre MAGIC HS, il programma scarica la nuova estrazione, la controlla come sul sito e la pubblica in `dati\` della cartella; i colleghi la ricevono da OneDrive (il programma controlla la cartella ogni dieci minuti). Da Gestione > Dati TARIC si può anche caricare a mano un'estrazione o tornare alla versione precedente, per tutti.
+- *Programma*: scarica `magic-hs-windows-<versione>.zip` dalla pagina delle versioni e caricalo in Gestione > Cartella condivisa. Ognuno passa alla nuova versione quando riapre MAGIC HS; finché OneDrive non l'ha scaricata si continua con quella già copiata sul PC.
+- *Intelligenza artificiale*: Gestione > Intelligenza artificiale, con il limite mensile per persona. Le impostazioni stanno in `impostazioni.json` nella cartella: **la chiave è leggibile da chi vede la cartella**, quindi usa una chiave dedicata con un tetto di spesa. Con **Azure OpenAI** dell'azienda scegli «compatibile OpenAI», indirizzo `https://<risorsa>.openai.azure.com/openai/v1`, chiave della risorsa e nome della distribuzione come modello. **Copilot di Microsoft 365** non si può usare da un programma senza la licenza Microsoft 365 Copilot per ogni persona e una registrazione fatta dall'IT; il Copilot Chat gratuito non ha un collegamento per i programmi.
+
+**Come funziona**: «Avvia MAGIC HS.cmd» copia `programma\magic-hs-<versione>.zip` (Python per Windows con le librerie e MAGIC HS, nessuna installazione) in `%LOCALAPPDATA%\MAGIC HS\programma` e lancia `taric.programma`. Il server ascolta solo su 127.0.0.1, accetta solo il browser aperto dall'avvio (chiave casuale nella cartella dell'utente), tiene una sola copia per utente e si chiude da solo dopo mezz'ora senza uso. Usa i certificati di Windows, quindi funziona anche dietro i proxy aziendali che ispezionano HTTPS (un proxy con script di configurazione automatica può invece bloccare IA e download dei dati). Se il PC aziendale blocca i programmi copiati nella cartella dell'utente, serve l'IT.
+
+**Costruire i file** (da Linux, macOS o Windows): `python strumenti/pacchetto_windows.py` crea in `dist/` il pacchetto e la cartella da estrarre; con `--dati …/versioni/AAAA-MM-01` la cartella include anche i dati di un mese. Il flusso GitHub *Programma per Windows* li costruisce, li prova su Windows a ogni modifica e, per i tag `v*`, li pubblica nella pagina delle versioni.
 
 ## Avvio rapido
 

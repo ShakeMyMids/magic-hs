@@ -450,7 +450,7 @@
     else if (g === 'cambia-chiave') { st.cambiaChiave = true; disegna(); }
     else if (g === 'prova-ia') {
       b.disabled = true; msg('ia', 'Provo il servizio…', true); disegna();
-      T.api('POST', '/api/admin/locale/ia/prova').then(function (r) { msg('ia', 'Il servizio risponde (' + r.modello + ', ' + String(r.secondi).replace('.', ',') + ' secondi).', true); },
+      T.api('POST', '/api/admin/locale/ia/prova').then(function (r) { msg('ia', 'Il servizio risponde (' + r.modello + ', ' + (r.secondi < 1 ? 'in meno di un secondo' : 'in ' + String(r.secondi).replace('.', ',') + ' secondi') + ').', true); },
         function (e) { msg('ia', errore(e)); }).then(disegna);
     }
     else if (g === 'backup') {

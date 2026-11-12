@@ -20,6 +20,15 @@ senza framework. Tutti i testi per l'utente, i commenti e i nomi sono in **itali
   Non indebolire i controlli per far passare un mese: se cambia il formato dei file, adegua lo script.
 - `taric/backup.py`: backup del database (.zip con solo `taric.db`, API di backup di SQLite), uno al giorno dal
   pianificatore, e ripristino a sito spento (controlla integrità e schema, salva prima il database attuale).
+- `taric/programma.py`: programma per Windows sul PC (`pythonw -I -m taric.programma --condivisa <cartella>`): una copia per
+  utente (blocco su file e `istanza.json` in `%LOCALAPPDATA%\MAGIC HS`), porta su 127.0.0.1, browser con chiave d'ingresso
+  (`/entra?k=`), chiusura dopo l'inattività. Con `TARIC_LOCALE` l'app ha un solo utente, controlla l'host e spegne le
+  funzioni del sito (`app.SOLO_SITO`).
+- `taric/condivisa.py`: cartella condivisa (OneDrive) del programma: chi può scriverci (editore) pubblica programma, dati e
+  `impostazioni.json` (IA per tutti), gli altri li ricevono. I file possono arrivare in ordine qualsiasi: chi legge controlla.
+- `windows/`: `Avvia MAGIC HS.cmd` (solo ASCII, niente blocchi tra parentesi: i percorsi possono contenere `( ) &`) e
+  `LEGGIMI.txt`; `strumenti/pacchetto_windows.py` costruisce i pacchetti (Python di python-build-standalone + librerie
+  Windows), il flusso `.github/workflows/windows.yml` li prova su Windows e li pubblica per i tag `v*`.
 - `taric/pagamenti.py`: piano Pro con Stripe (pass senza rinnovo, abbonamenti, concessioni manuali). Checkout con `price_data`,
   webhook firmato e idempotente (colonna `pagamenti.evento`), conferma al ritorno, rilettura periodica degli abbonamenti.
   Nei test una finta API di Stripe (`conftest.FintoStripe`; `tests/finto_claude.py` per il browser).
@@ -48,5 +57,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q tests
 ```
 
-Prova nel browser (Playwright, finto servizio IA): vedi la sezione «Sviluppo» del README. Dopo modifiche all'interfaccia
+Prova nel browser (Playwright, finto servizio IA): vedi la sezione «Sviluppo» del README. Il programma per Windows si prova
+anche con Wine: estrai `dist/MAGIC-HS-cartella-*.zip`, copia il pacchetto estratto in `%LOCALAPPDATA%\MAGIC HS\programma\<versione>`
+e lancia l'avvio con `MAGIC_HS_SENZA_BROWSER=1 wine cmd /c "…\Avvia MAGIC HS.cmd"`. Dopo modifiche all'interfaccia
 controlla anche il telefono (larghezza 390 px) e il tema scuro.

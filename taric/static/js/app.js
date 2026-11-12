@@ -1263,7 +1263,7 @@ function chiuso(daSolo) {
   $('main').innerHTML = '<div class="foglio"><div class="box chiuso" role="status"><div class="lab">' + T.icona('spegni') + 'MAGIC HS è chiuso</div>' +
     '<p class="cosa">' + (daSolo ? 'Il programma si è chiuso perché non lo usavi da un po\' o perché è arrivata una nuova versione.' : 'Puoi chiudere questa scheda del browser.') + '</p>' +
     '<p class="nota">Per riaprirlo fai doppio clic su <b>Avvia MAGIC HS</b>, nella cartella condivisa di OneDrive o sul desktop. Storico e preferiti restano salvati su questo computer.</p></div></div>';
-  ['#tab-classifica', '#tab-nomenclatura', '#tab-profilo', '#tab-gestione', '#esci'].forEach(function (s) { var e = $(s); if (e) e.hidden = true; });
+  ['.schede', '#esci'].forEach(function (s) { var e = $(s); if (e) e.hidden = true; });
 }
 var vivoT = null;
 function tieniVivo() {

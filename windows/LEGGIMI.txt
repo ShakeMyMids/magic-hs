@@ -1,0 +1,42 @@
+MAGIC HS - classificazione doganale con la nomenclatura TARIC dell'UE
+====================================================================
+
+COME SI APRE
+Fai doppio clic su «Avvia MAGIC HS». La prima volta, e a ogni nuova versione, il programma si copia
+su questo computer (ci vuole circa un minuto); poi si apre da solo nel browser.
+Per averlo a portata di mano crea un collegamento sul desktop: tasto destro su «Avvia MAGIC HS» >
+Mostra altre opzioni > Invia a > Desktop (crea collegamento).
+
+COME SI CHIUDE
+Con il pulsante di spegnimento in alto a destra nella pagina. Se chiudi solo il browser, il programma
+si chiude da solo dopo mezz'ora.
+
+DOVE RESTANO I TUOI DATI
+Storico, preferiti e preferenze restano su questo computer, nella cartella %LOCALAPPDATA%\MAGIC HS
+(scrivila nella barra degli indirizzi di Esplora file). Lì c'è anche registro.txt, utile se qualcosa
+non funziona.
+
+SE NON SI APRE
+- Controlla che OneDrive sia attivo e che la cartella sia sincronizzata (icona con la spunta verde).
+- Fai di nuovo doppio clic su «Avvia MAGIC HS» dopo un minuto.
+- Se compare un avviso di Windows sul file scaricato, chiedi a chi gestisce MAGIC HS.
+- Se il computer aziendale blocca i programmi copiati nella cartella dell'utente, serve l'IT.
+
+------------------------------------------------------------------------------------------
+PER CHI GESTISCE MAGIC HS (chi può modificare questa cartella)
+
+La cartella contiene:
+  Avvia MAGIC HS.cmd   l'avvio, per tutti
+  programma\           il programma per Windows (versione.txt dice quale usare)
+  dati\                i dati TARIC del mese (attiva.txt dice quale usare)
+  impostazioni.json    il servizio di intelligenza artificiale per tutti (si cambia dal programma)
+
+Non modificare i file a mano: si gestisce tutto dal programma, scheda Gestione.
+- Dati TARIC: a ogni inizio mese, quando apri MAGIC HS sul tuo PC, scarica la nuova estrazione,
+  la controlla e la pubblica qui da solo. I colleghi la ricevono da OneDrive.
+- Intelligenza artificiale: Gestione > Intelligenza artificiale. La chiave è leggibile da chi vede
+  questa cartella: usane una dedicata, con un tetto di spesa.
+- Nuova versione del programma: scarica magic-hs-windows-<versione>.zip dalla pagina delle versioni
+  su GitHub e caricala in Gestione > Cartella condivisa.
+- Colleghi: condividi la cartella con il solo permesso di visualizzazione; ognuno sceglie
+  «Aggiungi collegamento a I miei file» sul sito di OneDrive e poi apre «Avvia MAGIC HS».

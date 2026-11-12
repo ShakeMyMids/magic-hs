@@ -283,7 +283,7 @@ def test_prova_del_servizio_e_azure(ambiente):
         assert c.execute("SELECT COUNT(*) FROM uso_ia").fetchone()[0] == 0
     editore.claude.risposte = [httpx.Response(401, json={"error": {"message": "Access denied due to invalid subscription key"}})]
     r = ce.post("/api/admin/locale/ia/prova")
-    assert r.status_code == 503 and "chiave o modello" in r.json()["errore"]
+    assert r.status_code == 503 and "rifiuta la chiave" in r.json()["errore"]
 
 
 # ------------------------------------------------------------------ nuove versioni del programma
@@ -305,7 +305,7 @@ def test_pubblicazione_del_programma(ambiente):
             r = ce.post("/api/admin/locale/programma", files={"file": (f"magic-hs-windows-{v}.zip", f, "application/zip")})
         assert r.status_code == 200 and r.json()["versione"] == v, r.text
         time.sleep(0.02)
-    assert (cond / "programma" / "versione.txt").read_text() == "1.3.0\n"
+    assert (cond / "programma" / "versione.txt").read_bytes() == b"1.3.0\r\n"
     assert sorted(f.name for f in (cond / "programma").glob("*.zip")) == ["magic-hs-1.2.0.zip", "magic-hs-1.3.0.zip"]
     assert (cond / "Avvia MAGIC HS.cmd").read_bytes() == b"rem 1.3.0\r\n"
     assert ce.get("/api/admin/locale").json()["programma"]["pubblicato"] == "1.3.0"
@@ -316,7 +316,7 @@ def test_pubblicazione_del_programma(ambiente):
         z.writestr("leggimi.txt", "niente")
     with pytest.raises(ErroreCondivisa):
         versione_pacchetto(vuoto)
-    assert (cond / "programma" / "versione.txt").read_text() == "1.3.0\n"
+    assert (cond / "programma" / "versione.txt").read_bytes() == b"1.3.0\r\n"
 
 
 # ------------------------------------------------------------------ avvio vero, con il server in ascolto
@@ -367,3 +367,15 @@ def test_avvio_senza_cartella_condivisa(tmp_path: Path):
     r = subprocess.run([sys.executable, "-m", "taric.programma", "--condivisa", str(tmp_path / "manca"), "--cartella", str(tmp_path / "pc"),
                         "--senza-browser"], cwd=RADICE, capture_output=True, text=True, timeout=30)
     assert r.returncode == 1 and "Non trovo la cartella condivisa" in r.stderr
+
+
+def test_file_di_avvio_per_windows():
+    testo = (RADICE / "windows" / "Avvia MAGIC HS.cmd").read_bytes().decode("ascii")      # solo ASCII
+    righe = [r.strip() for r in testo.splitlines() if r.strip() and not r.strip().lower().startswith("rem ")]
+    # niente blocchi tra parentesi: un percorso come «OneDrive - Azienda (Italia)» li romperebbe
+    assert not any(r.endswith("(") or r.startswith(")") for r in righe)
+    etichette = {r[1:] for r in righe if r.startswith(":")}
+    salti = {r.split("goto ", 1)[1].split()[0] for r in righe if "goto " in r}
+    assert salti and salti <= etichette
+    assert '-I -m taric.programma --condivisa "%CONDIVISA%"' in testo
+    assert "pythonw.exe" in testo and 'set "CONDIVISA=%CONDIVISA:~0,-1%"' in testo   # niente \ prima delle virgolette

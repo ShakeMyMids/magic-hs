@@ -1,0 +1,98 @@
+name: Programma per Windows
+# Costruisce il programma per Windows, lo prova su un vero Windows (avvio dalla cartella, copia sul PC,
+# server in ascolto, chiusura) e, per i tag v*, pubblica i file nella pagina delle versioni di GitHub.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths: ["taric/**", "windows/**", "strumenti/pacchetto_windows.py", "requirements.txt", ".github/workflows/windows.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pacchetto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: python strumenti/pacchetto_windows.py --uscita dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: magic-hs-windows
+          path: dist/*.zip
+          retention-days: 30
+
+  prova:
+    needs: pacchetto
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: magic-hs-windows
+          path: dist
+      - name: Avvio dalla cartella condivisa, come con un doppio clic
+        shell: pwsh
+        env:
+          MAGIC_HS_SENZA_BROWSER: "1"
+        run: |
+          $ErrorActionPreference = "Stop"
+          $kit = Get-ChildItem dist -Filter "MAGIC-HS-cartella-*.zip" | Select-Object -First 1
+          $onedrive = Join-Path $env:RUNNER_TEMP "OneDrive - Azienda (Prova)"
+          Expand-Archive $kit.FullName -DestinationPath $onedrive
+          $cond = Join-Path $onedrive "MAGIC HS"
+          $avvio = Join-Path $cond "Avvia MAGIC HS.cmd"
+          $vuoto = Join-Path $env:RUNNER_TEMP "vuoto.txt"
+          Set-Content $vuoto ""
+          # come il doppio clic di Esplora file; l'ingresso vuoto evita che un «pause» blocchi la prova
+          function Avvia {
+            $p = Start-Process -FilePath $avvio -WorkingDirectory $cond -PassThru -NoNewWindow -RedirectStandardInput $vuoto
+            $p.WaitForExit()
+            if ($p.ExitCode -ne 0) { throw "l'avvio ha restituito $($p.ExitCode)" }
+          }
+          Avvia
+          $mia = Join-Path $env:LOCALAPPDATA "MAGIC HS"
+          $file = Join-Path $mia "istanza.json"
+          $info = $null
+          for ($i = 0; $i -lt 120 -and -not $info; $i++) {
+            Start-Sleep -Seconds 1
+            if (Test-Path $file) {
+              $prova = Get-Content $file -Raw | ConvertFrom-Json
+              try { if ((Invoke-RestMethod "http://127.0.0.1:$($prova.porta)/api/locale/ping").app -eq "magic-hs") { $info = $prova } } catch { }
+            }
+          }
+          if (-not $info) { Get-Content (Join-Path $mia "registro.txt") -ErrorAction SilentlyContinue; throw "il programma non risponde" }
+          $base = "http://127.0.0.1:$($info.porta)"
+          $s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+          Invoke-WebRequest "$base/entra?k=$($info.chiave)" -WebSession $s | Out-Null
+          $io = Invoke-RestMethod "$base/api/io" -WebSession $s
+          if (-not $io.locale.editore) { throw "atteso: da questo PC si puo' pubblicare" }
+          $loc = Invoke-RestMethod "$base/api/admin/locale" -WebSession $s
+          "programma $($loc.programma.in_uso), pubblicato $($loc.programma.pubblicato), cartella $($loc.condivisa)"
+          if ($loc.programma.in_uso -ne $loc.programma.pubblicato) { throw "versione inattesa" }
+          # secondo doppio clic: usa la copia gia' aperta
+          Avvia
+          Start-Sleep -Seconds 8
+          Invoke-RestMethod -Method Post "$base/api/locale/chiudi" -Headers @{ "X-Taric" = "1" } -WebSession $s | Out-Null
+          for ($i = 0; $i -lt 30 -and (Test-Path $file); $i++) { Start-Sleep -Seconds 1 }
+          Get-Content (Join-Path $mia "registro.txt")
+          if (Test-Path $file) { throw "il programma non si e' chiuso" }
+
+  rilascio:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: prova
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: magic-hs-windows
+          path: dist
+      - name: Pagina della versione con i file
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --title "MAGIC HS $GITHUB_REF_NAME" --notes \
+            "Programma per Windows. Prima installazione: estrai MAGIC-HS-cartella-*.zip nella cartella di OneDrive da condividere (vedi LEGGIMI.txt). Aggiornamento: carica magic-hs-windows-*.zip in Gestione > Cartella condivisa."
