@@ -57,7 +57,7 @@ const testo = async (p, sel) => (await p.textContent(sel)) || '';
   ok(await l.isHidden('#tab-gestione'), 'Gestione nascosta all\'utente');
   ok((await testo(l, '#ia-nome')).length > 3, 'nome del servizio IA nel piè di pagina (' + (await testo(l, '#ia-nome')).trim() + ')');
 
-  console.log('3. classificazione con l'IA (finta) e storico');
+  console.log("3. classificazione con l'IA (finta) e storico");
   ok((await testo(l, '#esito')).includes('Esempio') || (await testo(l, '#esito')).length > 0, 'esempio al primo utilizzo');
   await l.fill('#q', 'scarpe da ginnastica con tomaia in pelle');
   await l.click('#vai');

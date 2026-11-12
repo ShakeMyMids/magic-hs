@@ -30,12 +30,15 @@ Sito per cercare le voci doganali in modo più rapido di AIDA. Descrivi la merce
 
 ## Avvio rapido
 
-### Con Docker (consigliato su un server)
+Per metterlo online su un server tuo vai direttamente a [Metterlo su Internet](#metterlo-su-internet): uno script fa tutto.
+
+### Con Docker
 
 ```bash
 git clone https://github.com/ShakeMyMids/magic-hs.git
 cd magic-hs
 cp taric.env.esempio taric.env        # scrivi la chiave dell'IA, per esempio GEMINI_API_KEY
+mkdir -p dati && sudo chown 10001:10001 dati   # solo su Linux
 docker compose up -d
 docker compose logs taric | grep "NESSUN AMMINISTRATORE"
 ```
@@ -73,6 +76,7 @@ Tutto si imposta nel file `taric.env` (modello commentato: `taric.env.esempio`) 
 | `TARIC_URL_PUBBLICO` | Indirizzo del sito (es. `https://taric.tuodominio.it`), usato nei link delle email. |
 | `TARIC_SMTP_HOST`, `_PORTA`, `_UTENTE`, `_PASSWORD`, `_MITTENTE`, `_SICUREZZA` | Server di posta per conferme, avvisi e «password dimenticata». |
 | `TARIC_DATI` | Cartella dei dati (predefinita `dati`). |
+| `TARIC_BACKUP_COPIE` | Backup automatici giornalieri del database da tenere (predefinito 14, `0` = spenti). |
 | `TARIC_HOST`, `TARIC_PORTA` | Dove ascolta il server (predefiniti `127.0.0.1` e `8000`). |
 | `TARIC_PROXY_FIDATI` | Indirizzi dei reverse proxy da cui accettare `X-Forwarded-*`. |
 | `TARIC_AGGIORNAMENTO_AUTOMATICO` | `si` o `no`. |
@@ -108,6 +112,48 @@ Con la posta configurata la registrazione automatica è completa: conferma dell'
 
 ## Metterlo su Internet
 
+### Su un server tuo (per esempio un Cloud VPS di Aruba)
+
+Uno script installa e configura tutto: Docker, firewall, aggiornamenti di sicurezza automatici, HTTPS e backup. Ti servono:
+
+- un **VPS Linux** con **Ubuntu 24.04** (vanno bene anche Ubuntu 22.04 e Debian 12 o 13), con almeno **2 GB di RAM** e un **indirizzo IPv4 pubblico**: l'aggiornamento mensile dei dati usa circa 520 MB di memoria;
+- un **dominio** (per esempio `magichs.it`, oppure un sottodominio come `taric.tuaazienda.it`);
+- facoltativi: la chiave di Google Gemini e una casella email del tuo dominio per mandare le conferme.
+
+**1. Il dominio.** Nel pannello DNS del dominio crea un record **A** che punta all'IPv4 del VPS. Nome `@` per il dominio principale, oppure il nome del sottodominio (es. `taric`). Di solito il record diventa attivo in pochi minuti.
+
+**2. Le porte.** Se il pannello del VPS ha un firewall o un *security group*, lascia aperte le porte 22 (SSH), 80 e 443.
+
+**3. L'installazione.** Collegati al server (da Windows, Mac o Linux: `ssh root@INDIRIZZO-IP` nel terminale) e lancia:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ShakeMyMids/magic-hs/main/server/installa.sh -o installa.sh
+sudo bash installa.sh
+```
+
+Lo script ti chiede il dominio, la chiave Gemini e la casella email. Per le caselle Aruba propone già il server giusto (`smtps.aruba.it`, porta 465, SSL); per saltare una domanda premi Invio. Poi:
+
+- installa Docker, il firewall (aperte solo SSH, 80 e 443), fail2ban sugli accessi SSH e gli aggiornamenti di sicurezza automatici, più 2 GB di swap sui server con poca memoria;
+- scarica MAGIC HS in `/opt/magic-hs`, scrive la configurazione in `/opt/magic-hs/taric.env` (leggibile solo dall'amministratore) e avvia il sito con il certificato HTTPS di Let's Encrypt;
+- alla fine mostra l'indirizzo `https://tuodominio/configura` e il **codice** per creare il tuo account da amministratore.
+
+I dati TARIC si scaricano da soli nei primi minuti. Puoi rilanciare lo script quando vuoi: aggiorna codice e configurazione e lascia intatti utenti e dati.
+
+**Gestione di tutti i giorni**, sul server:
+
+| Comando | Che cosa fa |
+|---|---|
+| `sudo magic-hs stato` | Come sta il sito: utenti, dati, IA, posta, disco e memoria. |
+| `sudo magic-hs aggiorna` | Scarica l'ultima versione da GitHub e riavvia. |
+| `sudo magic-hs configura` | Apre `taric.env` (chiave IA, posta…) e riavvia con le modifiche. |
+| `sudo magic-hs dominio NUOVO` | Cambia l'indirizzo del sito. |
+| `sudo magic-hs log` | Registro del sito (`magic-hs log caddy` per l'HTTPS). |
+| `sudo magic-hs codice` | Codice per il primo amministratore. |
+| `sudo magic-hs backup` / `ripristina FILE` | Backup del database e ripristino (vedi sotto). |
+| `sudo magic-hs aiuto` | Tutti i comandi. |
+
+### Con Docker su un server già pronto
+
 Su un server (VPS) con Docker e un dominio che punta al server, con le porte 80 e 443 aperte:
 
 ```bash
@@ -115,9 +161,11 @@ Su un server (VPS) con Docker e un dominio che punta al server, con le porte 80 
 TARIC_DOMINIO=taric.tuodominio.it docker compose --profile https up -d
 ```
 
+Su Linux la cartella `dati` deve appartenere all'utente del container: `sudo chown 10001:10001 dati`.
+
 Caddy ottiene e rinnova da solo il certificato HTTPS e inoltra le richieste a MAGIC HS. Con un reverse proxy tuo (nginx, Traefik…), inoltra a `127.0.0.1:8000` e imposta `TARIC_PROXY_FIDATI` con l'indirizzo del proxy.
 
-Prima di aprire il sito ad altre persone:
+### Prima di aprire il sito ad altre persone
 
 - Pubblica un'informativa privacy: diventi titolare dei dati degli utenti (nome, email, azienda, storico).
 - Decidi le regole di registrazione: domini approvati, registrazione aperta o chiusa, limite IA predefinito.
@@ -139,19 +187,19 @@ python -m taric crea-admin              # crea un amministratore dal terminale
 python -m taric link-password EMAIL     # link per reimpostare la password di un utente
 python -m taric aggiorna-dati [AAAA-MM] # scarica e installa i dati del mese
 python -m taric stato                   # riepilogo di utenti, dati e configurazione
+python -m taric backup                  # backup del database adesso
+python -m taric ripristina FILE         # rimette un backup (a sito spento)
 ```
 
-Con Docker: `docker compose exec taric python -m taric stato`.
+Con Docker: `docker compose exec taric python -m taric stato`. Sul server installato con lo script: `sudo magic-hs aiuto`.
 
 ## Copia di sicurezza
 
-Basta copiare la cartella `dati/`, a sito fermo oppure con `sqlite3 dati/taric.db ".backup copia.db"`. Gli elementi importanti sono:
+Il sito fa da solo un **backup del database** ogni giorno in `dati/backup` e tiene gli ultimi 14 (`TARIC_BACKUP_COPIE`; `0` li spegne). Il database contiene utenti, password cifrate, storico, preferiti, regole e registro. I dati TARIC non servono perché si riscaricano.
 
-- `taric.db`: utenti, storico, preferiti, registro;
-- `segreto.key`;
-- `taric/nomenclatura_it.json`.
-
-Le versioni dei dati TARIC si possono rigenerare.
+- **Scaricarne uno**: *Gestione → Dati TARIC → Backup del database*, dove puoi anche farne uno al momento. Ogni tanto salvane uno sul tuo computer: se il server si rompe, è la tua copia.
+- **Rimetterlo**: sul server installato con lo script, `sudo magic-hs ripristina magic-hs-AAAA-MM-GG-HHMMSS.zip`. Il sito si ferma per qualche secondo, e il database di prima viene salvato in un nuovo backup. Un file dal tuo computer lo copi prima sul server, per esempio con `scp file.zip root@IP:/opt/magic-hs/dati/backup/`. Senza lo script: ferma il sito e lancia `python -m taric ripristina FILE`.
+- **Spostare il sito su un altro server**: installalo sul nuovo server con lo script, poi rimetti l'ultimo backup.
 
 ## Sicurezza in breve
 
