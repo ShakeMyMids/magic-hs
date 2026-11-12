@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# MAGIC HS - comandi per gestire il sito sul server (installato da server/installa.sh in /usr/local/bin).
+set -euo pipefail
+
+CARTELLA="${MAGIC_HS_CARTELLA:-/opt/magic-hs}"
+UID_SITO=10001
+
+aiuto() {
+  cat <<'EOF'
+MAGIC HS - comandi (da lanciare come amministratore, per esempio: sudo magic-hs stato)
+
+  magic-hs stato                 come sta il sito: container, utenti, dati, IA, posta, disco e memoria
+  magic-hs log [taric|caddy]     ultime righe del registro, poi in diretta (Ctrl+C per uscire)
+  magic-hs aggiorna              scarica l'ultima versione da GitHub e riavvia il sito
+  magic-hs configura             modifica taric.env (chiave IA, posta, ...) e riavvia il sito
+  magic-hs dominio NUOVO         cambia l'indirizzo del sito (es. magic-hs dominio magichs.it)
+  magic-hs riavvia | ferma | avvia
+  magic-hs codice                codice per creare il primo amministratore (pagina /configura)
+  magic-hs admin                 crea un amministratore (o reimposta la password di uno esistente)
+  magic-hs link-password EMAIL   link per reimpostare la password di un utente
+  magic-hs aggiorna-dati [MESE]  scarica e installa subito i dati TARIC (MESE = AAAA-MM)
+  magic-hs backup                backup del database adesso (il sito ne fa gia' uno al giorno)
+  magic-hs backup-elenco         elenco dei backup in dati/backup
+  magic-hs ripristina FILE       rimette un backup (.zip): il sito si ferma per qualche secondo
+EOF
+}
+
+muori() { echo "Errore: $*" >&2; exit 1; }
+[ "$(id -u)" = 0 ] || muori "serve l'amministratore: sudo magic-hs ${*:-aiuto}"
+cd "$CARTELLA" 2>/dev/null || muori "MAGIC HS non e' installato in $CARTELLA"
+dc() { docker compose "$@"; }
+in_funzione() { [ -n "$(dc ps -q --status running taric 2>/dev/null)" ]; }
+
+imposta() {         # come in installa.sh: sostituisce o aggiunge CHIAVE='valore'
+  local f=$1
+  K="$2" VAL="$3" awk '
+    BEGIN { k = ENVIRON["K"]; v = ENVIRON["VAL"]; fatto = 0 }
+    $0 ~ ("^#?[ \t]*" k "=") { if (!fatto) { print k "=\047" v "\047"; fatto = 1 }; next }
+    { print }
+    END { if (!fatto) print k "=\047" v "\047" }' "$f" > "$f.nuovo"
+  cat "$f.nuovo" > "$f"
+  rm -f "$f.nuovo"
+}
+
+comando=${1:-aiuto}
+[ $# -gt 0 ] && shift
+case "$comando" in
+  stato)
+    dc ps
+    echo
+    if in_funzione; then dc exec -T taric python -m taric stato; else echo "Il sito e' FERMO: avvialo con «magic-hs avvia»."; fi
+    echo
+    echo "Disco:   $(df -h "$CARTELLA" | awk 'NR == 2 {print $4 " liberi su " $2}')"
+    echo "Memoria: $(free -m | awk '/^Mem/ {print $7 " MB disponibili su " $2}')"
+    echo "Backup:  $(find dati/backup -maxdepth 1 -name 'magic-hs-*.zip' 2>/dev/null | wc -l) in dati/backup"
+    ;;
+  log)
+    dc logs --tail=150 -f "${1:-taric}"
+    ;;
+  aggiorna)
+    if [ -d .git ]; then
+      git pull --ff-only || muori "non riesco ad aggiornare il codice (modifiche locali? guarda: git -C $CARTELLA status)"
+    else
+      echo "La cartella non e' un clone git: ricostruisco solo l'immagine."
+    fi
+    chmod +x server/magic-hs
+    dc build --pull taric
+    dc up -d --remove-orphans
+    docker image prune -f >/dev/null 2>&1 || true
+    echo "Fatto: MAGIC HS aggiornato a $(git log -1 --format='%h del %cs' 2>/dev/null || echo 'versione locale')."
+    ;;
+  configura)
+    "${EDITOR:-nano}" taric.env
+    chmod 600 taric.env
+    dc up -d --force-recreate taric
+    echo "Configurazione applicata."
+    ;;
+  dominio)
+    nuovo=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]' | sed -e 's#^https\?://##' -e 's#/.*$##')
+    [[ "$nuovo" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]] || muori "uso: magic-hs dominio magichs.it"
+    printf "# scritto da magic-hs\nTARIC_DOMINIO=%s\nCOMPOSE_PROFILES=https\n" "$nuovo" > .env
+    imposta taric.env TARIC_URL_PUBBLICO "https://$nuovo"
+    chmod 600 .env taric.env
+    dc up -d --force-recreate
+    echo "Ora il sito e' su https://$nuovo (il certificato arriva in pochi minuti se il dominio punta a questo server)."
+    ;;
+  riavvia) dc restart ;;
+  ferma) dc stop ;;
+  avvia) dc up -d ;;
+  codice)
+    if [ -f dati/codice-configurazione.txt ]; then
+      echo "Codice: $(tr -d '[:space:]' < dati/codice-configurazione.txt)  ->  apri https://$(sed -n "s/^TARIC_DOMINIO=//p" .env)/configura"
+    else
+      echo "Nessun codice: l'amministratore esiste gia'. Per crearne un altro: magic-hs admin"
+    fi
+    ;;
+  admin) dc exec taric python -m taric crea-admin ;;
+  link-password)
+    [ -n "${1:-}" ] || muori "uso: magic-hs link-password utente@esempio.it"
+    dc exec -T taric python -m taric link-password "$1"
+    ;;
+  aggiorna-dati) dc exec -T taric python -m taric aggiorna-dati "${1:-}" ;;
+  backup)
+    if in_funzione; then dc exec -T taric python -m taric backup
+    else dc run --rm --no-deps -T taric python -m taric backup; fi
+    ;;
+  backup-elenco) ls -lh dati/backup 2>/dev/null || echo "Nessun backup." ;;
+  ripristina)
+    f=${1:-}
+    [ -n "$f" ] || muori "uso: magic-hs ripristina FILE.zip  (vedi magic-hs backup-elenco)"
+    if [ ! -f "$f" ] && [ -f "dati/backup/$f" ]; then f="dati/backup/$f"; fi
+    [ -f "$f" ] || muori "file non trovato: $f"
+    read -r -p "Il database attuale verra' sostituito da $(basename "$f") (e salvato prima in un backup). Continuo? [s/N] " r
+    [[ "$r" =~ ^[sS] ]] || { echo "Annullato."; exit 0; }
+    cp "$f" dati/da-ripristinare.zip
+    chown "$UID_SITO:$UID_SITO" dati/da-ripristinare.zip
+    dc stop taric
+    if dc run --rm --no-deps -T taric python -m taric ripristina /dati/da-ripristinare.zip; then esito=0; else esito=1; fi
+    rm -f dati/da-ripristinare.zip
+    dc up -d
+    [ "$esito" = 0 ] || muori "ripristino non riuscito: il database e' rimasto quello di prima"
+    ;;
+  aiuto|-h|--help|help) aiuto ;;
+  *) echo "Comando sconosciuto: $comando"; echo; aiuto; exit 2 ;;
+esac

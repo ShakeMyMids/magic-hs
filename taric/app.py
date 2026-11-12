@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import sicurezza as S
+from .backup import Backup, ErroreBackup
 from .config import Config
 from .dati import GestoreDati
 from .db import Database, iso
@@ -173,10 +174,12 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     reg = Registrazioni(db, posta)
     ia = ServizioIA(cfg, db, client_ia)
     dati = GestoreDati(cfg, db, posta)
+    copie = Backup(cfg.dati, cfg.backup_copie)
+
     @asynccontextmanager
     async def vita(_app: FastAPI) -> AsyncIterator[None]:
         if pianificatore:
-            dati.avvia_pianificatore(reg)
+            dati.avvia_pianificatore(reg, copie)
         yield
         dati.ferma()
 
@@ -786,7 +789,27 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.get("/api/admin/dati")
     def admin_dati(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         return {"attiva": dati.attiva(), "versioni": dati.elenco(), "in_corso": dati.in_corso, "ultimi": dati.ultimi(),
-                "automatico": cfg.aggiornamento_automatico, "fonte": cfg.fonte_url, "prossimo": dati.da_fare()}
+                "automatico": cfg.aggiornamento_automatico, "fonte": cfg.fonte_url, "prossimo": dati.da_fare(),
+                "backup": copie.elenco(), "backup_copie": cfg.backup_copie}
+
+    @app.post("/api/admin/backup")
+    def admin_crea_backup(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        try:
+            f = copie.crea()
+        except ErroreBackup as e:
+            raise Errore(409, f"Backup non riuscito: {e}.", "backup")
+        with db.transazione() as c:
+            db.evento(c, "backup_creato", autore_id=a["id"], dettagli=f.name)
+        return json_ok(nome=f.name)
+
+    @app.get("/api/admin/backup/{nome}")
+    def admin_scarica_backup(nome: str, a: sqlite3.Row = Depends(richiede_admin)) -> FileResponse:
+        f = copie.file(nome)
+        if f is None:
+            raise Errore(404, "Backup non trovato.", "non_trovato")
+        with db.transazione() as c:
+            db.evento(c, "backup_scaricato", autore_id=a["id"], dettagli=nome)
+        return FileResponse(f, media_type="application/zip", filename=nome)
 
     @app.get("/api/admin/dati/registro/{agg_id}")
     def admin_registro(agg_id: int, a: sqlite3.Row = Depends(richiede_admin)) -> PlainTextResponse:

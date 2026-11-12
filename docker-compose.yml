@@ -2,7 +2,16 @@
 #   Sul tuo computer:      docker compose up -d            -> http://localhost:8000
 #   Su un server con dominio e HTTPS automatico:
 #                          TARIC_DOMINIO=taric.tuodominio.it docker compose --profile https up -d
+#   (lo script server/installa.sh scrive dominio e profilo nel file .env, cosi' basta "docker compose up -d")
 # La configurazione (chiave API, posta...) va nel file taric.env accanto a questo file.
+
+# registri dei container a dimensione limitata, per non riempire il disco del server
+x-registro: &registro
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   taric:
     build: .
@@ -19,6 +28,7 @@ services:
       - ./dati:/dati
     ports:
       - "127.0.0.1:8000:8000"     # raggiungibile solo da questo computer; per la rete locale togli 127.0.0.1:
+    logging: *registro
 
   caddy:
     profiles: ["https"]
@@ -30,10 +40,12 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp"             # HTTP/3
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_dati:/data
       - caddy_config:/config
+    logging: *registro
 
 volumes:
   caddy_dati:

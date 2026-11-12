@@ -5,6 +5,8 @@
   python -m taric link-password EMAIL     stampa un link per reimpostare la password di un utente
   python -m taric aggiorna-dati [AAAA-MM] scarica e installa i dati TARIC del mese (senza avviare il sito)
   python -m taric stato                   riepilogo di utenti, dati e configurazione
+  python -m taric backup                  salva subito un backup del database in dati/backup
+  python -m taric ripristina FILE         rimette il database di un backup (.zip o .db) - a sito SPENTO
 """
 from __future__ import annotations
 
@@ -28,6 +30,9 @@ def main(argv: list[str] | None = None) -> int:
     ad = sub.add_parser("aggiorna-dati", help="scarica e installa i dati TARIC")
     ad.add_argument("mese", nargs="?", default="")
     sub.add_parser("stato", help="riepilogo")
+    sub.add_parser("backup", help="backup del database")
+    rp = sub.add_parser("ripristina", help="ripristina un backup (a sito spento)")
+    rp.add_argument("file")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)      # gli indirizzi firmati dei download non servono nel registro
@@ -41,6 +46,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"MAGIC HS in ascolto su http://{cfg.host}:{cfg.porta}  (dati in {cfg.dati})", flush=True)
         uvicorn.run(app, host=cfg.host, port=cfg.porta, proxy_headers=True, forwarded_allow_ips=cfg.proxy_fidati,
                     log_level="info", server_header=False)
+        return 0
+
+    if a.comando in ("backup", "ripristina"):
+        from pathlib import Path
+
+        from .backup import Backup, ErroreBackup
+        b = Backup(cfg.dati, cfg.backup_copie)
+        try:
+            if a.comando == "backup":
+                print(f"Backup salvato: {b.crea()}")
+            else:
+                print(f"Database ripristinato ({b.ripristina(Path(a.file))}).")
+        except ErroreBackup as e:
+            print(f"Errore: {e}.")
+            return 1
         return 0
 
     db = Database(cfg.dati / "taric.db")

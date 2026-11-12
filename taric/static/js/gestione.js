@@ -18,7 +18,8 @@
     link_password: 'Link password creato', utente_creato: 'Utente creato', utente_eliminato: 'Utente eliminato', ruolo: 'Ruolo cambiato',
     quota_ia: 'Limite IA cambiato', sessioni_chiuse: 'Sessioni chiuse', impostazioni: 'Regole modificate', configurazione_iniziale: 'Configurazione iniziale',
     admin_da_riga_di_comando: 'Amministratore da riga di comando', pulizia: 'Pulizia automatica', dati_ok: 'Dati TARIC installati',
-    dati_errore: 'Aggiornamento dati non riuscito', dati_non_disponibile: 'Estrazione non ancora disponibile', dati_versione_attivata: 'Versione dati cambiata'
+    dati_errore: 'Aggiornamento dati non riuscito', dati_non_disponibile: 'Estrazione non ancora disponibile', dati_versione_attivata: 'Versione dati cambiata',
+    backup_creato: 'Backup creato', backup_scaricato: 'Backup scaricato'
   };
 
   function app() { return T.app; }
@@ -178,8 +179,21 @@
           '<td>' + (a.esito === 'errore' || a.esito === 'ok' ? '<button class="btn sm" type="button" data-g="registro-agg" data-id="' + a.id + '">Registro</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' + (d.ultimi.length ? '' : '<p class="vuoto">Nessun aggiornamento ancora.</p>') +
       (st.registro ? '<div class="lab" style="margin-top:8px">' + esc(st.registro.titolo) + '<span class="dx"><button class="link" type="button" data-g="chiudi-registro">chiudi</button></span></div><pre class="registro">' + esc(st.registro.testo) + '</pre>' : '') + '</div></div>';
-    return h;
+
+    var bk = d.backup || [];
+    h += '<div class="foglio"><div class="box"><div class="lab">Backup del database</div><p class="nota">Il backup contiene utenti, password (cifrate), storico, preferiti, regole e registro; i dati TARIC non servono perché si riscaricano. ' +
+      (d.backup_copie ? 'Il server ne fa uno da solo ogni giorno e tiene gli ultimi ' + d.backup_copie + '.' : 'Il backup automatico è spento (TARIC_BACKUP_COPIE=0).') +
+      ' Ogni tanto scaricane uno sul tuo computer: se il server si rompe, è la tua copia.</p>' +
+      '<div class="fila"><button class="btn pri" type="button" data-g="backup">Fai un backup adesso</button></div>' + riga('backup');
+    if (bk.length) h += '<div class="scorri"><table class="tab"><thead><tr><th>Creato</th><th class="n">Dimensione</th><th></th></tr></thead><tbody>' +
+      bk.map(function (x) {
+        return '<tr><td>' + esc(T.dataOra(x.creato)) + '</td><td class="n" data-l="Dimensione">' + esc(peso(x.dimensione)) + '</td><td class="azioni"><a class="btn sm" href="/api/admin/backup/' + encodeURIComponent(x.nome) + '" download>Scarica</a></td></tr>';
+      }).join('') + '</tbody></table></div>';
+    else h += '<p class="vuoto">Ancora nessun backup.</p>';
+    return h + '</div></div>';
   }
+
+  function peso(n) { return n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
 
   /* ---------- uso dell'IA ---------- */
   function uso() {
@@ -270,6 +284,10 @@
     if (!b || b.tagName === 'FORM') return;
     var g = b.getAttribute('data-g'), id = b.getAttribute('data-id'), v = b.getAttribute('data-v');
     if (g === 'sotto') { st.sotto = v; st.registro = null; disegna(); carica(); }
+    else if (g === 'backup') {
+      b.disabled = true;
+      T.api('POST', '/api/admin/backup').then(function () { msg('backup', 'Backup creato: lo trovi qui sotto.', true); }, function (e) { msg('backup', errore(e)); }).then(carica);
+    }
     else if (g === 'apri') { var n = parseInt(id, 10); st.aperto = st.aperto === n ? null : n; disegna(); }
     else if (g === 'approva') azione(id, 'approva', {}, 'richieste', 'Richiesta approvata: l\'utente è stato avvisato.').then(carica);
     else if (g === 'rifiuta') {

@@ -286,11 +286,16 @@ class GestoreDati:
                 return None
         return mese
 
-    def avvia_pianificatore(self, registrazioni: Any) -> None:
+    def avvia_pianificatore(self, registrazioni: Any, backup: Any = None) -> None:
         def ciclo() -> None:
             ultima_pulizia = 0.0
             self._fermo.wait(10)
             while not self._fermo.is_set():
+                try:
+                    if backup is not None and backup.da_fare():
+                        log.info("backup automatico: %s", backup.crea().name)
+                except Exception:
+                    log.exception("backup automatico")
                 try:
                     if time.time() - ultima_pulizia > 6 * 3600:
                         with self.db.transazione() as c:

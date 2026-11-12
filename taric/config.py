@@ -59,6 +59,7 @@ class Config:
     fonte_url: str = "https://github.com/rousseauxy/taric-opendata/releases/download/eu-{mese}/eu-taric-{mese}.zip"
     aggiornamento_automatico: bool = True
     fuso: str = "Europe/Rome"
+    backup_copie: int = 14                 # backup automatici del database da tenere (0 = nessun backup automatico)
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -144,5 +145,6 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         fonte_url=v.get("TARIC_FONTE_URL", Config.fonte_url),
         aggiornamento_automatico=_bool(v.get("TARIC_AGGIORNAMENTO_AUTOMATICO"), True),
         fuso=v.get("TARIC_FUSO", "Europe/Rome"),
+        backup_copie=max(0, int(v.get("TARIC_BACKUP_COPIE", "14") or 14)),
         extra=v,
     )
