@@ -36,6 +36,18 @@ MAX_ZIP = 300 * 1024 * 1024
 MAX_ESTRATTO = 1536 * 1024 * 1024
 
 
+def sposta(origine: Path, dest: Path, tentativi: int = 12) -> None:
+    """os.replace che ritenta: su Windows un antivirus o OneDrive possono tenere aperto un file per qualche istante."""
+    for n in range(tentativi):
+        try:
+            os.replace(origine, dest)
+            return
+        except PermissionError:
+            if n == tentativi - 1:
+                raise
+            time.sleep(0.25 * (n + 1))
+
+
 class GestoreDati:
     def __init__(self, cfg: Config, db: Database, posta: Posta):
         self.cfg, self.db, self.posta = cfg, db, posta
@@ -71,7 +83,7 @@ class GestoreDati:
             raise ValueError("versione inesistente")
         tmp = self.base / f"attiva.{secrets.token_hex(4)}.tmp"
         tmp.write_text(versione, encoding="utf-8")
-        os.replace(tmp, self.base / "attiva.txt")
+        sposta(tmp, self.base / "attiva.txt")
 
     def file(self, versione: str, percorso: str) -> Path | None:
         if not RE_VERSIONE.match(versione) or not RE_FILE.match(percorso):
@@ -183,12 +195,12 @@ class GestoreDati:
             dest = self.versioni / f"{mese}-01"
             if dest.exists():
                 vecchia = dest.with_name(dest.name + ".vecchia-" + secrets.token_hex(3))
-                os.replace(dest, vecchia)
+                sposta(dest, vecchia)
                 shutil.rmtree(vecchia, ignore_errors=True)
-            os.replace(out, dest)
+            sposta(out, dest)
             info = self.info_versione(dest.name)
             if info.get("it_aggiornato"):
-                os.replace(it_lavoro, self.it)
+                sposta(it_lavoro, self.it)
             if att is None or dest.name >= att:
                 self.imposta_attiva(dest.name)
             self._pota()

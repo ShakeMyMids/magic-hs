@@ -26,12 +26,11 @@ import os
 import re
 import secrets
 import shutil
-import time
 import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
-from .dati import RE_FILE, RE_VERSIONE
+from .dati import RE_FILE, RE_VERSIONE, sposta
 
 log = logging.getLogger("taric.condivisa")
 
@@ -49,16 +48,7 @@ class ErroreCondivisa(Exception):
     pass
 
 
-def sostituisci(origine: Path, dest: Path, tentativi: int = 12) -> None:
-    """os.replace che ritenta: su Windows OneDrive o un antivirus possono tenere aperto il file per qualche istante."""
-    for n in range(tentativi):
-        try:
-            os.replace(origine, dest)
-            return
-        except PermissionError:
-            if n == tentativi - 1:
-                raise
-            time.sleep(0.25 * (n + 1))
+sostituisci = sposta          # os.replace che ritenta (OneDrive e antivirus tengono aperti i file per qualche istante)
 
 
 def scrivi_testo(dest: Path, testo: str) -> None:
@@ -208,7 +198,7 @@ class Condivisa:
                 dest = versioni / v
                 if dest.exists():
                     shutil.rmtree(dest)
-                os.replace(tmp, dest)
+                sposta(tmp, dest)
                 log.info("dati %s ricevuti dalla cartella condivisa", v)
             except (OSError, ValueError, zipfile.BadZipFile, ErroreCondivisa) as e:
                 log.warning("dati %s non ancora utilizzabili: %s", v, e)
