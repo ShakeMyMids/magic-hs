@@ -44,7 +44,8 @@ trap 'muori "comando non riuscito alla riga $LINENO. Correggi il problema e rila
 chiedi() {          # chiedi VARIABILE "domanda" [predefinito] [segreta]
   local __var=$1 __domanda=$2 __pred=${3:-} __segreta=${4:-} __r=""
   if [ "$DOMANDE" = 1 ]; then
-    if [ -n "$__pred" ]; then __domanda="$__domanda [$__pred]"; fi
+    if [ -n "$__pred" ] && [ -n "$__segreta" ]; then __domanda="$__domanda [gia' indicata: Invio per tenerla]"
+    elif [ -n "$__pred" ]; then __domanda="$__domanda [$__pred]"; fi
     if [ -n "$__segreta" ]; then
       read -r -s -p "    $__domanda: " __r < /dev/tty || true; echo
     else
@@ -107,7 +108,7 @@ chiedi_configurazione() {
     echo "    Invio per saltare: la puoi aggiungere dopo con «magic-hs configura»."
   fi
   GEMINI_API_KEY=${GEMINI_API_KEY:-}
-  chiedi GEMINI_API_KEY "Chiave Gemini (non viene mostrata)" "" segreta
+  chiedi GEMINI_API_KEY "Chiave Gemini (non viene mostrata)" "$GEMINI_API_KEY" segreta
   GEMINI_API_KEY=$(printf '%s' "$GEMINI_API_KEY" | tr -d '[:space:]')
 
   if [ "$DOMANDE" = 1 ]; then
@@ -123,7 +124,7 @@ chiedi_configurazione() {
   if [ -n "$EMAIL_INVIO" ]; then
     [[ "$EMAIL_INVIO" == *@*.* ]] || muori "indirizzo email non valido: $EMAIL_INVIO"
     while :; do
-      chiedi EMAIL_PASSWORD "Password della casella (non viene mostrata)" "" segreta
+      chiedi EMAIL_PASSWORD "Password della casella (non viene mostrata)" "$EMAIL_PASSWORD" segreta
       if [[ "$EMAIL_PASSWORD" == *"'"* ]]; then
         [ "$DOMANDE" = 1 ] || muori "la password della casella non puo' contenere l'apostrofo (')"
         echo "    La password contiene un apostrofo ('), che il file di configurazione non accetta: cambiala sulla casella o usa un'altra casella."
