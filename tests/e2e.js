@@ -53,7 +53,7 @@ const testo = async (p, sel) => (await p.textContent(sel)) || '';
   ok(!l.url().includes('#'), 'il gettone sparisce dalla barra degli indirizzi');
   await l.fill('[name=password]', 'Password-Luca-1'); await l.fill('[name=ripeti]', 'Password-Luca-1');
   await l.click('button[type=submit]');
-  await l.waitForURL(base + '/'); await l.waitForSelector('#chi-nome:text("Luca Bianchi")');
+  await l.waitForURL(base + '/'); await l.waitForSelector('#chi-nome:text("Luca Bianchi")', { state: 'attached' });
   ok(await l.isHidden('#tab-gestione'), 'Gestione nascosta all\'utente');
   ok((await testo(l, '#ia-nome')).length > 3, 'nome del servizio IA nel piè di pagina (' + (await testo(l, '#ia-nome')).trim() + ')');
 
@@ -94,7 +94,7 @@ const testo = async (p, sel) => (await p.textContent(sel)) || '';
   ok((await l.inputValue('#paese')) === 'CN', 'il paese preferito vale nel risultato');
   ok((await testo(l, '#esito')).includes('Cina'), 'misure per la Cina');
   // ricarico la pagina: preferiti e paese restano (sono sul server)
-  await l.reload(); await l.waitForSelector('#chi-nome:text("Luca Bianchi")');
+  await l.reload(); await l.waitForSelector('#chi-nome:text("Luca Bianchi")', { state: 'attached' });
   await l.fill('#q', '6403 99 96 10'); await l.click('#vai');
   await l.waitForSelector('[data-act=preferito][aria-pressed=true]');
   ok((await l.inputValue('#paese')) === 'CN', 'preferenze conservate dopo il ricaricamento');
@@ -128,7 +128,7 @@ const testo = async (p, sel) => (await p.textContent(sel)) || '';
   await a.waitForSelector('.esito-ok:text("Richiesta approvata")');
   await r.click('button[type=submit]');
   await r.waitForURL(base + '/');
-  await r.waitForSelector('#chi-nome:text("Giulia Verdi")');
+  await r.waitForSelector('#chi-nome:text("Giulia Verdi")', { state: 'attached' });
   ok(true, 'dopo l\'approvazione entra');
   await r.screenshot({ path: out + '/05-classifica-mobile.png', fullPage: false });
 
@@ -171,7 +171,7 @@ const testo = async (p, sel) => (await p.textContent(sel)) || '';
   const m = await nuovaPagina(browser, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: 'dark' });
   await m.goto(base + '/accedi');
   await m.fill('[name=email]', 'admin@esempio.it'); await m.fill('[name=password]', 'Password-Admin-1'); await m.click('button[type=submit]');
-  await m.waitForURL(base + '/'); await m.waitForSelector('#chi-nome:text("Simone")');
+  await m.waitForURL(base + '/'); await m.waitForSelector('#chi-nome:text("Simone")', { state: 'attached' });
   ok(await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'nessuno scorrimento orizzontale su telefono');
   await m.screenshot({ path: out + '/07-mobile-scuro.png', fullPage: false });
   await m.click('#tab-gestione'); await m.waitForSelector('#view-gestione .sotto');

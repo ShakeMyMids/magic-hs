@@ -45,9 +45,9 @@
   function disegna() {
     var r = st.riep, h = '';
     var attesa = r ? (r.utenti.in_attesa || 0) : 0;
-    h += '<div class="sotto" role="tablist">' + [['utenti', 'Utenti' + (attesa ? '<span class="conta">' + attesa + '</span>' : '')], ['regole', 'Regole di registrazione'],
-      ['dati', 'Dati TARIC'], ['uso', 'Uso dell\'IA'], ['registro', 'Registro'], ['posta', 'Posta']].map(function (x) {
-      return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + x[1] + '</button>';
+    h += '<div class="sotto" role="tablist">' + [['utenti', 'Utenti' + (attesa ? '<span class="conta">' + attesa + '</span>' : ''), 'utenti'], ['regole', 'Regole di registrazione', 'regole'],
+      ['dati', 'Dati TARIC', 'database'], ['uso', 'Uso dell\'IA', 'grafico'], ['registro', 'Registro', 'registro'], ['posta', 'Posta', 'posta']].map(function (x) {
+      return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
     if (r) h += avvisi(r);
     h += { utenti: utenti, regole: regole, dati: dati, uso: uso, registro: registro, posta: posta }[st.sotto]();
@@ -61,14 +61,14 @@
     if (!r.posta) a.push('La posta non è configurata: le email (conferme, avvisi, link) restano nella scheda Posta e le nuove registrazioni aspettano sempre la tua approvazione, perché l\'indirizzo non si può verificare.');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC installati: vai su Dati TARIC.');
     if (!r.url_pubblico) a.push('L\'indirizzo pubblico del sito non è impostato (TARIC_URL_PUBBLICO): nei link delle email uso l\'indirizzo da cui stai navigando.');
-    return a.length ? '<div class="foglio"><div class="box"><div class="lab">Da sistemare</div>' + a.map(function (t) { return '<p class="avviso">' + esc(t) + '</p>'; }).join('') + '</div></div>' : '';
+    return a.length ? '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Da sistemare</div>' + a.map(function (t) { return '<p class="avviso">' + esc(t) + '</p>'; }).join('') + '</div></div>' : '';
   }
 
   /* ---------- utenti ---------- */
   function utenti() {
     var h = '', attesa = st.utenti.filter(function (u) { return u.stato === 'in_attesa' || u.stato === 'email_da_confermare'; });
     var altri = st.utenti.filter(function (u) { return attesa.indexOf(u) < 0; });
-    h += '<div class="foglio"><div class="box"><div class="lab">Richieste di accesso<span class="dx">' + attesa.length + '</span></div>';
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('nuovo-utente') + 'Richieste di accesso<span class="dx">' + attesa.length + '</span></div>';
     if (!attesa.length) h += '<p class="vuoto">Nessuna richiesta in attesa.</p>';
     attesa.forEach(function (u) {
       h += '<div class="voce"><div><b>' + esc(u.nome) + '</b> · ' + esc(u.email) + ' <span class="st ' + u.stato + '">' + STATI[u.stato] + '</span>' +
@@ -79,7 +79,7 @@
     });
     h += riga('richieste') + '</div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab">Utenti<span class="dx">' + altri.length + '</span></div><div class="scorri"><table class="tab"><thead><tr>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utenti') + 'Utenti<span class="dx">' + altri.length + '</span></div><div class="scorri"><table class="tab"><thead><tr>' +
       '<th>Utente</th><th>Stato</th><th>Ruolo</th><th class="n">IA questo mese</th><th>Ultimo accesso</th><th></th></tr></thead><tbody>';
     altri.forEach(function (u) {
       var aperto = st.aperto === u.id;
@@ -94,7 +94,7 @@
     });
     h += '</tbody></table></div>' + riga('utenti') + '</div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab">Nuovo utente</div>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('piu') + 'Nuovo utente</div>' +
       '<form class="modulo" data-g="crea"><div class="due"><label>Nome e cognome<input class="campo" name="nome" required minlength="2"></label>' +
       '<label>Email<input class="campo" name="email" type="email" required></label><label>Azienda<input class="campo" name="azienda"></label>' +
       '<label>Ruolo<select class="campo" name="ruolo"><option value="utente">Utente</option><option value="amministratore">Amministratore</option></select></label>' +
@@ -132,7 +132,7 @@
   function regole() {
     var i = st.imp;
     if (!i) return '<p class="vuoto">Carico…</p>';
-    return '<div class="foglio"><div class="box"><div class="lab">Registrazione automatica</div>' +
+    return '<div class="foglio"><div class="box"><div class="lab">' + T.icona('regole') + 'Registrazione automatica</div>' +
       '<p class="nota">Chi si iscrive conferma l\'indirizzo con il link ricevuto via email. Poi: se il dominio dell\'email è tra quelli approvati (o se «approva tutti» è attivo) l\'account si attiva subito; altrimenti la richiesta resta in attesa e ricevi un avviso. Le iscrizioni non confermate spariscono dopo 7 giorni, quelle rifiutate dopo 90.</p>' +
       '<form class="modulo" data-g="regole">' +
       '<label class="spunta"><input type="checkbox" name="registrazione_aperta"' + (i.registrazione_aperta ? ' checked' : '') + '> Registrazione aperta dalla pagina di accesso</label>' +
@@ -149,7 +149,7 @@
   function dati() {
     var d = st.dati;
     if (!d) return '<p class="vuoto">Carico…</p>';
-    var h = '<div class="foglio"><div class="box s8"><div class="lab">Dati in uso</div>';
+    var h = '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('database') + 'Dati in uso</div>';
     var att = d.versioni.filter(function (v) { return v.attiva; })[0];
     if (att) h += '<p class="cosa">Situazione al ' + esc(att.data.split('-').reverse().join('/')) + '</p><p class="nota">' + (att.righe || '?') + ' righe di nomenclatura, ' + (att.dichiarabili || '?') +
       ' codici dichiarabili, ' + (att.misure_import || '?') + ' misure all\'importazione e ' + (att.misure_export || '?') + ' all\'esportazione; ' + (att.righe_en || 0) + ' righe ancora in inglese.</p>' +
@@ -158,22 +158,22 @@
     if (d.in_corso) h += '<p class="esito-ok">Aggiornamento di ' + esc(d.in_corso.mese) + ' in corso: ' + esc(d.in_corso.fase) + '…</p>';
     h += '<p class="nota">' + (d.automatico ? 'Aggiornamento automatico attivo: dal giorno 1 a ogni inizio mese il server controlla la fonte e installa la nuova estrazione dopo i controlli.' : 'Aggiornamento automatico spento (TARIC_AGGIORNAMENTO_AUTOMATICO).') +
       (d.prossimo ? ' Prossimo tentativo per ' + esc(d.prossimo) + ' entro mezz\'ora.' : '') + '</p></div>';
-    h += '<div class="box s4"><div class="lab">Aggiorna adesso</div><form class="modulo" data-g="aggiorna"><label>Mese (vuoto = corrente)<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label>' +
+    h += '<div class="box s4"><div class="lab">' + T.icona('aggiorna') + 'Aggiorna adesso</div><form class="modulo" data-g="aggiorna"><label>Mese (vuoto = corrente)<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Scarica e installa</button></div>' + riga('aggiorna') + '</form></div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab">Carica a mano un\'estrazione</div><p class="nota">Se la fonte automatica non funziona: scarica dal gruppo CIRCABC «TARIC and Quota data and information» i file Excel del mese, mettili in un archivio .zip e caricalo qui. Valgono gli stessi controlli.</p>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('carica') + 'Carica a mano un\'estrazione</div><p class="nota">Se la fonte automatica non funziona: scarica dal gruppo CIRCABC «TARIC and Quota data and information» i file Excel del mese, mettili in un archivio .zip e caricalo qui. Valgono gli stessi controlli.</p>' +
       '<form class="modulo" data-g="carica"><div class="due"><label>Archivio .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
       '<label>Mese dell\'estrazione<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label></div>' +
       '<div class="fila"><button class="btn" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Carica e installa</button></div>' + riga('carica') + '</form></div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab">Versioni installate</div><div class="scorri"><table class="tab"><thead><tr><th>Situazione al</th><th class="n">Righe</th><th class="n">Misure import</th><th>Generata</th><th></th></tr></thead><tbody>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Versioni installate</div><div class="scorri"><table class="tab"><thead><tr><th>Situazione al</th><th class="n">Righe</th><th class="n">Misure import</th><th>Generata</th><th></th></tr></thead><tbody>' +
       d.versioni.map(function (v) {
         return '<tr' + (v.attiva ? ' class="evid"' : '') + '><td>' + esc(v.versione.split('-').reverse().join('/')) + (v.attiva ? ' <span class="st ok">in uso</span>' : '') + '</td><td class="n" data-l="Righe">' + (v.righe || '') + '</td><td class="n" data-l="Misure import">' + (v.misure_import || '') +
           '</td><td data-l="Generata">' + esc(T.dataOra(v.generato)) + '</td><td class="azioni"><button class="btn sm" type="button" data-g="riepilogo" data-v="' + esc(v.versione) + '">Riepilogo</button>' +
           (v.attiva ? '' : '<button class="btn sm" type="button" data-g="usa" data-v="' + esc(v.versione) + '">Usa questa</button>') + '</td></tr>';
       }).join('') + '</tbody></table></div></div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab">Ultimi aggiornamenti</div><div class="scorri"><table class="tab"><thead><tr><th>Quando</th><th>Mese</th><th>Origine</th><th>Esito</th><th>Messaggio</th><th></th></tr></thead><tbody>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Ultimi aggiornamenti</div><div class="scorri"><table class="tab"><thead><tr><th>Quando</th><th>Mese</th><th>Origine</th><th>Esito</th><th>Messaggio</th><th></th></tr></thead><tbody>' +
       d.ultimi.map(function (a) {
         return '<tr><td>' + esc(T.dataOra(a.iniziato)) + '</td><td data-l="Mese">' + esc(a.mese) + '</td><td data-l="Origine">' + esc(a.origine.replace(/_/g, ' ')) + '</td><td data-l="Esito"><span class="st ' + a.esito + '">' + (ESITI[a.esito] || a.esito) + '</span></td><td>' + esc(a.messaggio) + '</td>' +
           '<td>' + (a.esito === 'errore' || a.esito === 'ok' ? '<button class="btn sm" type="button" data-g="registro-agg" data-id="' + a.id + '">Registro</button>' : '') + '</td></tr>';
@@ -181,13 +181,13 @@
       (st.registro ? '<div class="lab" style="margin-top:8px">' + esc(st.registro.titolo) + '<span class="dx"><button class="link" type="button" data-g="chiudi-registro">chiudi</button></span></div><pre class="registro">' + esc(st.registro.testo) + '</pre>' : '') + '</div></div>';
 
     var bk = d.backup || [];
-    h += '<div class="foglio"><div class="box"><div class="lab">Backup del database</div><p class="nota">Il backup contiene utenti, password (cifrate), storico, preferiti, regole e registro; i dati TARIC non servono perché si riscaricano. ' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scarica') + 'Backup del database</div><p class="nota">Il backup contiene utenti, password (cifrate), storico, preferiti, regole e registro; i dati TARIC non servono perché si riscaricano. ' +
       (d.backup_copie ? 'Il server ne fa uno da solo ogni giorno e tiene gli ultimi ' + d.backup_copie + '.' : 'Il backup automatico è spento (TARIC_BACKUP_COPIE=0).') +
       ' Ogni tanto scaricane uno sul tuo computer: se il server si rompe, è la tua copia.</p>' +
-      '<div class="fila"><button class="btn pri" type="button" data-g="backup">Fai un backup adesso</button></div>' + riga('backup');
+      '<div class="fila"><button class="btn pri" type="button" data-g="backup">' + T.icona('scarica') + 'Fai un backup adesso</button></div>' + riga('backup');
     if (bk.length) h += '<div class="scorri"><table class="tab"><thead><tr><th>Creato</th><th class="n">Dimensione</th><th></th></tr></thead><tbody>' +
       bk.map(function (x) {
-        return '<tr><td>' + esc(T.dataOra(x.creato)) + '</td><td class="n" data-l="Dimensione">' + esc(peso(x.dimensione)) + '</td><td class="azioni"><a class="btn sm" href="/api/admin/backup/' + encodeURIComponent(x.nome) + '" download>Scarica</a></td></tr>';
+        return '<tr><td>' + esc(T.dataOra(x.creato)) + '</td><td class="n" data-l="Dimensione">' + esc(peso(x.dimensione)) + '</td><td class="azioni"><a class="btn sm" href="/api/admin/backup/' + encodeURIComponent(x.nome) + '" download>' + T.icona('scarica') + 'Scarica</a></td></tr>';
       }).join('') + '</tbody></table></div>';
     else h += '<p class="vuoto">Ancora nessun backup.</p>';
     return h + '</div></div>';
@@ -197,7 +197,7 @@
 
   /* ---------- uso dell'IA ---------- */
   function uso() {
-    var r = st.riep, h = '<div class="foglio"><div class="box"><div class="lab">Uso dell\'IA</div>';
+    var r = st.riep, h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('grafico') + 'Uso dell\'IA</div>';
     if (r) h += '<p class="nota">' + (r.ia ? 'Servizio: ' + esc(r.ia_nome) + ', modelli ' + esc(r.modelli.join(' (rapido) e ')) + '. ' : 'Nessun servizio IA configurato. ') +
       'Questo mese: ' + r.uso_mese.n + ' richieste, ' + (r.uso_mese.tin || 0).toLocaleString('it-IT') + ' token in ingresso e ' +
       (r.uso_mese.tout || 0).toLocaleString('it-IT') + ' in uscita. Costi e limiti effettivi li vedi nella console del fornitore (Google AI Studio, Console di Anthropic…), dove conviene impostare anche un tetto di spesa.</p>';
@@ -212,7 +212,7 @@
 
   /* ---------- registro ---------- */
   function registro() {
-    var h = '<div class="foglio"><div class="box"><div class="lab">Registro degli eventi<span class="dx">ultimi ' + st.eventi.length + '</span></div>';
+    var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('registro') + 'Registro degli eventi<span class="dx">ultimi ' + st.eventi.length + '</span></div>';
     if (!st.eventi.length) return h + '<p class="vuoto">Nessun evento.</p></div></div>';
     h += '<div class="scorri"><table class="tab"><thead><tr><th>Quando · evento</th><th>Utente</th><th>Da</th><th>Dettagli</th></tr></thead><tbody>' +
       st.eventi.map(function (e) {
@@ -224,7 +224,7 @@
 
   /* ---------- posta ---------- */
   function posta() {
-    var p = st.posta, h = '<div class="foglio"><div class="box"><div class="lab">Posta non inviata</div>';
+    var p = st.posta, h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('posta') + 'Posta non inviata</div>';
     if (!p) return h + '<p class="vuoto">Carico…</p></div></div>';
     h += '<p class="nota">' + (p.configurata ? 'La posta è configurata: qui compaiono solo i messaggi il cui invio non è riuscito.' :
       'La posta non è configurata (variabili TARIC_SMTP_*): ogni email resta qui. Puoi copiare i link e mandarli tu.') + '</p>';

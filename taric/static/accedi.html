@@ -10,19 +10,18 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
-<meta name="theme-color" content="#17694a">
+<meta name="theme-color" content="#edf1ee">
 </head>
 <body class="accesso" data-pagina="accedi">
 <div class="page">
-  <header class="top">
-    <div class="marca">
-      <h1>MAGIC <span>HS</span></h1>
-      <p>Voci doganali a 10 cifre con alternative, dazi e documenti richiesti per ogni paese.</p>
-    </div>
+  <header class="barra">
+    <a class="logo" href="/" data-marchio><span>MAGIC <b>HS</b></span></a>
+    <div class="lato"><button class="tasto-ico" type="button" id="tema" aria-label="Cambia tema"></button></div>
   </header>
   <main>
     <div class="foglio"><div class="box">
-      <div class="lab"><b>1</b> Accesso</div>
+      <h2>Accedi a MAGIC HS</h2>
+      <p class="presenta">Voci doganali a 10 cifre con le alternative, i dazi e i documenti richiesti per ogni paese.</p>
       <form class="modulo" id="modulo" novalidate>
         <label>Email<input class="campo" type="email" name="email" autocomplete="username" required autofocus></label>
         <label>Password<input class="campo" type="password" name="password" autocomplete="current-password" required></label>
@@ -35,6 +34,7 @@
   </main>
   <footer class="piede"><p>Strumento non ufficiale, senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.</p></footer>
 </div>
+<script src="/static/js/icone.js"></script>
 <script src="/static/js/comune.js"></script>
 <script src="/static/js/accesso.js"></script>
 </body>

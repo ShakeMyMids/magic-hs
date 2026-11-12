@@ -816,7 +816,7 @@ function boxMisure(sel) {
     '<select class="campo" id="paese" aria-label="Paese">' + opt + '</select>' +
     '<div class="fila"><button class="chip" type="button" data-act="flusso" data-f="import" aria-pressed="' + (!exp) + '">Importazione</button>' +
     '<button class="chip" type="button" data-act="flusso" data-f="export" aria-pressed="' + exp + '">Esportazione</button></div></div>' +
-    '<div class="box s8"><div class="lab">Misure TARIC al ' + dataIt(oggiNum()) + ' <span class="dx">dati ufficiali UE estratti il ' + esc(DATA_IT) + '</span></div>' +
+    '<div class="box s8"><div class="lab">' + T.icona('percento') + 'Misure TARIC al ' + dataIt(oggiNum()) + ' <span class="dx">dati ufficiali UE estratti il ' + esc(DATA_IT) + '</span></div>' +
     '<p class="nota">Dazi e controlli dell\'Unione per il codice e il paese scelti. IVA, accise e misure nazionali non fanno parte del TARIC: per quelle usa AIDA.</p>' + links + '</div>' +
     '<div class="box"><div class="lab"><b>47</b> Calcolo delle imposizioni <span class="dx">' + (exp ? 'esportazione' : 'dazi all\'importazione') + '</span></div>' + h47 + '</div>' +
     '<div class="box"><div class="lab"><b>44</b> Documenti presentati, certificati e autorizzazioni <span class="dx">' + (n44 ? n44 + (n44 === 1 ? ' misura' : ' misure') + ' di controllo' : 'divieti, restrizioni e controlli') + '</span></div>' + h44 + '</div>' +
@@ -829,9 +829,10 @@ function boxMisure(sel) {
 function renderStato() {
   var el = $('#stato'), b = state.busy;
   $('#vai').disabled = !!b; $('#ferma').hidden = !b;
+  $('#avanza').hidden = !b;
   if (!b) { el.innerHTML = ''; return; }
   var s = Math.round((Date.now() - b.t0) / 1000);
-  el.innerHTML = '<span class="punto"></span><span>' + esc(b.note) + '… ' + s + ' s</span>';
+  el.innerHTML = T.icona('attesa') + '<span>' + esc(b.note) + '… ' + s + ' s</span>';
 }
 function renderMsg() {
   var h = '';
@@ -869,7 +870,7 @@ function celle(sel) {
     nc = grp((sig + '········').slice(0, 8)); ta = sig.length >= 10 ? sig.slice(8, 10) : '··'; manca = true;
   } else { nc = grp(c.slice(0, 8)); ta = c.slice(8, 10); }
   var k = 0;
-  function typed(s) { return s.split('').map(function (ch) { return ch === ' ' ? ' ' : '<i style="--i:' + (k++) + '">' + esc(ch) + '</i>'; }).join(''); }
+  function typed(s) { return s.split('').map(function (ch) { return ch === ' ' ? '<span class="sp"> </span>' : '<i style="--i:' + (k++) + '">' + esc(ch) + '</i>'; }).join(''); }
   return '<div class="c33">' +
     '<div class="cel' + (manca ? ' manca' : '') + '"><span class="v">' + typed(nc) + '</span><span class="k">Nomenclatura combinata</span></div>' +
     '<div class="cel' + (manca ? ' manca' : '') + '"><span class="v">' + typed(ta) + '</span><span class="k">TARIC</span></div>' +
@@ -893,22 +894,25 @@ function renderEsito() {
   var el = $('#esito'), sel = state.sel, r = state.result;
   if (!sel) { el.innerHTML = ''; return; }
   var i = sel.idx, role = ruolo(sel), cand = role.cand, h = '';
-  var anima = state.anima; state.anima = false;
+  /* l'arrivo del risultato si anima una volta; se nel frattempo la scheda si ridisegna (per esempio arrivano
+     le misure del capitolo) l'animazione riprende dal punto in cui era, grazie al ritardo negativo --t */
+  if (state.anima) { state.animaT0 = Date.now(); state.anima = false; }
+  var trascorso = state.animaT0 ? Date.now() - state.animaT0 : Infinity;
 
   /* --- box 33 --- */
-  h += '<div class="foglio' + (anima ? ' anima' : '') + '">';
-  h += '<div class="box s8"><div class="lab"><b>33</b> Codice delle merci' +
+  h += '<div class="foglio' + (trascorso < 1800 ? ' anima" style="--t:-' + trascorso + 'ms' : '') + '">';
+  h += '<div class="box s8 principale"><div class="lab"><b>33</b> Codice delle merci' +
     (state.esempio ? '<span class="dx">esempio dimostrativo: premi Classifica per la tua merce</span>' : (r && r.merce ? '<span class="dx">' + esc(r.merce) + '</span>' : '')) + '</div>';
   h += '<div class="testa33">' + celle(sel) +
-    '<div class="timbro">' + esc(role.nome) + (cand ? '<small>confidenza ' + confLabel(cand.conf) + '</small>' : '') + '</div></div>';
+    '<div class="timbro">' + T.icona(role.best ? 'timbro' : role.nome === 'Alternativa' ? 'domanda' : 'matita') + '<span>' + esc(role.nome) + (cand ? '<small>confidenza ' + confLabel(cand.conf) + '</small>' : '') + '</span></div></div>';
   if (i < 0) h += '<p class="errore">Il codice ' + esc(grp(sel.code)) + ' non esiste nella nomenclatura incorporata (situazione al ' + DATA_IT + '). Può essere stato introdotto dopo quella data oppure essere sbagliato: verificalo su AIDA.</p>';
   else if (!isLeaf(i)) h += '<p class="avviso">Questa voce non è dichiarabile così: scegli una delle sottovoci qui sotto.</p>';
   if (cand && cand.it) h += '<p class="cosa">' + esc(cand.it) + '</p>';
   if (cand && cand.why) h += '<p class="perche"><b>Perché.</b> ' + esc(cand.why) + '</p>';
   if (cand && !role.best && cand.when) h += '<p class="perche"><b>Quando.</b> ' + esc(cand.when) + '</p>';
-  h += '<div class="fila"><button class="btn sm" type="button" data-act="copia" data-c="' + esc(sel.code) + '">Copia codice</button>' +
-    (i >= 0 ? '<button class="btn sm" type="button" data-act="apri" data-i="' + i + '">Vedi nella nomenclatura</button>' : '') +
-    (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '"><span class="stella" aria-hidden="true">' + (state.preferiti[sel.code] ? '★' : '☆') + '</span>' + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' : '') + '</div>';
+  h += '<div class="fila"><button class="btn sm" type="button" data-act="copia" data-c="' + esc(sel.code) + '">' + T.icona('copia') + 'Copia codice</button>' +
+    (i >= 0 ? '<button class="btn sm" type="button" data-act="apri" data-i="' + i + '">' + T.icona('libro') + 'Vedi nella nomenclatura</button>' : '') +
+    (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' : '') + '</div>';
   var fineCod = (D.fine && D.fine[sel.code]) || 0;
   if (i >= 0 && fineCod) h += '<p class="avviso">' + (fineCod < oggiNum() ? 'Questo codice ha cessato di valere il ' : 'Questo codice cessa di valere il ') + dataIt(fineCod) + '.</p>';
   h += '<p class="nota">Dati TARIC al ' + DATA_IT + '. Prima di dichiarare controlla il codice su AIDA.</p>';
@@ -932,10 +936,10 @@ function renderEsito() {
     var p = pathOf(i);
     var inEN = p.filter(function (j) { return INGL[j]; });
     var daTradurre = inEN.some(function (j) { return !state.trad[j]; });
-    h += '<div class="box"><div class="lab">Percorso nella nomenclatura <span class="dx">' + (inEN.length ? 'testo ufficiale UE: le righe con la sigla EN non hanno ancora il testo italiano' : 'testo ufficiale UE in italiano') + '</span></div><div class="perc">' +
+    h += '<div class="box"><div class="lab">' + T.icona('albero') + 'Percorso nella nomenclatura <span class="dx">' + (inEN.length ? 'testo ufficiale UE: le righe con la sigla EN non hanno ancora il testo italiano' : 'testo ufficiale UE in italiano') + '</span></div><div class="perc">' +
       p.map(function (j, k) { return rigaPerc(j, k === p.length - 1); }).join('') + '</div>';
     if (state.warn) h += '<p class="avviso">' + esc(state.warn) + '</p>';
-    if (sampleFn && daTradurre) h += '<div class="fila"><button class="btn sm" type="button" data-act="traduci"' + (state.tradBusy ? ' disabled' : '') + '>' + (state.tradBusy ? 'Traduco…' : 'Traduci le righe in inglese') + '</button><span class="nota">Traduzione automatica, non ufficiale.</span></div>';
+    if (sampleFn && daTradurre) h += '<div class="fila"><button class="btn sm" type="button" data-act="traduci"' + (state.tradBusy ? ' disabled' : '') + '>' + T.icona('globo') + (state.tradBusy ? 'Traduco…' : 'Traduci le righe in inglese') + '</button><span class="nota">Traduzione automatica, non ufficiale.</span></div>';
     if (!isLeaf(i)) {
       h += '<div class="lab" style="margin-top:6px">Sottovoci</div><div class="lista">' + kids(i).map(function (j) {
         return '<button class="alt" type="button" data-act="scegli" data-i="' + j + '"><span class="cod">' + esc(showCode(j)) + '</span><span class="it txt">' + esc(DESC[j]) + tagEN(j) + '</span><span class="pill ' + (isLeaf(j) ? 'alta' : 'bassa') + '">' + (isLeaf(j) ? 'dichiarabile' : (FLAG[j] === 'g' ? 'gruppo' : 'voce')) + '</span></button>';
@@ -947,7 +951,7 @@ function renderEsito() {
   /* --- alternatives and questions --- */
   if (r) {
     var tutte = [r.best].concat(r.alts);
-    h += '<div class="box s7"><div class="lab">Voci a confronto <span class="dx">tocca una riga per aprirla</span></div><div class="lista">' + tutte.map(function (a, k) {
+    h += '<div class="box s7"><div class="lab">' + T.icona('regole') + 'Voci a confronto <span class="dx">tocca una riga per aprirla</span></div><div class="lista">' + tutte.map(function (a, k) {
       var ai = byCode.has(a.code) ? byCode.get(a.code) : -1;
       return '<button class="alt" type="button" data-act="alt" data-c="' + esc(a.code) + '" aria-pressed="' + (a.code === sel.code) + '">' +
         '<span class="cod">' + esc(grp(a.code)) + '</span><span class="it">' + esc(a.it || (ai >= 0 ? DESC[ai] : '')) + '</span>' +
@@ -956,7 +960,7 @@ function renderEsito() {
         (ai < 0 ? '<span class="quando" style="color:var(--bad)">Codice non presente nella nomenclatura incorporata.</span>' : '') + '</button>';
     }).join('') + '</div></div>';
 
-    h += '<div class="box s5"><div class="lab">Domande per affinare</div>';
+    h += '<div class="box s5"><div class="lab">' + T.icona('domanda') + 'Domande per affinare</div>';
     if (r.domande.length) {
       h += r.domande.map(function (d, k) {
         return '<div class="dom"><p class="q">' + esc(d.q) + '</p><div class="fila">' + d.opts.map(function (o, n) {
@@ -967,7 +971,7 @@ function renderEsito() {
     if (state.qmsg) h += '<p class="avviso">' + esc(state.qmsg) + '</p>';
     if (!state.esempio) {
       h += '<div class="fila"><input class="campo" id="extra" type="text" autocomplete="off" placeholder="Altro dettaglio utile (facoltativo)" value="' + esc(state.extra) + '">' +
-        '<button class="btn" type="button" data-act="riclassifica"' + (sampleFn ? '' : ' disabled') + '>Riclassifica</button></div>';
+        '<button class="btn" type="button" data-act="riclassifica"' + (sampleFn ? '' : ' disabled') + '>' + T.icona('aggiorna') + 'Riclassifica</button></div>';
     } else h += '<p class="nota">Nell\'uso reale rispondi e premi Riclassifica: la proposta si aggiorna.</p>';
     h += '</div>';
   }
@@ -1063,7 +1067,9 @@ function vista(v) {
   if (VISTE.indexOf(v) < 0 || (v === 'gestione' && !(state.utente && state.utente.ruolo === 'amministratore'))) v = 'classifica';
   state.view = v;
   VISTE.forEach(function (n) {
-    $('#view-' + n).hidden = n !== v;
+    var sez = $('#view-' + n), prima = sez.hidden;
+    sez.hidden = n !== v;
+    if (n === v && prima && state.avviato) { sez.classList.remove('entra'); void sez.offsetWidth; sez.classList.add('entra'); }
     var a = $('#tab-' + n); if (n === v) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
   try { var cur = location.hash.replace('#', ''); if (cur !== v && (cur || v !== 'classifica')) location.hash = v; } catch (e) { /* hash non scrivibile */ }
@@ -1156,7 +1162,7 @@ function start() {
   var ora = new Date(), att = ora.getDate() < 10 ? new Date(ora.getFullYear(), ora.getMonth() - 1, 1) : ora;
   var atteso = att.getFullYear() + '-' + ('0' + (att.getMonth() + 1)).slice(-2);
   if (DATA_ISO && DATA_ISO.slice(0, 7) < atteso) { txt += ' · manca l\'aggiornamento di questo mese'; $('#dato').classList.add('tardi'); }
-  $('#dato').textContent = txt; $('#dato2').textContent = N.toLocaleString('it-IT') + ' righe, ' + (m.dichiarabili || 0).toLocaleString('it-IT') + ' codici dichiarabili, situazione al ' + DATA_IT;
+  $('#dato').innerHTML = T.icona('calendario') + esc(txt); $('#dato2').textContent = N.toLocaleString('it-IT') + ' righe, ' + (m.dichiarabili || 0).toLocaleString('it-IT') + ' codici dichiarabili, situazione al ' + DATA_IT;
   $('#nota-nom').textContent = 'Testo ufficiale UE in italiano' +
     (N_EN ? '; le ' + N_EN.toLocaleString('it-IT') + ' righe create o modificate dopo il ' + IT_DATA + ' sono ancora in inglese (sigla EN)' : '') +
     '. La ricerca ignora accenti e differenze tra singolare e plurale.';
@@ -1173,6 +1179,7 @@ function start() {
   renderEsempi();
   vista(location.hash.replace('#', '') || 'classifica');
   renderAll();
+  state.avviato = true;
 }
 window.TARIC_DEBUG = { misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
 
@@ -1201,6 +1208,14 @@ T.app = {
   }
 };
 
+/* tema scelto dal pulsante in alto: lo ricorda anche il profilo */
+document.addEventListener('taric:tema', function (ev) {
+  var u = state.utente;
+  if (!u) return;
+  u.preferenze.tema = ev.detail;
+  T.api('PUT', '/api/io/preferenze', { paese: u.preferenze.paese || '', flusso: u.preferenze.flusso || 'import', tema: ev.detail }).catch(function () { /* resta solo su questo dispositivo */ });
+});
+
 $('#esci').addEventListener('click', function () {
   function via() { location.href = '/accedi'; }
   T.api('POST', '/api/esci', null, { resta: true }).then(via, via);
@@ -1209,7 +1224,9 @@ $('#esci').addEventListener('click', function () {
 T.api('GET', '/api/io').then(function (u) {
   state.utente = u;
   $('#chi-nome').textContent = u.nome;
-  if (u.ia && u.ia.nome) $('#ia-nome').textContent = ' (' + u.ia.nome + ')';
+  $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
+  $('#chi-iniziali').parentNode.title = u.nome + ' (' + u.email + ')';
+  if (u.ia && u.ia.nome) $('#ia-nome').textContent = ' (' + u.ia.nome.replace(/ \((.+)\)$/, ' di $1') + ')';
   $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
   T.tema(u.preferenze.tema);
   state.country = u.preferenze.paese || '';

@@ -10,20 +10,19 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
-<meta name="theme-color" content="#17694a">
+<meta name="theme-color" content="#edf1ee">
 </head>
 <body class="accesso" data-pagina="attesa">
 <div class="page">
-  <header class="top">
-    <div class="marca">
-      <h1>MAGIC <span>HS</span></h1>
-      <p>Voci doganali a 10 cifre con alternative, dazi e documenti richiesti per ogni paese.</p>
-    </div>
+  <header class="barra">
+    <a class="logo" href="/" data-marchio><span>MAGIC <b>HS</b></span></a>
+    <div class="lato"><button class="tasto-ico" type="button" id="tema" aria-label="Cambia tema"></button></div>
   </header>
   <main>
     <div class="foglio"><div class="box">
-      <div class="lab"><b>1</b> Preparazione dei dati TARIC</div>
+      <h2>Preparazione dei dati TARIC</h2>
       <p class="cosa">Preparazione dei dati in corso</p>
+      <div class="avanza"><i></i></div>
       <p class="nota" id="fase">Al primo avvio il server scarica l'estrazione TARIC del mese e la controlla: ci vuole circa un minuto. La pagina si apre da sola quando i dati sono pronti.</p>
       <div id="admin" hidden>
         <p class="nota">Sei amministratore: se il download automatico non funziona puoi avviarlo di nuovo o caricare a mano l'archivio .zip con i file Excel dell'estrazione (gruppo CIRCABC «TARIC and Quota data and information»).</p>
@@ -40,6 +39,7 @@
   </main>
   <footer class="piede"><p>Strumento non ufficiale, senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.</p></footer>
 </div>
+<script src="/static/js/icone.js"></script>
 <script src="/static/js/comune.js"></script>
 <script src="/static/js/accesso.js"></script>
 </body>

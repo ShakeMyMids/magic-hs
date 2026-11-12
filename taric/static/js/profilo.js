@@ -35,14 +35,14 @@
     var io = u(); if (!io) return;
     var p = io.preferenze, ia = io.ia, h = '';
 
-    h += '<div class="foglio"><div class="box s8"><div class="lab"><b>1</b> Il tuo account<span class="dx">' + esc(io.ruolo === 'amministratore' ? 'amministratore' : 'utente') + '</span></div>' +
+    h += '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('utente') + 'Il tuo account<span class="dx">' + esc(io.ruolo === 'amministratore' ? 'amministratore' : 'utente') + '</span></div>' +
       '<form class="modulo" data-p="salva-account"><div class="due">' +
       '<label>Nome e cognome<input class="campo" name="nome" required minlength="2" maxlength="100" value="' + esc(io.nome) + '"></label>' +
       '<label>Azienda<input class="campo" name="azienda" maxlength="150" value="' + esc(io.azienda) + '"></label></div>' +
       '<label>Email (per cambiarla chiedi all\'amministratore)<input class="campo" value="' + esc(io.email) + '" disabled></label>' +
       '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div>';
 
-    h += '<div class="box s4"><div class="lab"><b>2</b> Classificazione assistita<span class="dx">' + esc(meseIt(ia.mese)) + '</span></div>';
+    h += '<div class="box s4"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita<span class="dx">' + esc(meseIt(ia.mese)) + '</span></div>';
     if (!ia.configurata) h += '<p class="nota">Non attiva su questo server.</p>';
     else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + ' richieste</p><p class="nota">Nessun limite per il tuo account. Una classificazione usa di solito 2 o 3 richieste.</p>';
     else {
@@ -53,14 +53,14 @@
     h += '</div></div>';
 
     var paesi = app().paesi();
-    h += '<div class="foglio"><div class="box"><div class="lab"><b>3</b> Preferenze</div><div class="modulo"><div class="due">' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('gestione') + 'Preferenze</div><div class="modulo"><div class="due">' +
       '<label>Paese d\'origine predefinito<select class="campo" data-p="pref" name="paese"><option value="">Nessuno: tutti i paesi terzi</option>' +
       paesi.map(function (x) { return '<option value="' + esc(x[1]) + '"' + (x[1] === p.paese ? ' selected' : '') + '>' + esc(x[0]) + '</option>'; }).join('') + '</select></label>' +
       '<label>Flusso predefinito<select class="campo" data-p="pref" name="flusso"><option value="import"' + (p.flusso !== 'export' ? ' selected' : '') + '>Importazione</option><option value="export"' + (p.flusso === 'export' ? ' selected' : '') + '>Esportazione</option></select></label>' +
       '<label>Tema<select class="campo" data-p="pref" name="tema"><option value="auto"' + (p.tema === 'auto' ? ' selected' : '') + '>Come il dispositivo</option><option value="chiaro"' + (p.tema === 'chiaro' ? ' selected' : '') + '>Chiaro</option><option value="scuro"' + (p.tema === 'scuro' ? ' selected' : '') + '>Scuro</option></select></label>' +
       '</div><p class="nota">Il paese e il flusso si aggiornano anche quando li cambi nel risultato di una classificazione.</p></div></div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab"><b>4</b> Storico delle classificazioni<span class="dx">' + st.totale + ' salvate</span></div>';
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Storico delle classificazioni<span class="dx">' + st.totale + ' salvate</span></div>';
     if (!st.caricato) h += '<p class="vuoto">Carico…</p>';
     else if (!st.storico.length) h += '<p class="vuoto">Ancora nessuna classificazione: quelle che fai nella scheda Classifica vengono salvate qui.</p>';
     else {
@@ -70,18 +70,18 @@
     }
     h += '</div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab"><b>5</b> Voci preferite<span class="dx">' + st.preferiti.length + '</span></div>';
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('stella') + 'Voci preferite<span class="dx">' + st.preferiti.length + '</span></div>';
     if (!st.caricato) h += '<p class="vuoto">Carico…</p>';
     else if (!st.preferiti.length) h += '<p class="vuoto">Nessuna voce preferita. Nel risultato di una classificazione premi «Aggiungi ai preferiti».</p>';
     else h += '<div class="elenco">' + st.preferiti.map(rigaPreferito).join('') + '</div>';
     h += '</div></div>';
 
-    h += '<div class="foglio"><div class="box s8"><div class="lab"><b>6</b> Cambia password</div>' +
+    h += '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('chiave') + 'Cambia password</div>' +
       '<form class="modulo" data-p="password"><div class="due">' +
       '<label>Password attuale<input class="campo" type="password" name="attuale" autocomplete="current-password" required></label>' +
       '<label>Nuova password (almeno 10 caratteri)<input class="campo" type="password" name="nuova" autocomplete="new-password" required minlength="10"></label></div>' +
       '<div class="fila"><button class="btn pri" type="submit">Cambia password</button></div>' + riga('password') + '</form></div>' +
-      '<div class="box s4"><div class="lab"><b>7</b> Dispositivi</div><p class="nota">Se hai usato MAGIC HS su un computer non tuo, chiudi le altre sessioni: resterai collegato solo qui.</p>' +
+      '<div class="box s4"><div class="lab">' + T.icona('lucchetto') + 'Dispositivi</div><p class="nota">Se hai usato MAGIC HS su un computer non tuo, chiudi le altre sessioni: resterai collegato solo qui.</p>' +
       '<div class="fila"><button class="btn" type="button" data-p="esci-ovunque">Esci dagli altri dispositivi</button></div>' + riga('dispositivi') + '</div></div>';
 
     el.innerHTML = h;

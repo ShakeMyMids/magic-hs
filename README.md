@@ -224,5 +224,6 @@ Per la prova completa nel browser (Playwright) avvia `tests/finto_claude.py`, ch
 ## Fonti e licenze
 
 - **Nomenclatura e misure**: Commissione europea, DG TAXUD (dati pubblicati per il riutilizzo citando la fonte).
-- **Font**: Archivo e Courier Prime (SIL Open Font License, vedi `taric/static/fonts/`).
+- **Font**: Archivo (SIL Open Font License, vedi `taric/static/fonts/`).
+- **Icone**: Lucide (licenza ISC, vedi `taric/static/icons/LICENSE-lucide.txt`); si rigenerano con `strumenti/icone.py`.
 - **Classificazione assistita**: il servizio IA configurato (Google Gemini, Claude di Anthropic o altro).

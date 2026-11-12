@@ -9,24 +9,23 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
-<meta name="theme-color" content="#17694a">
+<meta name="theme-color" content="#edf1ee">
 </head>
 <body>
 <div class="page">
 
-  <header class="top">
-    <div class="marca">
-      <h1>MAGIC <span>HS</span></h1>
-      <p>Strumento non ufficiale. Scrivi il nome di una merce e ottieni la voce doganale a 10 cifre con le alternative, poi i dazi e i documenti richiesti per ogni paese.</p>
-    </div>
-    <div class="testata">
-      <div class="chi"><span>Accesso come <b id="chi-nome">…</b></span><button class="link" type="button" id="esci">Esci</button></div>
-      <nav class="schede" aria-label="Sezioni">
-        <a href="#classifica" id="tab-classifica" aria-current="page">Classifica</a>
-        <a href="#nomenclatura" id="tab-nomenclatura">Nomenclatura</a>
-        <a href="#profilo" id="tab-profilo">Profilo</a>
-        <a href="#gestione" id="tab-gestione" hidden>Gestione</a>
-      </nav>
+  <header class="barra">
+    <a class="logo" href="#classifica" data-marchio aria-label="MAGIC HS, vai a Classifica"><span>MAGIC <b>HS</b></span></a>
+    <nav class="schede" aria-label="Sezioni">
+      <a href="#classifica" id="tab-classifica" aria-current="page" data-ico="cerca">Classifica</a>
+      <a href="#nomenclatura" id="tab-nomenclatura" data-ico="albero">Nomenclatura</a>
+      <a href="#profilo" id="tab-profilo" data-ico="utente">Profilo</a>
+      <a href="#gestione" id="tab-gestione" data-ico="gestione" hidden>Gestione</a>
+    </nav>
+    <div class="lato">
+      <button class="tasto-ico" type="button" id="tema" aria-label="Cambia tema"></button>
+      <div class="chi"><span class="iniziali" id="chi-iniziali" aria-hidden="true"></span><b id="chi-nome">…</b>
+        <button class="tasto-ico" type="button" id="esci" title="Esci" aria-label="Esci" data-ico="esci"></button></div>
     </div>
   </header>
 
@@ -34,13 +33,16 @@
     <!-- ======================= CLASSIFICA ======================= -->
     <section id="view-classifica" aria-labelledby="tab-classifica">
       <div class="foglio">
-        <div class="box">
-          <div class="lab"><b>31</b> Designazione delle merci <span class="dx" id="dato"></span></div>
-          <label for="q" hidden>Descrizione della merce</label>
-          <textarea id="q" rows="2" spellcheck="false" placeholder="Per esempio: scarpe da ginnastica con tomaia in pelle e suola in gomma, da uomo"></textarea>
+        <div class="box domanda">
+          <span class="dato" id="dato"></span>
+          <h2>Che merce devi classificare?</h2>
+          <p class="sotto-titolo">Descrivila a parole: ricevi la voce doganale a 10 cifre con le alternative, poi dazi e documenti richiesti per ogni paese.</p>
+          <label for="q" hidden>Descrizione della merce (casella 31 del DAU)</label>
+          <div class="cerca-merce" data-ico="cerca"><textarea id="q" rows="2" spellcheck="false" placeholder="Per esempio: scarpe da ginnastica con tomaia in pelle e suola in gomma, da uomo"></textarea></div>
+          <div class="avanza" id="avanza" hidden><i></i></div>
           <div class="fila">
-            <button class="btn pri" id="vai" type="button">Classifica</button>
-            <button class="btn" id="ferma" type="button" hidden>Ferma</button>
+            <button class="btn pri" id="vai" type="button" data-ico="bacchetta">Classifica</button>
+            <button class="btn" id="ferma" type="button" data-ico="ferma" hidden>Ferma</button>
             <div class="stato" id="stato" role="status" aria-live="polite"></div>
           </div>
           <div id="msg"></div>
@@ -48,22 +50,22 @@
           <div class="fila" id="esempi"></div>
         </div>
       </div>
-      <div id="esito" style="margin-top:18px"></div>
+      <div id="esito" style="margin-top:16px"></div>
     </section>
 
     <!-- ======================= NOMENCLATURA ======================= -->
     <section id="view-nomenclatura" aria-labelledby="tab-nomenclatura" hidden>
       <div class="foglio">
         <div class="box">
-          <div class="lab">Nomenclatura TARIC <span class="dx" id="dato2"></span></div>
+          <div class="lab" data-ico="albero">Nomenclatura TARIC <span class="dx" id="dato2"></span></div>
           <div class="fila">
             <label for="nq" hidden>Cerca nella nomenclatura</label>
             <input class="campo" id="nq" type="search" autocomplete="off" spellcheck="false" placeholder="Codice (es. 8467 21) o parola (es. biciclette)">
-            <button class="btn sm" id="nq-x" type="button">Azzera</button>
+            <button class="btn" id="nq-x" type="button" data-ico="chiudi">Azzera</button>
           </div>
           <p class="nota" id="nota-nom"></p>
         </div>
-        <div class="box" style="padding:0">
+        <div class="box albero-box">
           <div class="albero" id="albero"></div>
         </div>
       </div>
@@ -81,6 +83,7 @@
   </footer>
 </div>
 
+<script src="/static/js/icone.js"></script>
 <script src="/static/js/comune.js"></script>
 <script src="{{DATI}}nomenclatura.js"></script>
 <script src="{{DATI}}rif.js"></script>
