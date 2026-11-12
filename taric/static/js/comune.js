@@ -67,7 +67,7 @@
     var d = (window.TARIC_ICONE || {})[nome];
     return d ? '<svg class="ico' + (classe ? ' ' + classe : '') + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + d + '</svg>' : '';
   };
-  /* marchio di MAGIC HS: il codice a gruppi 4-2-2-2, l'ultimo (TARIC) in lavanda */
+  /* marchio di MAGIC HS: il codice a gruppi 4-2-2-2, l'ultimo (TARIC) in viola */
   T.marchio = '<svg class="marchio" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect class="m-fondo" width="32" height="32" rx="8"/>' +
     '<rect class="m-r" x="6" y="9" width="12" height="2.6" rx="1.3"/><rect class="m-c" x="6" y="15" width="6.56" height="9" rx="2.2"/>' +
     '<rect class="m-c" x="13.76" y="15" width="3.28" height="9" rx="1.6"/><rect class="m-c" x="18.24" y="15" width="3.28" height="9" rx="1.6"/>' +
@@ -81,7 +81,7 @@
   }
   function coloreBarra() {
     var m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.setAttribute('content', scuroAttivo() ? '#101713' : '#edf1ee');
+    if (m) m.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--fondo').trim() || (scuroAttivo() ? '#171512' : '#dfdad0'));
   }
   T.temaAttuale = 'auto';
   T.tema = function (t) {

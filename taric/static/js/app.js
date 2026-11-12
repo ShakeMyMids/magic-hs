@@ -957,7 +957,7 @@ function renderEsito() {
         '<span class="cod">' + esc(grp(a.code)) + '</span><span class="it">' + esc(a.it || (ai >= 0 ? DESC[ai] : '')) + '</span>' +
         '<span class="pill ' + (k === 0 ? 'prop' : confLabel(a.conf)) + '">' + (k === 0 ? 'proposta' : confLabel(a.conf)) + '</span>' +
         (k > 0 && a.when ? '<span class="quando">' + esc(a.when) + '</span>' : '') +
-        (ai < 0 ? '<span class="quando" style="color:var(--bad)">Codice non presente nella nomenclatura incorporata.</span>' : '') + '</button>';
+        (ai < 0 ? '<span class="quando" style="color:var(--rosso)">Codice non presente nella nomenclatura incorporata.</span>' : '') + '</button>';
     }).join('') + '</div></div>';
 
     h += '<div class="box s5"><div class="lab">' + T.icona('domanda') + 'Domande per affinare</div>';
