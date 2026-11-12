@@ -105,7 +105,7 @@ def h8(s):
 
 def scrivi_js(cartella, nome, variabile, oggetto):
     js = variabile + "=" + json.dumps(oggetto, ensure_ascii=False, separators=(",", ":")) + ";\n"
-    with open(os.path.join(cartella, nome), "w", encoding="utf-8") as f:
+    with open(os.path.join(cartella, nome), "w", encoding="utf-8", newline="\n") as f:
         f.write(js)
     return len(js.encode("utf-8"))
 
@@ -126,7 +126,7 @@ def crea_tabella_it(xlsx_it, xlsx_en, data, dest):
             senza += 1
     if len(tab) < 20000:
         raise SystemExit(f"ERRORE: tabella italiana troppo piccola ({len(tab)} righe). NON PUBBLICARE.")
-    with open(dest, "w", encoding="utf-8") as f:
+    with open(dest, "w", encoding="utf-8", newline="\n") as f:
         json.dump({"data": data, "righe": tab}, f, ensure_ascii=False, separators=(",", ":"))
     return len(tab), senza
 
@@ -437,7 +437,7 @@ def main():
                 ch[flusso][g].sort(key=lambda r: (r[0], str(r[1]), r[3], str(r[5]), str(r[6])))
         ogg = {"s": ch["s"], "l": ch["l"], "m": ch["m"], "x": ch["x"]}
         js = f'window.TARIC_M=window.TARIC_M||{{}};window.TARIC_M["{c}"]=' + json.dumps(ogg, ensure_ascii=False, separators=(",", ":")) + ";\n"
-        with open(os.path.join(out, "m", c + ".js"), "w", encoding="utf-8") as f:
+        with open(os.path.join(out, "m", c + ".js"), "w", encoding="utf-8", newline="\n") as f:
             f.write(js)
 
     # ------------------------------------------------------------ tabelle di riferimento
@@ -496,7 +496,7 @@ def main():
     versione = {"data": a.data, "generato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "righe": n, "dichiarabili": n_dich,
                 "righe_it": n - n_en, "righe_en": n_en, "it_data": IT.get("data", ""), "misure_import": conta["m"], "misure_export": conta["x"],
                 "capitoli": len(capitoli), "it_aggiornato": it_aggiornato, "avvisi": avvisi, "variazioni": variazioni}
-    with open(os.path.join(out, "versione.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(out, "versione.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(versione, f, ensure_ascii=False, indent=1)
     elenco = [{"as": "data/" + nome, "path": os.path.abspath(os.path.join(out, nome))} for nome in ("nomenclatura.js", "rif.js", "note.js", "versione.json")]
     elenco += [{"as": "data/m/" + f_, "path": os.path.abspath(os.path.join(out, "m", f_))} for f_ in sorted(os.listdir(os.path.join(out, "m")))]
@@ -509,11 +509,11 @@ def main():
     problemi += prob_v
     avvisi += avv_v
     riepilogo = os.path.join(os.path.dirname(os.path.abspath(out)), "riepilogo.txt")
-    with open(riepilogo, "w", encoding="utf-8") as f:
+    with open(riepilogo, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(righe_riepilogo) + "\n")
     if avv_v:                               # gli avvisi della verifica entrano anche nel file di versione
         versione["avvisi"] = avvisi
-        with open(os.path.join(out, "versione.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(out, "versione.json"), "w", encoding="utf-8", newline="\n") as f:
             json.dump(versione, f, ensure_ascii=False, indent=1)
 
     print(json.dumps(versione, ensure_ascii=False))
@@ -532,7 +532,7 @@ def main():
         for p in problemi:
             print("  -", p)
         return 1
-    with open(da_pubblicare, "w", encoding="utf-8") as f:
+    with open(da_pubblicare, "w", encoding="utf-8", newline="\n") as f:
         json.dump(elenco, f, separators=(",", ":"))
     print(f"file da pubblicare: {len(elenco)} (elenco in {da_pubblicare})")
     print("CONTROLLI OK")

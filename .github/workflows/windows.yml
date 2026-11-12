@@ -89,12 +89,19 @@ jobs:
           $loc = Invoke-RestMethod "$base/api/admin/locale" -WebSession $s
           "programma $($loc.programma.in_uso), editori $($loc.editori -join ', '), cartella $($loc.condivisa)"
           if ($loc.programma.in_uso -ne $loc.programma.pubblicato) { throw "versione inattesa" }
-          for ($i = 0; $i -lt 160 -and -not $io.dati.versione; $i++) {
-            Start-Sleep -Seconds 5
-            $io = Invoke-RestMethod "$base/api/io" -WebSession $s
-            if ($i % 6 -eq 0) { "dati: $($io.dati.aggiornamento)" }
+          for ($i = 0; $i -lt 200 -and -not $io.dati.versione; $i++) {
+            Start-Sleep -Seconds 4
+            try { $io = Invoke-RestMethod "$base/api/io" -WebSession $s } catch { "nuovo tentativo: $_" }
+            if ($i % 8 -eq 0) { "dati: $($io.dati.aggiornamento)" }
+            if (-not $io.dati.versione -and -not $io.dati.aggiornamento -and $i -gt 10) { break }
           }
-          if (-not $io.dati.versione) { Get-Content (Join-Path $mia "registro.txt"); throw "dati del mese non installati" }
+          if (-not $io.dati.versione) {
+            Get-Content (Join-Path $mia "registro.txt")
+            $agg = Invoke-RestMethod "$base/api/admin/dati" -WebSession $s
+            $agg.ultimi | Format-List
+            if ($agg.ultimi) { Invoke-RestMethod "$base/api/admin/dati/registro/$($agg.ultimi[0].id)" -WebSession $s }
+            throw "dati del mese non installati"
+          }
           $pubblicati = (Get-Content (Join-Path $cond "dati\attiva.txt") -Raw).Trim()
           "dati installati $($io.dati.versione), pubblicati $pubblicati"
           if ($pubblicati -ne $io.dati.versione) { throw "dati non pubblicati nella cartella" }

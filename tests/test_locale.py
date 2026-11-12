@@ -477,3 +477,12 @@ def test_non_riscarica_un_mese_gia_installato(tmp_path: Path, monkeypatch: pytes
     sito.versione_finta("2026-12-01")
     sito.app.state.dati.imposta_attiva("2026-11-01")
     assert dati.da_fare() is None
+
+
+def test_file_dei_dati_con_a_capo_uguali_su_windows():
+    """Su Windows i file aperti in modalità testo scrivono \\r\\n: aggiorna.py deve produrre gli stessi file ovunque
+    (i controlli finali verificano che i .js finiscano con ";\\n")."""
+    import re
+    testo = (RADICE / "taric" / "aggiorna.py").read_text(encoding="utf-8")
+    aperture = re.findall(r'open\([^\n]*"w"[^\n]*\)', testo)
+    assert aperture and all('newline="\\n"' in a for a in aperture), aperture

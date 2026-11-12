@@ -268,8 +268,10 @@ def _servi(a: argparse.Namespace, cartella: Path, condivisa: Path, istanza_file:
         "TARIC_STRIPE_CHIAVE": "", "TARIC_BACKUP_COPIE": "7", "TARIC_SMTP_HOST": "",
     })
     app = crea_app(cfg, chiave_ingresso=chiave, istanza=istanza)
+    # connessioni tenute aperte a lungo: con un solo utente costano poco ed evitano che il browser riusi una
+    # connessione proprio mentre il server la chiude
     server = uvicorn.Server(uvicorn.Config(app, log_config=None, access_log=False, server_header=False, lifespan="on",
-                                           timeout_graceful_shutdown=10))
+                                           timeout_graceful_shutdown=10, timeout_keep_alive=75))
 
     def ferma() -> None:
         server.should_exit = True
