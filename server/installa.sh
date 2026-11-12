@@ -315,7 +315,7 @@ avvia_sito() {
   docker compose up -d --remove-orphans
   docker image prune -f >/dev/null 2>&1 || true
   for _ in $(seq 1 90); do
-    if curl -fsS -o /dev/null --max-time 3 http://127.0.0.1:8000/api/stato; then
+    if curl -fsS -o /dev/null --max-time 3 http://127.0.0.1:8000/api/stato 2>/dev/null; then
       ok "MAGIC HS risponde"
       return
     fi
