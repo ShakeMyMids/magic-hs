@@ -83,7 +83,7 @@ def test_registrazione_senza_posta_va_in_attesa_e_avvisa_admin(sito: Sito):
     assert mario["stato"] == "in_attesa" and utenti[0]["email"] == "mario@rossi.it"     # le richieste in attesa vengono prima
     assert a.post(f"/api/admin/utenti/{mario['id']}/approva").status_code == 200
     assert c.post("/api/accedi", json={"email": "mario@rossi.it", "password": "Password-Nuova-1"}).status_code == 200
-    assert c.get("/api/io").json()["ia"]["limite"] == 200
+    assert c.get("/api/io").json()["ia"]["limite"] == 50
 
 
 def test_registrazione_rifiuta_bot_e_dati_non_validi(sito: Sito):

@@ -8,14 +8,17 @@ import re
 import secrets
 import sqlite3
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator, Literal, Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from . import sicurezza as S
@@ -24,6 +27,7 @@ from .config import Config
 from .dati import GestoreDati
 from .db import Database, iso
 from .ia import ErroreIA, ServizioIA, mese_corrente
+from .pagamenti import PIANI, ErrorePagamento, Pagamenti
 from .posta import Posta
 from .registrazioni import Registrazioni
 
@@ -52,6 +56,7 @@ MESSAGGI_IA = {
     "upstream_timeout": "L'IA ha impiegato troppo tempo a rispondere. Riprova.",
     "upstream_error": "Errore temporaneo nel collegamento con il servizio di intelligenza artificiale. Riprova tra poco.",
     "bad_request": "Richiesta non valida.",
+    "tetto_giornaliero": "Hai raggiunto il tetto di sicurezza delle richieste all'IA nelle ultime 24 ore. Riprova più tardi; se ti serve di più scrivi all'amministratore.",
 }
 
 
@@ -150,13 +155,37 @@ class Motivo(BaseModel):
     invia: bool = False
 
 
+class Prezzi(BaseModel):
+    # centesimi di euro; Stripe non accetta pagamenti sotto 0,50 EUR (0 = piano non in vendita)
+    giorno: int = Field(ge=0, le=1_000_000)
+    settimana: int = Field(ge=0, le=1_000_000)
+    mese: int = Field(ge=0, le=1_000_000)
+    anno: int = Field(ge=0, le=10_000_000)
+
+
 class Impostazioni(BaseModel):
-    registrazione_aperta: bool
-    approva_tutti: bool
-    domini_approvati: list[str] = Field(max_length=200)
-    domini_bloccati: list[str] = Field(max_length=500)
-    quota_predefinita: int = Field(ge=0, le=100000)
-    massimo_in_attesa: int = Field(ge=1, le=10000)
+    # si salvano solo i campi inviati: le regole di registrazione e i piani hanno moduli separati
+    registrazione_aperta: Optional[bool] = None
+    approva_tutti: Optional[bool] = None
+    domini_approvati: Optional[list[str]] = Field(default=None, max_length=200)
+    domini_bloccati: Optional[list[str]] = Field(default=None, max_length=500)
+    quota_predefinita: Optional[int] = Field(default=None, ge=0, le=100000)
+    massimo_in_attesa: Optional[int] = Field(default=None, ge=1, le=10000)
+    prezzi: Optional[Prezzi] = None
+    pro_tetto_giorno: Optional[int] = Field(default=None, ge=0, le=100000)
+
+
+class Acquisto(BaseModel):
+    piano: Literal["giorno", "settimana", "mese", "anno"]
+    rinuncia_recesso: bool = False
+
+
+class ConcessionePro(BaseModel):
+    fino: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")   # None = togli la concessione
+
+
+class RitornoPagamento(BaseModel):
+    sessione: str = Field(min_length=3, max_length=255)
 
 
 class Mese(BaseModel):
@@ -168,23 +197,27 @@ class Versione(BaseModel):
 
 
 # ------------------------------------------------------------------ applicazione
-def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True) -> FastAPI:
+def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
+             client_stripe: httpx.Client | None = None) -> FastAPI:
     db = Database(cfg.dati / "taric.db")
     posta = Posta(cfg)
     reg = Registrazioni(db, posta)
     ia = ServizioIA(cfg, db, client_ia)
+    pag = Pagamenti(cfg, db, client_stripe)
+    ia.pro = pag.pro_attivo
     dati = GestoreDati(cfg, db, posta)
     copie = Backup(cfg.dati, cfg.backup_copie)
 
     @asynccontextmanager
     async def vita(_app: FastAPI) -> AsyncIterator[None]:
         if pianificatore:
-            dati.avvia_pianificatore(reg, copie)
+            dati.avvia_pianificatore(reg, copie, [pag.sincronizza_scadenze])
         yield
         dati.ferma()
 
     app = FastAPI(title="MAGIC HS", docs_url=None, redoc_url=None, openapi_url=None, lifespan=vita)
     app.state.cfg, app.state.db, app.state.posta, app.state.dati, app.state.ia, app.state.reg = cfg, db, posta, dati, ia, reg
+    app.state.pagamenti = pag
     codice_file = cfg.dati / "codice-configurazione.txt"
 
     def ci_sono_admin(c: sqlite3.Connection) -> bool:
@@ -240,7 +273,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     # ------------------------------------------------------------------ middleware: intestazioni di sicurezza e CSRF
     @app.middleware("http")
     async def protezioni(request: Request, call_next: Any) -> Response:
-        if request.url.path.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS"):
+        if (request.url.path.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS")
+                and request.url.path != "/api/stripe/webhook"):
             origine = request.headers.get("origin")
             atteso = f"{request.url.scheme}://{request.url.netloc}"
             if request.headers.get("x-taric") != "1" or (origine and origine != atteso and origine != cfg.url_pubblico):
@@ -493,7 +527,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return {"id": u["id"], "nome": u["nome"], "email": u["email"], "azienda": u["azienda"], "ruolo": u["ruolo"],
                 "preferenze": {"paese": pref.get("paese", ""), "flusso": pref.get("flusso", "import"), "tema": pref.get("tema", "auto")},
                 "ia": {"disponibile": ia.disponibile and lim != 0, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
-                       "usate": ia.usate(c, u["id"]), "mese": mese_corrente()},
+                       "usate": ia.usate(c, u["id"]), "mese": mese_corrente(), "tetto_giorno": ia.tetto(c, u)},
+                "piano": {**pag.stato(c, u["id"]), "pagamenti": pag.attivi},
                 "dati": {"versione": v, "aggiornamento": (dati.in_corso or {}).get("fase")}}
 
     @app.get("/api/io")
@@ -609,8 +644,73 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         try:
             return JSONResponse(ia.chiedi(u, body.prompt, body.livello))
         except ErroreIA as e:
-            return JSONResponse({"errore": MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"]), "codice": e.codice},
-                                status_code=e.stato_http)
+            messaggio = MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
+            if e.codice == "quota_esaurita" and pag.attivi and u["quota_ia"] != 0:
+                messaggio = ("Hai usato tutte le richieste gratuite all'IA di questo mese. Con il piano Pro sono illimitate: "
+                             "lo attivi da Profilo, «Il tuo piano». Nomenclatura e misure restano consultabili.")
+            return JSONResponse({"errore": messaggio, "codice": e.codice}, status_code=e.stato_http)
+
+    # ------------------------------------------------------------------ piani e pagamenti
+    def errore_pagamento(e: ErrorePagamento) -> Errore:
+        return Errore(e.stato, e.messaggio, e.codice)
+
+    @app.get("/api/piani")
+    def piani(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        with db.connessione() as c:
+            imp = db.impostazioni(c)
+            mio = pag.stato(c, u["id"])
+        return {"attivi": pag.attivi, "prova": pag.modalita_prova, "gratuito": imp["quota_predefinita"], "tetto_giorno": imp["pro_tetto_giorno"],
+                "piani": [{"id": k, "nome": v["nome"], "abbonamento": v["abbonamento"], "prezzo": int(imp["prezzi"].get(k) or 0)}
+                          for k, v in PIANI.items()],
+                "mio": mio}
+
+    @app.post("/api/pagamento/inizia")
+    def inizia_pagamento(body: Acquisto, request: Request, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        if not body.rinuncia_recesso:
+            raise Errore(422, "Per attivare subito il piano conferma la richiesta di esecuzione immediata.", "recesso")
+        with db.transazione() as c:
+            if S.conta(c, f"pagamento:{u['id']}", 3600) >= 30:
+                raise Errore(429, "Troppi tentativi di pagamento: riprova tra un'ora.", "troppi")
+            S.registra(c, f"pagamento:{u['id']}")
+            imp = db.impostazioni(c)
+        try:
+            url = pag.inizia(u, body.piano, imp["prezzi"], base_url(request))
+        except ErrorePagamento as e:
+            raise errore_pagamento(e)
+        with db.transazione() as c:
+            db.evento(c, "pagamento_avviato", u["id"], u["id"],
+                      f"{PIANI[body.piano]['nome']}; esecuzione immediata richiesta e rinuncia al recesso confermata")
+        return json_ok(url=url)
+
+    @app.post("/api/pagamento/conferma")
+    def conferma_pagamento(body: RitornoPagamento, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        try:
+            esito = pag.conferma(u["id"], body.sessione)
+        except ErrorePagamento as e:
+            raise errore_pagamento(e)
+        with db.connessione() as c:
+            return json_ok(esito=esito, piano=pag.stato(c, u["id"]))
+
+    @app.post("/api/pagamento/gestisci")
+    def gestisci_abbonamento(request: Request, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        try:
+            return json_ok(url=pag.portale(u["id"], base_url(request)))
+        except ErrorePagamento as e:
+            raise errore_pagamento(e)
+
+    @app.post("/api/stripe/webhook")
+    async def stripe_webhook(request: Request) -> JSONResponse:
+        if not pag.attivi or not cfg.stripe_firma:
+            return JSONResponse({"errore": "Pagamenti non configurati.", "codice": "pagamenti_spenti"}, status_code=503)
+        corpo = await request.body()
+        if len(corpo) > 1_000_000:
+            return JSONResponse({"errore": "Evento troppo grande.", "codice": "evento"}, status_code=413)
+        try:
+            esito = await run_in_threadpool(pag.webhook, corpo, request.headers.get("stripe-signature", ""))
+        except ErrorePagamento as e:
+            log.warning("webhook Stripe rifiutato: %s", e.messaggio)
+            return JSONResponse({"errore": e.messaggio, "codice": e.codice}, status_code=e.stato)
+        return JSONResponse({"ok": True, "esito": esito})
 
     # ------------------------------------------------------------------ amministrazione
     def conta_admin(c: sqlite3.Connection) -> int:
@@ -652,6 +752,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                                        "motivo_stato", "creato", "ultimo_accesso", "sessioni", "usate")}
                 d["limite"] = ia.limite(c, r)
                 d["password_impostata"] = r["hash_password"] is not None
+                st = pag.stato(c, r["id"])
+                d["pro"] = {"fino": st["fino"], "origine": st["origine"], "manuale_fino": st["manuale_fino"]} if st["pro"] or st["manuale_fino"] else None
                 out.append(d)
         return {"utenti": out, "mese": mese}
 
@@ -733,11 +835,44 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def admin_elimina(uid: int, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         if uid == a["id"]:
             raise Errore(409, "Non puoi eliminare il tuo account.", "se_stesso")
+        try:
+            pag.annulla_abbonamento(uid)          # niente addebiti per un account che non esiste piu'
+        except ErrorePagamento:
+            raise Errore(502, "Non riesco ad annullare l'abbonamento su Stripe: annullalo dalla dashboard di Stripe e riprova.", "stripe")
         with db.transazione() as c:
             u = utente_o_404(c, uid)
             c.execute("DELETE FROM utenti WHERE id = ?", (uid,))
             db.evento(c, "utente_eliminato", None, a["id"], f"{u['email']} ({u['nome']})")
         return json_ok()
+
+    @app.put("/api/admin/utenti/{uid}/pro")
+    def admin_concedi_pro(uid: int, body: ConcessionePro, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        fino = None
+        if body.fino:
+            try:
+                giorno = datetime.strptime(body.fino, "%Y-%m-%d")
+            except ValueError:
+                raise Errore(422, "Data non valida.", "data")
+            # fino alla fine di quel giorno, ora italiana
+            fino = (giorno + timedelta(days=1)).replace(tzinfo=ZoneInfo(cfg.fuso)).astimezone(timezone.utc)
+            if fino <= datetime.now(timezone.utc):
+                raise Errore(422, "La data deve essere nel futuro.", "data")
+        with db.transazione() as c:
+            utente_o_404(c, uid)
+            pag.concedi_manuale(c, uid, fino)
+            db.evento(c, "pro_manuale", uid, a["id"], f"Pro concesso fino al {body.fino}" if fino else "concessione del Pro tolta")
+            return json_ok(piano=pag.stato(c, uid))
+
+    @app.get("/api/admin/pagamenti")
+    def admin_pagamenti(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.connessione() as c:
+            out = pag.elenco(c)
+            imp = db.impostazioni(c)
+        out.update({"attivi": pag.attivi, "prova": pag.modalita_prova, "webhook": bool(cfg.stripe_firma), "tasse": cfg.stripe_tasse,
+                    "venditore": bool(cfg.venditore and cfg.venditore_email), "prezzi": imp["prezzi"],
+                    "gratuito": imp["quota_predefinita"], "tetto_giorno": imp["pro_tetto_giorno"],
+                    "webhook_url": (cfg.url_pubblico or "").rstrip("/") + "/api/stripe/webhook" if cfg.url_pubblico else ""})
+        return out
 
     @app.get("/api/admin/impostazioni")
     def admin_impostazioni(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
@@ -757,9 +892,14 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 if d not in out:
                     out.append(d)
             return out
-        valori = body.model_dump()
-        valori["domini_approvati"] = pulisci(body.domini_approvati)
-        valori["domini_bloccati"] = pulisci(body.domini_bloccati)
+        valori = body.model_dump(exclude_none=True)
+        if body.domini_approvati is not None:
+            valori["domini_approvati"] = pulisci(body.domini_approvati)
+        if body.domini_bloccati is not None:
+            valori["domini_bloccati"] = pulisci(body.domini_bloccati)
+        for k, v in (valori.get("prezzi") or {}).items():
+            if 0 < v < 50:
+                raise Errore(422, "Un prezzo deve essere almeno 0,50 € (oppure 0 per non vendere quel piano).", "prezzo")
         with db.transazione() as c:
             db.salva_impostazioni(c, valori)
             db.evento(c, "impostazioni", autore_id=a["id"], dettagli=json.dumps(valori, ensure_ascii=False))

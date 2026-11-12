@@ -48,6 +48,69 @@ class FintoClaude:
         return ("testo", t, stop)
 
 
+class FintoStripe:
+    """Finta API di Stripe: pagine di pagamento, abbonamenti, portale clienti. paga() simula il cliente che paga."""
+
+    def __init__(self) -> None:
+        self.sessioni: dict[str, dict] = {}
+        self.abbonamenti: dict[str, dict] = {}
+        self.chiamate: list[tuple[str, str, dict]] = []
+        self.n = 0
+
+    @staticmethod
+    def leggi(request: httpx.Request) -> dict:
+        from urllib.parse import parse_qsl
+        return dict(parse_qsl(request.content.decode())) if request.content else {}
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        dati, percorso = self.leggi(request), request.url.path.removeprefix("/v1")
+        self.chiamate.append((request.method, percorso, dati))
+        if request.headers.get("authorization") != "Bearer sk_test_prova":
+            return httpx.Response(401, json={"error": {"message": "Invalid API Key provided"}})
+        if request.method == "POST" and percorso == "/checkout/sessions":
+            self.n += 1
+            sid = f"cs_test_{self.n}"
+            self.sessioni[sid] = {"id": sid, "object": "checkout.session", "url": f"https://checkout.stripe.test/{sid}", "mode": dati["mode"],
+                                  "status": "open", "payment_status": "unpaid", "client_reference_id": dati.get("client_reference_id"),
+                                  "metadata": {k[9:-1]: v for k, v in dati.items() if k.startswith("metadata[")},
+                                  "customer": dati.get("customer"), "amount_total": int(dati["line_items[0][price_data][unit_amount]"]),
+                                  "currency": "eur", "subscription": None, "parametri": dati}
+            return httpx.Response(200, json=self.sessioni[sid])
+        if request.method == "GET" and percorso.startswith("/checkout/sessions/"):
+            s = self.sessioni.get(percorso.rsplit("/", 1)[1])
+            return httpx.Response(200, json=s) if s else httpx.Response(404, json={"error": {"message": "No such checkout session"}})
+        if percorso.startswith("/subscriptions/"):
+            sub = self.abbonamenti.get(percorso.rsplit("/", 1)[1])
+            if sub is None:
+                return httpx.Response(404, json={"error": {"message": "No such subscription"}})
+            if request.method == "DELETE":
+                sub.update(status="canceled", ended_at=int(time.time()))
+            return httpx.Response(200, json=sub)
+        if request.method == "POST" and percorso == "/billing_portal/sessions":
+            return httpx.Response(200, json={"url": f"https://billing.stripe.test/{dati['customer']}"})
+        return httpx.Response(404, json={"error": {"message": "sconosciuto"}})
+
+    def paga(self, sid: str, giorni: int = 30) -> dict:
+        s = self.sessioni[sid]
+        s.update(status="complete", payment_status="paid", customer=s["customer"] or f"cus_{sid}")
+        if s["mode"] == "subscription":
+            sub_id = f"sub_{sid}"
+            ora = int(time.time())
+            self.abbonamenti[sub_id] = {"id": sub_id, "object": "subscription", "status": "active", "customer": s["customer"],
+                                        "metadata": dict(s["metadata"]), "cancel_at_period_end": False, "cancel_at": None,
+                                        "current_period_end": ora + giorni * 86400,
+                                        "items": {"data": [{"price": {"recurring": {"interval": "year" if s["metadata"].get("piano") == "anno" else "month"}}}]}}
+            s["subscription"] = sub_id
+        return s
+
+    @staticmethod
+    def evento(tipo: str, oggetto: dict, segreto: str = "whsec_prova", quando: int | None = None, eid: str | None = None) -> tuple[bytes, str]:
+        corpo = json.dumps({"id": eid or f"evt_{tipo}_{oggetto.get('id')}_{time.time_ns()}", "type": tipo, "data": {"object": oggetto}}).encode()
+        t = str(quando or int(time.time()))
+        firma = hmac.new(segreto.encode(), t.encode() + b"." + corpo, hashlib.sha256).hexdigest()
+        return corpo, f"t={t},v1={firma}"
+
+
 class Sito:
     def __init__(self, tmp: Path, extra: dict[str, str] | None = None):
         self.tmp = tmp
@@ -55,7 +118,9 @@ class Sito:
         valori.update(extra or {})
         self.cfg = carica(valori)
         self.claude = FintoClaude()
-        self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False)
+        self.stripe = FintoStripe()
+        self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False,
+                            client_stripe=httpx.Client(transport=httpx.MockTransport(self.stripe)))
         self.posta_inviata: list[dict] = []
         if self.cfg.posta_configurata:
             def finto_invio(msg, destinatario, oggetto, testo):
@@ -108,6 +173,15 @@ def sito(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Sito:
               "TARIC_IA_MODELLO", "TARIC_IA_MODELLO_RAPIDO", "TARIC_SMTP_HOST", "TARIC_SMTP_MITTENTE", "TARIC_DATI"):
         monkeypatch.delenv(k, raising=False)
     return Sito(tmp_path)
+
+
+@pytest.fixture
+def sito_pagamenti(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Sito:
+    monkeypatch.setenv("TARIC_CONFIG", str(tmp_path / "nessuno.env"))
+    for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "TARIC_IA_FORNITORE", "TARIC_SMTP_HOST"):
+        monkeypatch.delenv(k, raising=False)
+    return Sito(tmp_path, {"TARIC_STRIPE_CHIAVE": "sk_test_prova", "TARIC_STRIPE_FIRMA_WEBHOOK": "whsec_prova",
+                           "TARIC_URL_PUBBLICO": "https://magichs.esempio.it"})
 
 
 @pytest.fixture

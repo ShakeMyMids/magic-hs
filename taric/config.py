@@ -60,6 +60,14 @@ class Config:
     aggiornamento_automatico: bool = True
     fuso: str = "Europe/Rome"
     backup_copie: int = 14                 # backup automatici del database da tenere (0 = nessun backup automatico)
+    stripe_chiave: str = ""                # chiave segreta Stripe (sk_live_... o sk_test_...): senza, i piani a pagamento sono spenti
+    stripe_firma: str = ""                 # segreto di firma del webhook (whsec_...)
+    stripe_tasse: bool = False             # calcolo automatico dell'IVA con Stripe Tax (va attivato anche su Stripe)
+    stripe_url: str = "https://api.stripe.com/v1"   # da cambiare solo per le prove
+    venditore: str = ""                    # chi vende il piano Pro (nome o ragione sociale): compare nelle condizioni di vendita
+    venditore_piva: str = ""
+    venditore_indirizzo: str = ""
+    venditore_email: str = ""
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -146,5 +154,13 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         aggiornamento_automatico=_bool(v.get("TARIC_AGGIORNAMENTO_AUTOMATICO"), True),
         fuso=v.get("TARIC_FUSO", "Europe/Rome"),
         backup_copie=max(0, int(v.get("TARIC_BACKUP_COPIE", "14") or 14)),
+        stripe_chiave=v.get("TARIC_STRIPE_CHIAVE", "").strip(),
+        stripe_firma=v.get("TARIC_STRIPE_FIRMA_WEBHOOK", "").strip(),
+        stripe_tasse=_bool(v.get("TARIC_STRIPE_TASSE"), False),
+        stripe_url=v.get("TARIC_STRIPE_URL", "https://api.stripe.com/v1").rstrip("/"),
+        venditore=v.get("TARIC_VENDITORE", "").strip(),
+        venditore_piva=v.get("TARIC_VENDITORE_PIVA", "").strip(),
+        venditore_indirizzo=v.get("TARIC_VENDITORE_INDIRIZZO", "").strip(),
+        venditore_email=v.get("TARIC_VENDITORE_EMAIL", "").strip(),
         extra=v,
     )

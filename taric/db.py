@@ -103,6 +103,35 @@ SCHEMA = [
         registro TEXT NOT NULL DEFAULT ''
     );
     """,
+    # versione 2: piano Pro (pass, abbonamenti Stripe, concessioni manuali) e pagamenti ricevuti
+    """
+    CREATE TABLE abbonamenti (
+        utente_id INTEGER PRIMARY KEY REFERENCES utenti(id) ON DELETE CASCADE,
+        cliente_stripe TEXT,
+        pass_fino TEXT,
+        manuale_fino TEXT,
+        abb_id TEXT,
+        abb_piano TEXT,
+        abb_stato TEXT,
+        abb_fino TEXT,
+        abb_annullato INTEGER NOT NULL DEFAULT 0,
+        aggiornato TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX abbonamenti_abb ON abbonamenti(abb_id) WHERE abb_id IS NOT NULL;
+    CREATE TABLE pagamenti (
+        id INTEGER PRIMARY KEY,
+        quando TEXT NOT NULL,
+        evento TEXT UNIQUE,
+        utente_id INTEGER REFERENCES utenti(id) ON DELETE SET NULL,
+        tipo TEXT NOT NULL,
+        piano TEXT NOT NULL DEFAULT '',
+        importo INTEGER NOT NULL DEFAULT 0,
+        valuta TEXT NOT NULL DEFAULT 'eur',
+        riferimento TEXT NOT NULL DEFAULT '',
+        dettagli TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX pagamenti_riferimento ON pagamenti(riferimento);
+    """,
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
@@ -110,8 +139,11 @@ IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
     "approva_tutti": False,              # True: ogni email confermata diventa subito un account attivo
     "domini_approvati": [],              # email di questi domini (confermate) diventano attive subito
     "domini_bloccati": [],               # registrazioni da questi domini rifiutate
-    "quota_predefinita": 200,            # richieste IA al mese per utente (0 = IA spenta per i nuovi utenti)
+    "quota_predefinita": 50,             # piano gratuito: richieste IA al mese per chi non ha un limite personale (0 = IA spenta)
     "massimo_in_attesa": 200,            # oltre questo numero di richieste in attesa le nuove vengono respinte
+    # piano Pro: prezzi in centesimi di euro (IVA inclusa) e tetto di sicurezza delle richieste nelle 24 ore (0 = nessun tetto)
+    "prezzi": {"giorno": 299, "settimana": 799, "mese": 1499, "anno": 14900},
+    "pro_tetto_giorno": 150,
 }
 
 
@@ -169,7 +201,10 @@ class Database:
         out = dict(IMPOSTAZIONI_PREDEFINITE)
         for r in c.execute("SELECT chiave, valore FROM impostazioni"):
             if r["chiave"] in out:
-                out[r["chiave"]] = json.loads(r["valore"])
+                val = json.loads(r["valore"])
+                if isinstance(out[r["chiave"]], dict) and isinstance(val, dict):
+                    val = {**out[r["chiave"]], **val}
+                out[r["chiave"]] = val
         return out
 
     def salva_impostazioni(self, c: sqlite3.Connection, valori: dict[str, Any]) -> None:
