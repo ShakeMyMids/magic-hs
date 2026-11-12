@@ -56,7 +56,7 @@ Per usare MAGIC HS in azienda senza un server: ognuno lo esegue sul proprio PC, 
 
 **Come funziona**: «Avvia MAGIC HS.cmd» copia `programma\magic-hs-<versione>.zip` (Python per Windows con le librerie e MAGIC HS, nessuna installazione) in `%LOCALAPPDATA%\MAGIC HS\programma` e lancia `taric.programma`. Il server ascolta solo su 127.0.0.1, accetta solo il browser aperto dall'avvio (chiave casuale nella cartella dell'utente), tiene una sola copia per utente e si chiude da solo dopo mezz'ora senza uso. Usa i certificati di Windows, quindi funziona anche dietro i proxy aziendali che ispezionano HTTPS (un proxy con script di configurazione automatica può invece bloccare IA e download dei dati). Se il PC aziendale blocca i programmi copiati nella cartella dell'utente, serve l'IT.
 
-**Costruire i file** (da Linux, macOS o Windows): `python strumenti/pacchetto_windows.py` crea in `dist/` il pacchetto e la cartella da estrarre; con `--dati …/versioni/AAAA-MM-01` la cartella include anche i dati di un mese. Il flusso GitHub *Programma per Windows* li costruisce, li prova su Windows a ogni modifica e, per i tag `v*`, li pubblica nella pagina delle versioni.
+**Costruire i file** (da Linux, macOS o Windows): `python strumenti/pacchetto_windows.py` crea in `dist/` il pacchetto e la cartella da estrarre; con `--dati …/versioni/AAAA-MM-01` la cartella include anche i dati di un mese. Il flusso GitHub *Programma per Windows* li costruisce e li prova su Windows a ogni modifica; li pubblica nella pagina delle versioni per i tag `v*`, oppure quando lo avvii a mano (Actions > Programma per Windows > Run workflow, con «pubblica» spuntato): la versione è quella scritta in `taric/__init__.py`.
 
 ## Avvio rapido
 

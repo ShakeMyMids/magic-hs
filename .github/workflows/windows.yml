@@ -1,12 +1,18 @@
 name: Programma per Windows
 # Costruisce il programma per Windows, lo prova su un vero Windows (avvio dalla cartella, copia sul PC,
-# server in ascolto, chiusura) e, per i tag v*, pubblica i file nella pagina delle versioni di GitHub.
+# server in ascolto, chiusura) e pubblica i file nella pagina delle versioni di GitHub: per i tag v*, oppure
+# da Actions > Programma per Windows > Run workflow con «pubblica» (tag v<versione di taric/__init__.py>).
 on:
   push:
     branches: [main]
     tags: ["v*"]
     paths: ["taric/**", "windows/**", "strumenti/pacchetto_windows.py", "requirements.txt", ".github/workflows/windows.yml"]
   workflow_dispatch:
+    inputs:
+      pubblica:
+        description: "Pubblica i file nella pagina delle versioni (tag v + versione del programma)"
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -80,12 +86,13 @@ jobs:
           if (Test-Path $file) { throw "il programma non si e' chiuso" }
 
   rilascio:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.pubblica
     needs: prova
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: magic-hs-windows
@@ -94,5 +101,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --title "MAGIC HS $GITHUB_REF_NAME" --notes \
-            "Programma per Windows. Prima installazione: estrai MAGIC-HS-cartella-*.zip nella cartella di OneDrive da condividere (vedi LEGGIMI.txt). Aggiornamento: carica magic-hs-windows-*.zip in Gestione > Cartella condivisa."
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then tag="$GITHUB_REF_NAME"; else tag="v$(sed -nE 's/^__version__ = "([^"]+)"/\1/p' taric/__init__.py)"; fi
+          note="Programma per Windows. Prima installazione: estrai MAGIC-HS-cartella-*.zip nella cartella di OneDrive da condividere (vedi LEGGIMI.txt). Aggiornamento: carica magic-hs-windows-*.zip in Gestione > Cartella condivisa."
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$tag" dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" dist/*.zip --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" --title "MAGIC HS $tag" --notes "$note"
+          fi
