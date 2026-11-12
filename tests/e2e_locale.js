@@ -1,0 +1,89 @@
+// Prova nel browser del programma sul PC: editore con cartella condivisa, IA finta (tests/finto_claude.py), chiusura.
+// Uso: python -m taric.programma --condivisa C --cartella P --senza-browser &  poi  node tests/e2e_locale.js P/istanza.json cartella-schermate
+const { chromium } = require('playwright');
+const fs = require('fs');
+const istanza = process.argv[2] || '/tmp/loc/istanza.json';
+const out = process.argv[3] || 'shots-locale';
+fs.mkdirSync(out, { recursive: true });
+const info = JSON.parse(fs.readFileSync(istanza, 'utf8'));
+const B = 'http://127.0.0.1:' + info.porta;
+let errori = [];
+function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } else console.log('ok: ' + m); }
+(async () => {
+  const b = await chromium.launch();
+  const ctx = await b.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light' });
+  const p = await ctx.newPage();
+  p.on('pageerror', e => errori.push('errore JS: ' + e.message));
+  p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errori.push('console: ' + m.text()); });
+  await p.goto(B + '/');
+  ok(await p.isVisible('text=Apri MAGIC HS dal suo collegamento'), 'senza chiave: pagina con le istruzioni');
+  await p.goto(B + '/entra?k=' + info.chiave);
+  await p.waitForSelector('#tab-gestione:not([hidden])');
+  ok((await p.getAttribute('#esci', 'title')) === 'Chiudi MAGIC HS', 'pulsante Chiudi al posto di Esci');
+  await p.screenshot({ path: out + '/1-classifica.png' });
+  await p.click('#tab-gestione');
+  await p.waitForSelector('text=Aggiungere un collega');
+  ok(await p.isVisible('.percorso'), 'percorso della cartella condivisa');
+  ok(!(await p.isVisible('text=Utenti')), 'niente scheda Utenti');
+  await p.screenshot({ path: out + '/2-condivisa.png', fullPage: true });
+  await p.click('button[data-v="ia"]');
+  await p.waitForSelector('form[data-g="ia-locale"]');
+  await p.selectOption('select[name=fornitore]', 'openai');
+  await p.waitForSelector('input[name=url]');
+  await p.fill('input[name=url]', 'http://127.0.0.1:9100/v1');
+  await p.fill('input[name=modello]', 'finto-modello');
+  await p.fill('input[name=chiave]', 'chiave-finta-1234');
+  await p.click('form[data-g="ia-locale"] button[type=submit]');
+  await p.waitForSelector('text=Salvato per tutti');
+  await p.click('button[data-g="prova-ia"]');
+  await p.waitForSelector('text=Il servizio rifiuta la chiave', { timeout: 15000 });
+  ok(true, 'chiave sbagliata: messaggio chiaro');
+  await p.click('button[data-g="cambia-chiave"]');
+  await p.fill('input[name=chiave]', 'chiave-finta');
+  await p.fill('input[name=quota]', '');
+  await p.click('form[data-g="ia-locale"] button[type=submit]');
+  await p.waitForSelector('text=Salvato per tutti');
+  ok(await p.isVisible('text=Chiave salvata: …inta'), 'chiave mascherata');
+  await p.click('button[data-g="prova-ia"]');
+  await p.waitForSelector('text=Il servizio risponde', { timeout: 15000 });
+  ok(true, 'prova del servizio IA');
+  await p.screenshot({ path: out + '/3-ia.png', fullPage: true });
+  await p.click('button[data-v="dati"]');
+  await p.waitForSelector('text=Pubblicati per i colleghi');
+  ok(!(await p.isVisible('text=Backup del database')), 'niente backup nel programma sul PC');
+  await p.screenshot({ path: out + '/4-dati.png', fullPage: true });
+  // classificazione con il servizio appena scelto
+  await p.click('#tab-classifica');
+  await p.fill('#q', 'trapano a percussione elettrico'); await p.click('#vai');
+  await p.waitForFunction(() => document.querySelector('.timbro') && document.querySelector('.timbro').textContent.includes('Proposta'), null, { timeout: 20000 });
+  ok(true, 'classificazione con l\'IA');
+  await p.click('#tab-profilo');
+  await p.waitForSelector('text=Il tuo nome');
+  ok(!(await p.isVisible('text=Cambia password')), 'niente password nel profilo');
+  ok(await p.isVisible('text=Senza limite mensile'), 'uso dell\'IA senza limite');
+  await p.screenshot({ path: out + '/5-profilo.png', fullPage: true });
+  // telefono, tema scuro
+  const t = await b.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', deviceScaleFactor: 2 });
+  const q = await t.newPage();
+  q.on('pageerror', e => errori.push('errore JS (tel): ' + e.message));
+  await q.goto(B + '/entra?k=' + info.chiave);
+  await q.waitForSelector('#tab-gestione:not([hidden])', { state: 'attached' });
+  await q.goto(B + '/#gestione'); await q.waitForSelector('text=Aggiungere un collega');
+  await q.screenshot({ path: out + '/6-tel-condivisa.png', fullPage: true });
+  await q.click('button[data-v="ia"]'); await q.waitForSelector('form[data-g="ia-locale"]');
+  await q.screenshot({ path: out + '/7-tel-ia.png', fullPage: true });
+  // chiusura dal pulsante
+  await p.click('#esci');
+  await p.waitForSelector('text=MAGIC HS è chiuso');
+  ok(await p.isVisible('text=Puoi chiudere questa scheda'), 'chiuso dal pulsante');
+  await p.screenshot({ path: out + '/8-chiuso.png' });
+  // l'altra scheda si accorge che il programma non c'è più
+  await new Promise(r => setTimeout(r, 2500));
+  await q.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await q.waitForSelector('text=MAGIC HS è chiuso', { timeout: 8000 });
+  ok(await q.isVisible('text=non lo usavi da un po'), 'scheda aperta: avviso di programma chiuso');
+  await q.screenshot({ path: out + '/9-tel-chiuso.png' });
+  await b.close();
+  console.log(errori.length ? 'ERRORI:\n' + errori.join('\n') : 'tutto ok');
+  process.exit(errori.length ? 1 : 0);
+})();

@@ -289,7 +289,7 @@ python -m pytest -q tests                       # API, accessi, registrazione, a
 TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.py   # con un'estrazione vera (circa un minuto)
 ```
 
-Per la prova completa nel browser (Playwright) avvia `tests/finto_claude.py`, che imita le API di Gemini, Claude, OpenAI e Stripe, e un server con `GEMINI_API_KEY=chiave-finta`, `TARIC_IA_URL=http://127.0.0.1:9100/v1beta`, `TARIC_STRIPE_CHIAVE=sk_test_finta` e `TARIC_STRIPE_URL=http://127.0.0.1:9100/stripe/v1`, poi lancia `node tests/e2e.js http://127.0.0.1:8000 dati shots`. Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
+Per la prova completa nel browser (Playwright) avvia `tests/finto_claude.py`, che imita le API di Gemini, Claude, OpenAI e Stripe, e un server con `GEMINI_API_KEY=chiave-finta`, `TARIC_IA_URL=http://127.0.0.1:9100/v1beta`, `TARIC_STRIPE_CHIAVE=sk_test_finta` e `TARIC_STRIPE_URL=http://127.0.0.1:9100/stripe/v1`, poi lancia `node tests/e2e.js http://127.0.0.1:8000 dati shots`. Per il programma sul PC: `python -m taric.programma --condivisa <cartella> --cartella <pc> --senza-browser` con la cartella che contiene i dati pubblicati, `tests/finto_claude.py` in ascolto e poi `node tests/e2e_locale.js <pc>/istanza.json shots-locale`. Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
 
 ## Fonti e licenze
 

@@ -12,3 +12,4 @@ venv/
 node_modules/
 shots/
 dist/
+shots-locale/
