@@ -1,6 +1,6 @@
 // Prova nel browser del programma sul PC: editore con cartella condivisa, IA finta (tests/finto_claude.py), chiusura.
 // Uso: python -m taric.programma --condivisa C --cartella P --senza-browser &  poi  node tests/e2e_locale.js P/istanza.json cartella-schermate
-const { chromium } = require('playwright');
+const { chromium } = require(process.env.PLAYWRIGHT || '/opt/npm-tools/node_modules/playwright');
 const fs = require('fs');
 const istanza = process.argv[2] || '/tmp/loc/istanza.json';
 const out = process.argv[3] || 'shots-locale';
