@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="it" data-dati="{{DATI}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>TARIC 2.0</title>
+<link rel="stylesheet" href="/static/css/app.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#17694a">
+</head>
+<body>
+<div class="page">
+
+  <header class="top">
+    <div class="marca">
+      <h1>TARIC <span>2.0</span></h1>
+      <p>Strumento non ufficiale. Scrivi il nome di una merce e ottieni la voce doganale a 10 cifre con le alternative, poi i dazi e i documenti richiesti per ogni paese.</p>
+    </div>
+    <div class="testata">
+      <div class="chi"><span>Accesso come <b id="chi-nome">…</b></span><button class="link" type="button" id="esci">Esci</button></div>
+      <nav class="schede" aria-label="Sezioni">
+        <a href="#classifica" id="tab-classifica" aria-current="page">Classifica</a>
+        <a href="#nomenclatura" id="tab-nomenclatura">Nomenclatura</a>
+        <a href="#profilo" id="tab-profilo">Profilo</a>
+        <a href="#gestione" id="tab-gestione" hidden>Gestione</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- ======================= CLASSIFICA ======================= -->
+    <section id="view-classifica" aria-labelledby="tab-classifica">
+      <div class="foglio">
+        <div class="box">
+          <div class="lab"><b>31</b> Designazione delle merci <span class="dx" id="dato"></span></div>
+          <label for="q" hidden>Descrizione della merce</label>
+          <textarea id="q" rows="2" spellcheck="false" placeholder="Per esempio: scarpe da ginnastica con tomaia in pelle e suola in gomma, da uomo"></textarea>
+          <div class="fila">
+            <button class="btn pri" id="vai" type="button">Classifica</button>
+            <button class="btn" id="ferma" type="button" hidden>Ferma</button>
+            <div class="stato" id="stato" role="status" aria-live="polite"></div>
+          </div>
+          <div id="msg"></div>
+          <div class="fila" id="fornite" hidden></div>
+          <div class="fila" id="esempi"></div>
+        </div>
+      </div>
+      <div id="esito" style="margin-top:18px"></div>
+    </section>
+
+    <!-- ======================= NOMENCLATURA ======================= -->
+    <section id="view-nomenclatura" aria-labelledby="tab-nomenclatura" hidden>
+      <div class="foglio">
+        <div class="box">
+          <div class="lab">Nomenclatura TARIC <span class="dx" id="dato2"></span></div>
+          <div class="fila">
+            <label for="nq" hidden>Cerca nella nomenclatura</label>
+            <input class="campo" id="nq" type="search" autocomplete="off" spellcheck="false" placeholder="Codice (es. 8467 21) o parola (es. biciclette)">
+            <button class="btn sm" id="nq-x" type="button">Azzera</button>
+          </div>
+          <p class="nota" id="nota-nom"></p>
+        </div>
+        <div class="box" style="padding:0">
+          <div class="albero" id="albero"></div>
+        </div>
+      </div>
+    </section>
+    <!-- ======================= PROFILO ======================= -->
+    <section id="view-profilo" class="sezione" aria-labelledby="tab-profilo" hidden></section>
+
+    <!-- ======================= GESTIONE (amministratori) ======================= -->
+    <section id="view-gestione" class="sezione" aria-labelledby="tab-gestione" hidden></section>
+  </main>
+
+  <footer class="piede">
+    <p id="fonte"></p>
+    <p>Strumento non ufficiale, senza valore legale. La proposta di classificazione è generata da Claude (Anthropic): prima di dichiarare verifica sempre il codice e le misure su AIDA o sul TARIC dell'UE.</p>
+  </footer>
+</div>
+
+<script src="/static/js/comune.js"></script>
+<script src="{{DATI}}nomenclatura.js"></script>
+<script src="{{DATI}}rif.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/profilo.js"></script>
+<script src="/static/js/gestione.js"></script>
+</body>
+</html>

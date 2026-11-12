@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>Richiedi un account · TARIC 2.0</title>
+<link rel="stylesheet" href="/static/css/app.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#17694a">
+</head>
+<body class="accesso" data-pagina="registrati">
+<div class="page">
+  <header class="top">
+    <div class="marca">
+      <h1>TARIC <span>2.0</span></h1>
+      <p>Voci doganali a 10 cifre con alternative, dazi e documenti richiesti per ogni paese.</p>
+    </div>
+  </header>
+  <main>
+    <div class="foglio"><div class="box">
+      <div class="lab"><b>1</b> Richiesta di accesso</div>
+      <p class="nota" id="intro">Compila il modulo: ti mandiamo un'email per confermare l'indirizzo, poi l'account viene attivato secondo le regole del sito (a volte serve l'approvazione dell'amministratore).</p>
+      <form class="modulo" id="modulo" novalidate>
+        <div class="due">
+          <label>Nome e cognome<input class="campo" name="nome" autocomplete="name" required minlength="2" maxlength="100"></label>
+          <label>Azienda<input class="campo" name="azienda" autocomplete="organization" maxlength="150"></label>
+        </div>
+        <label>Email di lavoro<input class="campo" type="email" name="email" autocomplete="email" required maxlength="254"></label>
+        <div class="due">
+          <label>Password (almeno 10 caratteri)<input class="campo" type="password" name="password" autocomplete="new-password" required minlength="10"></label>
+          <label>Ripeti la password<input class="campo" type="password" name="ripeti" autocomplete="new-password" required minlength="10"></label>
+        </div>
+        <label>A che cosa ti serve? (facoltativo, aiuta l'approvazione)<textarea class="campo" name="richiesta" maxlength="1000" rows="3" placeholder="Per esempio: classificazione di componenti meccanici importati dalla Cina"></textarea></label>
+        <label class="trappola" aria-hidden="true">Sito web<input name="sito_web" tabindex="-1" autocomplete="off"></label>
+        <input type="hidden" name="modulo">
+        <label class="spunta"><input type="checkbox" name="consenso" required> Accetto che i dati inseriti siano usati per gestire il mio account e so che le classificazioni proposte non hanno valore legale.</label>
+        <div class="fila"><button class="btn pri" type="submit">Invia la richiesta</button></div>
+      </form>
+      <div id="esito" role="alert"></div>
+      <div class="sotto-link"><a href="/accedi">Hai già un account? Accedi</a></div>
+    </div></div>
+  </main>
+  <footer class="piede"><p>Strumento non ufficiale, senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.</p></footer>
+</div>
+<script src="/static/js/comune.js"></script>
+<script src="/static/js/accesso.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# dati del sito: database, chiavi, estrazioni TARIC (si rigenerano)
+dati/
+taric.env
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+node_modules/
+shots/

@@ -1,0 +1,40 @@
+# TARIC 2.0 con Docker Compose.
+#   Sul tuo computer:      docker compose up -d            -> http://localhost:8000
+#   Su un server con dominio e HTTPS automatico:
+#                          TARIC_DOMINIO=taric.tuodominio.it docker compose --profile https up -d
+# La configurazione (chiave API, posta...) va nel file taric.env accanto a questo file.
+services:
+  taric:
+    build: .
+    image: taric2:latest
+    restart: unless-stopped
+    env_file:
+      - path: taric.env
+        required: false
+    environment:
+      TARIC_DATI: /dati
+      TARIC_HOST: 0.0.0.0
+      TARIC_PROXY_FIDATI: "*"
+    volumes:
+      - ./dati:/dati
+    ports:
+      - "127.0.0.1:8000:8000"     # raggiungibile solo da questo computer; per la rete locale togli 127.0.0.1:
+
+  caddy:
+    profiles: ["https"]
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [taric]
+    environment:
+      TARIC_DOMINIO: ${TARIC_DOMINIO:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_dati:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_dati:
+  caddy_config:
