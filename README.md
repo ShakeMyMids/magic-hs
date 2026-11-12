@@ -15,8 +15,11 @@ Sito per cercare le voci doganali in modo più rapido di AIDA. Descrivi la merce
   - storico delle classificazioni, che si riaprono con tutti i dettagli;
   - voci preferite con una nota;
   - paese, flusso e tema predefiniti;
-  - contatore mensile delle richieste all'IA;
+  - il piano (Gratis o Pro) con il contatore mensile delle richieste all'IA;
   - cambio della password e uscita dagli altri dispositivi.
+- **Piani Gratis e Pro** (facoltativi, con Stripe):
+  - Gratis: 50 richieste all'IA al mese; nomenclatura, misure e documenti senza limiti;
+  - Pro: nessun limite mensile, con un tetto di sicurezza nelle 24 ore; pass da 1 giorno o 1 settimana, abbonamento mensile o annuale.
 - **Registrazione automatica**:
   - chi si iscrive conferma l'email;
   - i domini che indichi vengono approvati subito, gli altri restano in attesa e ricevi un avviso;
@@ -24,6 +27,7 @@ Sito per cercare le voci doganali in modo più rapido di AIDA. Descrivi la merce
 - **Gestione** (solo amministratori):
   - utenti e richieste: approva, rifiuta, sospendi, cambia ruolo e limite IA, crea link per la password, elimina;
   - regole di registrazione;
+  - piani e pagamenti: prezzi, limiti, utenti Pro, incassi, Pro concesso a mano a chi paga con bonifico;
   - dati TARIC: versioni, aggiornamento immediato, caricamento manuale, ritorno alla versione precedente;
   - uso dell'IA per utente, registro degli eventi, posta non inviata.
 - **Aggiornamento mensile**: dal primo giorno di ogni mese il server scarica la nuova estrazione TARIC. La installa solo se supera tutti i controlli; altrimenti resta la versione precedente e gli amministratori ricevono un avviso.
@@ -77,6 +81,8 @@ Tutto si imposta nel file `taric.env` (modello commentato: `taric.env.esempio`) 
 | `TARIC_SMTP_HOST`, `_PORTA`, `_UTENTE`, `_PASSWORD`, `_MITTENTE`, `_SICUREZZA` | Server di posta per conferme, avvisi e «password dimenticata». |
 | `TARIC_DATI` | Cartella dei dati (predefinita `dati`). |
 | `TARIC_BACKUP_COPIE` | Backup automatici giornalieri del database da tenere (predefinito 14, `0` = spenti). |
+| `TARIC_STRIPE_CHIAVE`, `TARIC_STRIPE_FIRMA_WEBHOOK` | Chiave segreta e segreto del webhook di Stripe: attivano il piano Pro a pagamento (vedi «Piani e pagamenti»). |
+| `TARIC_VENDITORE`, `TARIC_VENDITORE_PIVA`, `TARIC_VENDITORE_INDIRIZZO`, `TARIC_VENDITORE_EMAIL` | I tuoi dati nelle condizioni di vendita. |
 | `TARIC_HOST`, `TARIC_PORTA` | Dove ascolta il server (predefiniti `127.0.0.1` e `8000`). |
 | `TARIC_PROXY_FIDATI` | Indirizzi dei reverse proxy da cui accettare `X-Forwarded-*`. |
 | `TARIC_AGGIORNAMENTO_AUTOMATICO` | `si` o `no`. |
@@ -109,6 +115,44 @@ Senza server SMTP il sito funziona lo stesso, con due differenze:
 - le registrazioni aspettano sempre la tua approvazione, perché senza email l'indirizzo non si può verificare.
 
 Con la posta configurata la registrazione automatica è completa: conferma dell'indirizzo, approvazione per dominio, avvisi e «password dimenticata».
+
+### Piani e pagamenti (Stripe)
+
+Senza Stripe tutti gli utenti sono sul piano Gratis, con 50 richieste all'IA al mese. Puoi comunque concedere il Pro a mano fino a una data, per esempio a chi ti paga con bonifico, da *Gestione → Utenti → Gestisci*. Con Stripe gli utenti passano a Pro da soli, da *Profilo → Il tuo piano*.
+
+| Pro | Prezzo predefinito | Come funziona |
+|---|---|---|
+| 1 giorno | 2,99 € | pagamento singolo, nessun rinnovo; se ne compri un altro la durata si somma |
+| 1 settimana | 7,99 € | pagamento singolo, nessun rinnovo |
+| Mensile | 14,99 € | si rinnova ogni mese finché non si disdice |
+| Annuale | 149 € | si rinnova ogni anno |
+
+Prezzi, limite del piano Gratis e tetto del Pro nelle 24 ore si cambiano in *Gestione → Piani e pagamenti*.
+
+**Collegare Stripe**
+
+1. Crea un account su stripe.com. Per vendere servono i dati della tua attività (partita IVA o società): chiedi al tuo commercialista come fatturare, perché Stripe non emette fatture elettroniche italiane.
+2. Comincia in **modalità di prova** (sandbox): nessun addebito vero. In *Developers → API keys* copia la chiave segreta `sk_test_...`.
+3. Nel file `taric.env` (sul server: `sudo magic-hs configura`) scrivi:
+   ```
+   TARIC_STRIPE_CHIAVE=sk_test_...
+   TARIC_VENDITORE=Mario Rossi Consulenze Doganali
+   TARIC_VENDITORE_PIVA=01234567890
+   TARIC_VENDITORE_INDIRIZZO=Via Roma 1, 20100 Milano
+   TARIC_VENDITORE_EMAIL=info@magichs.it
+   ```
+4. **Webhook**, perché arrivino subito rinnovi e disdette. In Stripe apri *Workbench → Webhooks → Create an event destination* e:
+   - scegli gli eventi `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `customer.subscription.updated` e `customer.subscription.deleted`;
+   - come destinazione scegli *Webhook endpoint*, con indirizzo `https://tuodominio/api/stripe/webhook`;
+   - copia il segreto `whsec_...` (*Reveal secret*) in `TARIC_STRIPE_FIRMA_WEBHOOK=`.
+
+   Senza webhook i pagamenti si attivano lo stesso, quando l'utente torna sul sito; rinnovi e disdette arrivano con il controllo automatico ogni 6 ore.
+5. **Portale clienti**, da cui gli abbonati cambiano carta, scaricano le ricevute e disdicono: in *Settings → Billing → Customer portal* attiva la disdetta e salva.
+6. Prova un acquisto con la carta `4242 4242 4242 4242`, una scadenza futura e un CVC qualsiasi. Quando tutto funziona, rifai i passi 2-5 in modalità reale con la chiave `sk_live_...`.
+
+Facoltativo: con `TARIC_STRIPE_TASSE=sì` l'IVA viene calcolata da Stripe Tax, che va attivato anche su Stripe ed è a pagamento.
+
+Le condizioni di vendita sono su `https://tuodominio/condizioni`, con i tuoi dati e i prezzi correnti. Il testo, compreso quello sul diritto di recesso che l'utente accetta prima di pagare, è un punto di partenza: fallo controllare da un professionista prima di vendere.
 
 ## Metterlo su Internet
 
@@ -219,7 +263,7 @@ python -m pytest -q tests                       # API, accessi, registrazione, a
 TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.py   # con un'estrazione vera (circa un minuto)
 ```
 
-Per la prova completa nel browser (Playwright) avvia `tests/finto_claude.py`, che imita le API di Gemini, Claude e OpenAI, e un server con `GEMINI_API_KEY=chiave-finta` e `TARIC_IA_URL=http://127.0.0.1:9100/v1beta`, poi lancia `node tests/e2e.js http://127.0.0.1:8000 dati shots`. Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
+Per la prova completa nel browser (Playwright) avvia `tests/finto_claude.py`, che imita le API di Gemini, Claude, OpenAI e Stripe, e un server con `GEMINI_API_KEY=chiave-finta`, `TARIC_IA_URL=http://127.0.0.1:9100/v1beta`, `TARIC_STRIPE_CHIAVE=sk_test_finta` e `TARIC_STRIPE_URL=http://127.0.0.1:9100/stripe/v1`, poi lancia `node tests/e2e.js http://127.0.0.1:8000 dati shots`. Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
 
 ## Fonti e licenze
 

@@ -419,6 +419,7 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .offerta .spunta{display:flex;gap:9px;align-items:flex-start;font-size:14px;line-height:1.45;color:var(--secondario);max-width:80ch}
 .offerta .spunta input{margin-top:2px;flex:none}
 .offerta .fila .nota{flex:1 1 260px}
+@media (max-width:560px){.tagli{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.taglio{padding:12px 12px 11px}.t-prezzo{font-size:22px}.t-nota{font-size:12.5px}}
 
 /* pagine di testo (condizioni di vendita) */
 .documento .page{max-width:760px;justify-content:flex-start}

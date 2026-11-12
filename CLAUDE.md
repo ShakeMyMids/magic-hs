@@ -20,6 +20,9 @@ senza framework. Tutti i testi per l'utente, i commenti e i nomi sono in **itali
   Non indebolire i controlli per far passare un mese: se cambia il formato dei file, adegua lo script.
 - `taric/backup.py`: backup del database (.zip con solo `taric.db`, API di backup di SQLite), uno al giorno dal
   pianificatore, e ripristino a sito spento (controlla integrità e schema, salva prima il database attuale).
+- `taric/pagamenti.py`: piano Pro con Stripe (pass senza rinnovo, abbonamenti, concessioni manuali). Checkout con `price_data`,
+  webhook firmato e idempotente (colonna `pagamenti.evento`), conferma al ritorno, rilettura periodica degli abbonamenti.
+  Nei test una finta API di Stripe (`conftest.FintoStripe`; `tests/finto_claude.py` per il browser).
 - `server/installa.sh` e `server/magic-hs`: installazione su un VPS Ubuntu/Debian (Docker, firewall, HTTPS con Caddy)
   e comandi di gestione. Devono restare idempotenti e passare `shellcheck -S style`; i messaggi sono in italiano.
 - `taric/nomenclatura_it.json`: testo ufficiale italiano della nomenclatura (estrazione del 1° luglio 2026).
