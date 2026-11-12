@@ -141,7 +141,7 @@ const testo = async (p, sel) => (await p.textContent(sel)) || '';
   await a.click('[data-g=riepilogo]'); await a.waitForSelector('pre.registro');
   ok((await testo(a, 'pre.registro')).includes('Verifica riga per riga: superata'), 'riepilogo della versione');
   await a.screenshot({ path: out + '/06-dati.png', fullPage: true });
-  await a.click('[data-g=sotto][data-v=uso]'); await a.waitForSelector('text=Token in');
+  await a.click('[data-g=sotto][data-v=uso]'); await a.waitForSelector('#view-gestione td:has-text("luca@esempio.it")');
   ok((await testo(a, '#view-gestione')).includes('luca@esempio.it'), 'uso IA per utente');
   await a.click('[data-g=sotto][data-v=registro]'); await a.waitForSelector('#view-gestione table.tab td');
   const reg = await testo(a, '#view-gestione');
