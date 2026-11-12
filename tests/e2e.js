@@ -1,6 +1,6 @@
 /* Collaudo end-to-end nel browser: configurazione, gestione utenti, classificazione, profilo, registrazione.
    Uso: node tests/e2e.js http://127.0.0.1:8765 <cartella dati> <cartella screenshot>
-   Richiede un server avviato con ANTHROPIC_API_KEY=chiave-finta e TARIC_ANTHROPIC_URL verso tests/finto_claude.py. */
+   Richiede un server collegato al finto servizio IA di tests/finto_claude.py (vedi README, sezione Sviluppo). */
 const { chromium } = require(process.env.PLAYWRIGHT || '/opt/npm-tools/node_modules/playwright');
 const fs = require('fs');
 const path = require('path');
@@ -55,8 +55,9 @@ const testo = async (p, sel) => (await p.textContent(sel)) || '';
   await l.click('button[type=submit]');
   await l.waitForURL(base + '/'); await l.waitForSelector('#chi-nome:text("Luca Bianchi")');
   ok(await l.isHidden('#tab-gestione'), 'Gestione nascosta all\'utente');
+  ok((await testo(l, '#ia-nome')).length > 3, 'nome del servizio IA nel piè di pagina (' + (await testo(l, '#ia-nome')).trim() + ')');
 
-  console.log('3. classificazione con Claude (finto) e storico');
+  console.log('3. classificazione con l'IA (finta) e storico');
   ok((await testo(l, '#esito')).includes('Esempio') || (await testo(l, '#esito')).length > 0, 'esempio al primo utilizzo');
   await l.fill('#q', 'scarpe da ginnastica con tomaia in pelle');
   await l.click('#vai');

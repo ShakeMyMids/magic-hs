@@ -150,7 +150,7 @@ function confLabel(n) { return n >= 80 ? 'alta' : n >= 55 ? 'media' : 'bassa'; }
 function oggi() { var d = new Date(); return '' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
 
 /* ================================================================
-   Claude: prompts and calls
+   AI: prompts and calls
    ================================================================ */
 function infoBlock() {
   if (!state.answers.length) return '';
@@ -241,7 +241,7 @@ var ERR = {
 };
 function errMsg(e) { return (e && e.message) || ERR[e && e.code] || ERR.upstream_error; }
 
-/* Claude risponde tramite il server, con la chiave API e il limite mensile gestiti lì */
+/* l'IA risponde tramite il server, che custodisce la chiave e applica il limite mensile */
 function creaIA() {
   return {
     json: function (prompt, opts) {
@@ -257,7 +257,7 @@ function creaIA() {
 function impostaIA() {
   var ia = state.utente && state.utente.ia;
   sampleFn = null; state.ai = 'no';
-  if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva su questo server (manca la chiave API di Anthropic). Puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
+  if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva su questo server (manca la chiave del servizio di intelligenza artificiale). Puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
   else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi all\'amministratore. Puoi comunque aprire un codice scrivendone le cifre.';
   else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' richieste all\'IA di questo mese: chiedi all\'amministratore di aumentare il limite.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
@@ -293,7 +293,7 @@ function classifica(soloScelta) {
   state.error = ''; state.warn = '';
   var qEl = $('#q'); state.q = qEl.value.trim().replace(/\s+/g, ' ');
   if (!state.q) { state.error = 'Scrivi che cosa devi classificare.'; renderMsg(); qEl.focus(); return; }
-  // a typed code opens that code directly, without Claude
+  // a typed code opens that code directly, without the AI
   if (/^[\d\s.]+$/.test(state.q) && digits(state.q).length >= 2) {
     var r = resolve(state.q);
     state.result = null; state.answers = []; state.heads = []; state.esempio = false; state.picks = {}; state.trad = {};
@@ -1027,15 +1027,15 @@ function renderNom() {
   var el = $('#albero'), q = state.nq.trim(), out = [];
   if (q) {
     var res = cerca(q), testuale = !/^[\d\s.]+$/.test(q);
-    var ponte = (testuale && sampleFn) ? '<button class="btn sm" type="button" data-act="chiedi">Classifica con Claude</button>' : '';
+    var ponte = (testuale && sampleFn) ? '<button class="btn sm" type="button" data-act="chiedi">Classifica con l\'IA</button>' : '';
     if (!res.length) out.push('<div class="trow info" style="--d:0"><span class="txt nota">Nessun risultato. ' +
-      (testuale ? 'La nomenclatura usa termini suoi (per esempio «foratrici» per i trapani): prova un\'altra parola' + (ponte ? ' oppure fai classificare la merce a Claude.' : ' oppure descrivi la merce nella scheda Classifica.') : 'Controlla le cifre del codice.') + '</span>' + ponte + '</div>');
+      (testuale ? 'La nomenclatura usa termini suoi (per esempio «foratrici» per i trapani): prova un\'altra parola' + (ponte ? ' oppure fai classificare la merce all\'IA.' : ' oppure descrivi la merce nella scheda Classifica.') : 'Controlla le cifre del codice.') + '</span>' + ponte + '</div>');
     res.forEach(function (i) {
       var p = pathOf(i), ctx = p.length > 1 ? p.slice(0, -1).filter(function (j) { return LVL[j] <= 1; }).map(function (j) { return showCode(j) + ' ' + descOf(j); }).join(' › ') : '';
       out.push(trow(i, 0, ctx || ' '));
     });
     if (res.length === 150) out.push('<div class="trow info" style="--d:0"><span class="txt nota">Mostro i primi 150 risultati: aggiungi una parola o qualche cifra.</span></div>');
-    else if (res.length && ponte) out.push('<div class="trow info" style="--d:0"><span class="txt nota">Non trovi la voce? La nomenclatura usa termini suoi: puoi far classificare «' + esc(q) + '» a Claude.</span>' + ponte + '</div>');
+    else if (res.length && ponte) out.push('<div class="trow info" style="--d:0"><span class="txt nota">Non trovi la voce? La nomenclatura usa termini suoi: puoi far classificare «' + esc(q) + '» all\'IA.</span>' + ponte + '</div>');
   } else {
     SEZIONI.forEach(function (s, k) {
       var open = !!state.secOpen[k];
@@ -1209,6 +1209,7 @@ $('#esci').addEventListener('click', function () {
 T.api('GET', '/api/io').then(function (u) {
   state.utente = u;
   $('#chi-nome').textContent = u.nome;
+  if (u.ia && u.ia.nome) $('#ia-nome').textContent = ' (' + u.ia.nome + ')';
   $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
   T.tema(u.preferenze.tema);
   state.country = u.preferenze.paese || '';

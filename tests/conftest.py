@@ -15,23 +15,37 @@ from taric.config import carica
 
 
 class FintoClaude:
-    """Risponde come l'API Messages di Anthropic; le risposte si preparano nel test."""
+    """Finto servizio IA: risponde nel formato di chi chiama (Anthropic, Gemini o compatibile OpenAI).
+    Nei test si preparano le risposte: testo(...) per una risposta riuscita, oppure un httpx.Response grezzo."""
 
     def __init__(self) -> None:
         self.richieste: list[dict] = []
-        self.risposte: list[httpx.Response] = []
+        self.risposte: list = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         corpo = json.loads(request.content)
-        self.richieste.append({"corpo": corpo, "chiave": request.headers.get("x-api-key")})
-        if self.risposte:
-            return self.risposte.pop(0)
-        return self.testo('{"merce": "prova", "voci": [{"voce": "8467", "motivo": "utensile"}]}')
+        self.richieste.append({"url": str(request.url), "corpo": corpo, "intestazioni": dict(request.headers),
+                               "chiave": request.headers.get("x-api-key") or request.headers.get("x-goog-api-key") or request.headers.get("authorization")})
+        r = self.risposte.pop(0) if self.risposte else FintoClaude.testo('{"merce": "prova", "voci": [{"voce": "8467", "motivo": "utensile"}]}')
+        if isinstance(r, httpx.Response):
+            return r
+        _, testo, stop = r
+        url = str(request.url)
+        if ":generateContent" in url:
+            motivo = {"refusal": "SAFETY", "end_turn": "STOP"}.get(stop, stop)
+            return httpx.Response(200, json={"candidates": [{"content": {"role": "model", "parts": [{"text": "ragiono...", "thought": True}, {"text": testo}]},
+                                                             "finishReason": motivo}],
+                                             "usageMetadata": {"promptTokenCount": 120, "candidatesTokenCount": 30, "thoughtsTokenCount": 50}})
+        if url.endswith("/chat/completions"):
+            motivo = {"refusal": "content_filter", "end_turn": "stop"}.get(stop, stop)
+            return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": testo}, "finish_reason": motivo}],
+                                             "usage": {"prompt_tokens": 120, "completion_tokens": 30}})
+        return httpx.Response(200, json={"content": [{"type": "text", "text": testo}], "stop_reason": stop,
+                                         "usage": {"input_tokens": 120, "output_tokens": 30}})
 
     @staticmethod
-    def testo(t: str, stop: str = "end_turn") -> httpx.Response:
-        return httpx.Response(200, json={"content": [{"type": "text", "text": t}], "stop_reason": stop,
-                                         "usage": {"input_tokens": 120, "output_tokens": 30}})
+    def testo(t: str, stop: str = "end_turn") -> tuple:
+        return ("testo", t, stop)
 
 
 class Sito:
@@ -90,7 +104,8 @@ class Sito:
 @pytest.fixture
 def sito(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Sito:
     monkeypatch.setenv("TARIC_CONFIG", str(tmp_path / "nessuno.env"))
-    for k in ("ANTHROPIC_API_KEY", "TARIC_SMTP_HOST", "TARIC_SMTP_MITTENTE", "TARIC_DATI"):
+    for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "TARIC_IA_FORNITORE", "TARIC_IA_URL", "TARIC_IA_CHIAVE",
+              "TARIC_IA_MODELLO", "TARIC_IA_MODELLO_RAPIDO", "TARIC_SMTP_HOST", "TARIC_SMTP_MITTENTE", "TARIC_DATI"):
         monkeypatch.delenv(k, raising=False)
     return Sito(tmp_path)
 
@@ -98,4 +113,6 @@ def sito(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Sito:
 @pytest.fixture
 def sito_con_posta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Sito:
     monkeypatch.setenv("TARIC_CONFIG", str(tmp_path / "nessuno.env"))
+    for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "TARIC_IA_FORNITORE"):
+        monkeypatch.delenv(k, raising=False)
     return Sito(tmp_path, {"TARIC_SMTP_HOST": "smtp.esempio.it", "TARIC_SMTP_MITTENTE": "TARIC <taric@esempio.it>"})

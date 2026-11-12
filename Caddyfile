@@ -1,4 +1,4 @@
-# HTTPS automatico (certificato Let's Encrypt) davanti a TARIC 2.0.
+# HTTPS automatico (certificato Let's Encrypt) davanti a MAGIC HS.
 # Il dominio arriva dalla variabile TARIC_DOMINIO e deve puntare a questo server (porte 80 e 443 aperte).
 {$TARIC_DOMINIO} {
 	encode gzip zstd

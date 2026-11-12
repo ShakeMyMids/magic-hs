@@ -1,4 +1,4 @@
-/* TARIC 2.0 - pagine di accesso, registrazione, conferma email, recupero password, configurazione e attesa dati. */
+/* MAGIC HS - pagine di accesso, registrazione, conferma email, recupero password, configurazione e attesa dati. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;

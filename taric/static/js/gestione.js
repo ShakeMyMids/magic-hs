@@ -1,4 +1,4 @@
-/* TARIC 2.0 - vista Gestione (amministratori): utenti e richieste, regole di registrazione, dati TARIC,
+/* MAGIC HS - vista Gestione (amministratori): utenti e richieste, regole di registrazione, dati TARIC,
    uso dell'IA, registro degli eventi, posta non inviata. */
 (function () {
   'use strict';
@@ -56,7 +56,7 @@
 
   function avvisi(r) {
     var a = [];
-    if (!r.ia) a.push('La classificazione assistita è spenta: imposta ANTHROPIC_API_KEY nella configurazione del server e riavvialo.');
+    if (!r.ia) a.push('La classificazione assistita è spenta: imposta GEMINI_API_KEY (oppure ANTHROPIC_API_KEY o un servizio compatibile OpenAI) nella configurazione del server e riavvialo.');
     if (!r.posta) a.push('La posta non è configurata: le email (conferme, avvisi, link) restano nella scheda Posta e le nuove registrazioni aspettano sempre la tua approvazione, perché l\'indirizzo non si può verificare.');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC installati: vai su Dati TARIC.');
     if (!r.url_pubblico) a.push('L\'indirizzo pubblico del sito non è impostato (TARIC_URL_PUBBLICO): nei link delle email uso l\'indirizzo da cui stai navigando.');
@@ -184,8 +184,9 @@
   /* ---------- uso dell'IA ---------- */
   function uso() {
     var r = st.riep, h = '<div class="foglio"><div class="box"><div class="lab">Uso dell\'IA</div>';
-    if (r) h += '<p class="nota">Modelli: ' + esc(r.modelli.join(' (rapido) e ')) + '. Questo mese: ' + r.uso_mese.n + ' richieste, ' + (r.uso_mese.tin || 0).toLocaleString('it-IT') + ' token in ingresso e ' +
-      (r.uso_mese.tout || 0).toLocaleString('it-IT') + ' in uscita. Il costo effettivo lo vedi nella Console di Anthropic, dove conviene impostare anche un limite di spesa mensile.</p>';
+    if (r) h += '<p class="nota">' + (r.ia ? 'Servizio: ' + esc(r.ia_nome) + ', modelli ' + esc(r.modelli.join(' (rapido) e ')) + '. ' : 'Nessun servizio IA configurato. ') +
+      'Questo mese: ' + r.uso_mese.n + ' richieste, ' + (r.uso_mese.tin || 0).toLocaleString('it-IT') + ' token in ingresso e ' +
+      (r.uso_mese.tout || 0).toLocaleString('it-IT') + ' in uscita. Costi e limiti effettivi li vedi nella console del fornitore (Google AI Studio, Console di Anthropic…), dove conviene impostare anche un tetto di spesa.</p>';
     if (!st.uso.length) h += '<p class="vuoto">Nessuna richiesta finora.</p>';
     else h += '<div class="scorri"><table class="tab"><thead><tr><th>Mese</th><th>Utente</th><th class="n">Richieste</th><th class="n">Riuscite</th><th class="n">Token in</th><th class="n">Token out</th></tr></thead><tbody>' +
       st.uso.map(function (x) {

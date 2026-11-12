@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TARIC 2.0 - rigenera i dati della pagina dall'estrazione mensile TARIC (file Excel DG TAXUD).
+"""MAGIC HS - rigenera i dati della pagina dall'estrazione mensile TARIC (file Excel DG TAXUD).
 
 Uso mensile:
   python3 -I aggiorna.py --src <cartella con gli .xlsx del mese> --out <cartella data/ da pubblicare> \
@@ -255,7 +255,7 @@ def verifica(out, data, capitoli_attesi):
     estranei = sorted(d for d in domini if not (d == "europa.eu" or d.endswith(".europa.eu")))
     if estranei:
         avv.append(f"indirizzi web non europa.eu citati nei testi: {', '.join(estranei[:8])}")
-    testa = [f"TARIC 2.0 - riepilogo dei file generati, situazione al {data}",
+    testa = [f"MAGIC HS - riepilogo dei file generati, situazione al {data}",
              f"Verifica riga per riga: {'superata' if not prob else 'NON superata'} ({n['file']} file riletti dal disco, {n['valori']} valori controllati, {n['misure']} misure).",
              "Ogni file e' un'assegnazione JavaScript di soli dati (JSON): nessun codice eseguibile, nessun marcatore HTML nei testi"
              + (" salvo gli avvisi sotto." if con_tag else "."),

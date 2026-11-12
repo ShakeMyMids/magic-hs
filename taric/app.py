@@ -1,4 +1,4 @@
-"""Applicazione web TARIC 2.0 (FastAPI): pagine, API di accesso, profilo, IA e amministrazione."""
+"""Applicazione web MAGIC HS (FastAPI): pagine, API di accesso, profilo, IA e amministrazione."""
 from __future__ import annotations
 
 import hmac
@@ -36,18 +36,20 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
        "connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
 
 MESSAGGI_IA = {
-    "not_configured": "La classificazione assistita non è attiva su questo server: manca la chiave API di Anthropic.",
+    "not_configured": "La classificazione assistita non è attiva su questo server: manca la chiave del servizio di intelligenza artificiale.",
     "quota_esaurita": "Hai esaurito le richieste all'IA di questo mese. Chiedi all'amministratore di aumentare il limite.",
-    "rate_limited": "Troppe richieste in questo momento. Riprova tra qualche secondo.",
-    "overloaded": "Il servizio di Claude è sovraccarico. Riprova tra qualche minuto.",
-    "credito_esaurito": "Il credito dell'API di Anthropic è esaurito o è stato raggiunto il limite di spesa. Avvisa l'amministratore.",
-    "server_misconfigured": "Il server non riesce a usare l'API di Anthropic (chiave o modello non validi). Avvisa l'amministratore.",
-    "refused": "Claude non ha elaborato questa richiesta. Prova a descrivere la merce in un altro modo.",
-    "empty_completion": "Claude non ha restituito una risposta. Prova a riformulare la descrizione.",
+    "rate_limited": "Troppe richieste in questo momento. Riprova tra un minuto.",
+    "limite_giornaliero": "Il servizio di intelligenza artificiale ha raggiunto il suo limite di oggi (succede con i piani gratuiti). Riprova domani o avvisa l'amministratore.",
+    "overloaded": "Il servizio di intelligenza artificiale è sovraccarico. Riprova tra qualche minuto.",
+    "credito_esaurito": "Il servizio di intelligenza artificiale richiede la fatturazione attiva o ha esaurito il credito. Avvisa l'amministratore.",
+    "regione_non_supportata": "Il servizio di intelligenza artificiale non è disponibile dal paese del server senza fatturazione attiva. Avvisa l'amministratore.",
+    "server_misconfigured": "Il server non riesce a usare il servizio di intelligenza artificiale (chiave o modello non validi). Avvisa l'amministratore.",
+    "refused": "L'IA non ha elaborato questa richiesta. Prova a descrivere la merce in un altro modo.",
+    "empty_completion": "L'IA non ha restituito una risposta. Prova a riformulare la descrizione.",
     "invalid_json": "La risposta non era leggibile. Riprova.",
     "prompt_too_large": "La richiesta è troppo lunga. Accorcia la descrizione e riprova.",
-    "upstream_timeout": "Claude ha impiegato troppo tempo a rispondere. Riprova.",
-    "upstream_error": "Errore temporaneo nel collegamento con Claude. Riprova tra poco.",
+    "upstream_timeout": "L'IA ha impiegato troppo tempo a rispondere. Riprova.",
+    "upstream_error": "Errore temporaneo nel collegamento con il servizio di intelligenza artificiale. Riprova tra poco.",
     "bad_request": "Richiesta non valida.",
 }
 
@@ -178,7 +180,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         yield
         dati.ferma()
 
-    app = FastAPI(title="TARIC 2.0", docs_url=None, redoc_url=None, openapi_url=None, lifespan=vita)
+    app = FastAPI(title="MAGIC HS", docs_url=None, redoc_url=None, openapi_url=None, lifespan=vita)
     app.state.cfg, app.state.db, app.state.posta, app.state.dati, app.state.ia, app.state.reg = cfg, db, posta, dati, ia, reg
     codice_file = cfg.dati / "codice-configurazione.txt"
 
@@ -448,7 +450,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             u = c.execute("SELECT * FROM utenti WHERE email = ? AND stato = 'attivo'", (email,)).fetchone()
             if u is not None:
                 g = S.crea_gettone(c, u["id"], "reimposta_password", 2)
-                posta.invia(email, "TARIC 2.0: reimposta la password",
+                posta.invia(email, "MAGIC HS: reimposta la password",
                             f"Ciao {u['nome']},\n\nper scegliere una nuova password apri questo link (vale 2 ore):\n"
                             f"{base_url(request)}/reimposta-password#{g}\n\nSe non l'hai chiesto tu, ignora questo messaggio: "
                             "la password attuale resta valida.")
@@ -487,7 +489,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             pref = {}
         return {"id": u["id"], "nome": u["nome"], "email": u["email"], "azienda": u["azienda"], "ruolo": u["ruolo"],
                 "preferenze": {"paese": pref.get("paese", ""), "flusso": pref.get("flusso", "import"), "tema": pref.get("tema", "auto")},
-                "ia": {"disponibile": ia.disponibile and lim != 0, "configurata": ia.disponibile, "limite": lim,
+                "ia": {"disponibile": ia.disponibile and lim != 0, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
                        "usate": ia.usate(c, u["id"]), "mese": mese_corrente()},
                 "dati": {"versione": v, "aggiornamento": (dati.in_corso or {}).get("fase")}}
 
@@ -627,7 +629,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             mese = mese_corrente()
             uso = c.execute("SELECT COUNT(*) AS n, COALESCE(SUM(token_in), 0) AS tin, COALESCE(SUM(token_out), 0) AS tout "
                             "FROM uso_ia WHERE mese = ?", (mese,)).fetchone()
-        return {"utenti": stati, "posta": posta.configurata, "ia": ia.disponibile, "modelli": [cfg.modello_rapido, cfg.modello],
+        return {"utenti": stati, "posta": posta.configurata, "ia": ia.disponibile, "ia_nome": cfg.ia_nome, "ia_fornitore": cfg.ia_fornitore,
+                "modelli": [cfg.modello_rapido, cfg.modello],
                 "dati": dati.attiva(), "aggiornamento": dati.in_corso, "uso_mese": dict(uso), "mese": mese,
                 "url_pubblico": cfg.url_pubblico}
 
@@ -662,8 +665,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                             (email, body.nome.strip(), body.azienda.strip(), body.ruolo, body.quota_ia, iso(), iso())).lastrowid
             link = link_password(c, uid, 168, request)
             db.evento(c, "utente_creato", uid, a["id"], f"{email} ({body.ruolo})")
-        posta.invia(email, "TARIC 2.0: il tuo account",
-                    f"Ciao {body.nome.strip()},\n\n{a['nome']} ha creato per te un account su TARIC 2.0.\n"
+        posta.invia(email, "MAGIC HS: il tuo account",
+                    f"Ciao {body.nome.strip()},\n\n{a['nome']} ha creato per te un account su MAGIC HS.\n"
                     f"Scegli la tua password da questo link (vale 7 giorni):\n{link}")
         return json_ok(id=uid, link=link, inviata=posta.configurata)
 
@@ -712,7 +715,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 link = link_password(c, uid, 72, request)
                 db.evento(c, "link_password", uid, a["id"], "inviato via email" if body.invia else "consegnato a mano")
                 if body.invia:
-                    posta.invia(u["email"], "TARIC 2.0: imposta la password",
+                    posta.invia(u["email"], "MAGIC HS: imposta la password",
                                 f"Ciao {u['nome']},\n\nper scegliere una nuova password apri questo link (vale 3 giorni):\n{link}")
                 return json_ok(link=link, inviata=body.invia and posta.configurata)
             else:

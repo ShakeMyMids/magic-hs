@@ -1,4 +1,4 @@
-/* TARIC 2.0 - funzioni comuni a tutte le pagine: chiamate alle API, testo sicuro, date, avvisi. */
+/* MAGIC HS - funzioni comuni a tutte le pagine: chiamate alle API, testo sicuro, date, avvisi. */
 (function () {
   'use strict';
   var T = window.TARIC = window.TARIC || {};

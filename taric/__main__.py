@@ -1,4 +1,4 @@
-"""Riga di comando di TARIC 2.0.
+"""Riga di comando di MAGIC HS.
 
   python -m taric                         avvia il sito
   python -m taric crea-admin              crea un amministratore (chiede email, nome e password)
@@ -19,7 +19,7 @@ from .db import Database, iso
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m taric", description="TARIC 2.0")
+    ap = argparse.ArgumentParser(prog="python -m taric", description="MAGIC HS")
     sub = ap.add_subparsers(dest="comando")
     sub.add_parser("avvia", help="avvia il sito (predefinito)")
     sub.add_parser("crea-admin", help="crea un amministratore")
@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
 
         from .app import crea_app
         app = crea_app(cfg)
-        print(f"TARIC 2.0 in ascolto su http://{cfg.host}:{cfg.porta}  (dati in {cfg.dati})", flush=True)
+        print(f"MAGIC HS in ascolto su http://{cfg.host}:{cfg.porta}  (dati in {cfg.dati})", flush=True)
         uvicorn.run(app, host=cfg.host, port=cfg.porta, proxy_headers=True, forwarded_allow_ips=cfg.proxy_fidati,
                     log_level="info", server_header=False)
         return 0
@@ -95,7 +95,8 @@ def main(argv: list[str] | None = None) -> int:
             for r in c.execute("SELECT ruolo, stato, COUNT(*) AS n FROM utenti GROUP BY ruolo, stato"):
                 print(f"utenti {r['ruolo']:<15} {r['stato']:<20} {r['n']}")
         print("dati attivi:", g.attiva() or "nessuno")
-        print("IA:", "configurata" if cfg.ia_disponibile else "NON configurata (manca ANTHROPIC_API_KEY)")
+        print("IA:", f"{cfg.ia_nome}, modelli {cfg.modello_rapido} e {cfg.modello}" if cfg.ia_disponibile
+              else "NON configurata (imposta GEMINI_API_KEY, ANTHROPIC_API_KEY o TARIC_IA_FORNITORE=openai)")
         print("posta:", "configurata" if cfg.posta_configurata else "NON configurata (le email restano in dati/posta)")
         return 0
     return 1

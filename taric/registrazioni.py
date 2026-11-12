@@ -43,8 +43,8 @@ class Registrazioni:
             if esistente["stato"] == "email_da_confermare" and con_email:
                 self._manda_conferma(c, esistente, base_url)
             elif con_email:
-                self.posta.invia(email, "TARIC 2.0: tentativo di registrazione",
-                                 f"Ciao {esistente['nome']},\n\nqualcuno ha chiesto di registrarsi a TARIC 2.0 con questo indirizzo, "
+                self.posta.invia(email, "MAGIC HS: tentativo di registrazione",
+                                 f"Ciao {esistente['nome']},\n\nqualcuno ha chiesto di registrarsi a MAGIC HS con questo indirizzo, "
                                  f"che ha già un account.\nSe hai dimenticato la password puoi reimpostarla qui:\n"
                                  f"{base_url}/password-dimenticata\n\nSe non sei stato tu, ignora questo messaggio.")
             self.db.evento(c, "registrazione_duplicata", esistente["id"], dettagli=email)
@@ -67,8 +67,8 @@ class Registrazioni:
 
     def _manda_conferma(self, c: sqlite3.Connection, utente: sqlite3.Row, base_url: str) -> None:
         g = S.crea_gettone(c, utente["id"], "conferma_email", ORE_CONFERMA)
-        self.posta.invia(utente["email"], "TARIC 2.0: conferma il tuo indirizzo email",
-                         f"Ciao {utente['nome']},\n\nper completare la registrazione a TARIC 2.0 apri questo link "
+        self.posta.invia(utente["email"], "MAGIC HS: conferma il tuo indirizzo email",
+                         f"Ciao {utente['nome']},\n\nper completare la registrazione a MAGIC HS apri questo link "
                          f"(vale {ORE_CONFERMA} ore):\n{base_url}/conferma-email#{g}\n\n"
                          "Se non hai chiesto tu la registrazione, ignora questo messaggio.")
 
@@ -95,13 +95,13 @@ class Registrazioni:
         c.execute("UPDATE utenti SET stato = 'in_attesa', aggiornato = ? WHERE id = ?", (iso(), utente["id"]))
         self.db.evento(c, "in_attesa", utente["id"], dettagli="email confermata" if verificata else "email non verificata")
         if verificata:
-            self.posta.invia(utente["email"], "TARIC 2.0: richiesta ricevuta",
-                             f"Ciao {utente['nome']},\n\nla tua richiesta di accesso a TARIC 2.0 è stata ricevuta ed è in attesa "
+            self.posta.invia(utente["email"], "MAGIC HS: richiesta ricevuta",
+                             f"Ciao {utente['nome']},\n\nla tua richiesta di accesso a MAGIC HS è stata ricevuta ed è in attesa "
                              "di approvazione. Riceverai un'email quando l'account sarà attivo.")
         amministratori = c.execute("SELECT email FROM utenti WHERE ruolo = 'amministratore' AND stato = 'attivo'").fetchall()
         for a in amministratori:
-            self.posta.invia(a["email"], f"TARIC 2.0: nuova richiesta di accesso da {utente['nome']}",
-                             f"Nuova richiesta di accesso a TARIC 2.0.\n\nNome: {utente['nome']}\nEmail: {utente['email']}"
+            self.posta.invia(a["email"], f"MAGIC HS: nuova richiesta di accesso da {utente['nome']}",
+                             f"Nuova richiesta di accesso a MAGIC HS.\n\nNome: {utente['nome']}\nEmail: {utente['email']}"
                              f" ({'confermata' if verificata else 'NON verificata: la posta del server non è configurata'})\n"
                              f"Azienda: {utente['azienda'] or '-'}\nUso previsto: {utente['richiesta'] or '-'}\n\n"
                              f"Approva o rifiuta dal pannello: {base_url}/#amministrazione")
@@ -109,8 +109,8 @@ class Registrazioni:
     def _attiva(self, c: sqlite3.Connection, utente: sqlite3.Row, autore_id: int | None, base_url: str, motivo: str) -> None:
         c.execute("UPDATE utenti SET stato = 'attivo', motivo_stato = '', aggiornato = ? WHERE id = ?", (iso(), utente["id"]))
         self.db.evento(c, "approvato" if autore_id else "approvato_automaticamente", utente["id"], autore_id, motivo)
-        self.posta.invia(utente["email"], "TARIC 2.0: il tuo account è attivo",
-                         f"Ciao {utente['nome']},\n\nil tuo account TARIC 2.0 è attivo. Accedi qui con l'email e la password "
+        self.posta.invia(utente["email"], "MAGIC HS: il tuo account è attivo",
+                         f"Ciao {utente['nome']},\n\nil tuo account MAGIC HS è attivo. Accedi qui con l'email e la password "
                          f"che hai scelto:\n{base_url}/accedi")
 
     # ------------------------------------------------------------------ azioni dell'amministratore
@@ -133,8 +133,8 @@ class Registrazioni:
         S.chiudi_tutte(c, uid)
         self.db.evento(c, "rifiutato", uid, autore_id, motivo)
         if u["email_confermata"] or self.posta.configurata:
-            self.posta.invia(u["email"], "TARIC 2.0: richiesta non accolta",
-                             f"Ciao {u['nome']},\n\nla tua richiesta di accesso a TARIC 2.0 non è stata accolta."
+            self.posta.invia(u["email"], "MAGIC HS: richiesta non accolta",
+                             f"Ciao {u['nome']},\n\nla tua richiesta di accesso a MAGIC HS non è stata accolta."
                              + (f"\nMotivo: {motivo}" if motivo else ""))
         return None
 

@@ -1,4 +1,4 @@
-# Istruzioni per lavorare su TARIC 2.0 con Claude Code
+# Istruzioni per lavorare su MAGIC HS con Claude Code
 
 Sito per la classificazione doganale (TARIC UE): server Python (FastAPI + SQLite), interfaccia in JavaScript
 senza framework. Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
@@ -11,7 +11,9 @@ senza framework. Tutti i testi per l'utente, i commenti e i nomi sono in **itali
   dice quali sono già applicate. Le impostazioni modificabili dal pannello sono in `IMPOSTAZIONI_PREDEFINITE`.
 - `taric/sicurezza.py`: password (Argon2), sessioni, gettoni monouso, limiti ai tentativi, moduli firmati.
 - `taric/registrazioni.py`: la procedura automatica delle registrazioni (conferma email, regole, avvisi, pulizia).
-- `taric/ia.py`: chiamate all'API Messages di Anthropic con limite mensile per utente.
+- `taric/ia.py`: chiamate al servizio IA (Gemini, Anthropic o compatibile OpenAI, scelto in `config._ia`) con limite
+  mensile per utente. Ogni fornitore ha il suo metodo che restituisce una `Risposta`; gli errori diventano codici comuni
+  (`_errore_http`) con messaggi italiani in `app.MESSAGGI_IA`.
 - `taric/dati.py`: versioni dei dati TARIC, aggiornamento (download, estrazione sicura, `aggiorna.py`, installazione), pianificatore.
 - `taric/aggiorna.py`: genera i file di `data/` dai file Excel dell'estrazione e li controlla. Si esegue come
   sottoprocesso con `python -I`; l'installazione avviene solo con codice di uscita 0 e ultima riga `CONTROLLI OK`.
@@ -39,5 +41,5 @@ pip install -r requirements-dev.txt
 python -m pytest -q tests
 ```
 
-Prova nel browser (Playwright, finto Claude): vedi la sezione «Sviluppo» del README. Dopo modifiche all'interfaccia
+Prova nel browser (Playwright, finto servizio IA): vedi la sezione «Sviluppo» del README. Dopo modifiche all'interfaccia
 controlla anche il telefono (larghezza 390 px) e il tema scuro.

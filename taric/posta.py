@@ -30,12 +30,12 @@ class Posta:
 
     def invia(self, destinatario: str, oggetto: str, testo: str, attendi: bool = False) -> None:
         msg = EmailMessage()
-        msg["From"] = self.cfg.smtp_mittente or "TARIC 2.0 <noreply@localhost>"
+        msg["From"] = self.cfg.smtp_mittente or "MAGIC HS <noreply@localhost>"
         msg["To"] = destinatario
         msg["Subject"] = oggetto
         msg["Date"] = formatdate(localtime=False)
         msg["Message-ID"] = make_msgid(domain="taric.local")
-        msg.set_content(testo + "\n\n--\nTARIC 2.0 - messaggio automatico, non rispondere.\n")
+        msg.set_content(testo + "\n\n--\nMAGIC HS - messaggio automatico, non rispondere.\n")
         if not self.configurata:
             self._in_uscita(msg, destinatario, oggetto, testo, "non inviata: posta non configurata")
             return

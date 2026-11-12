@@ -1,6 +1,6 @@
-# TARIC 2.0
+# MAGIC HS
 
-Sito per cercare le voci doganali in modo più rapido di AIDA. Descrivi la merce a parole: Claude propone il codice a 10 cifre con le alternative e fa le domande che servono per scegliere. Il sito mostra dazi, misure e documenti richiesti per ogni paese, presi dai dati ufficiali TARIC dell'Unione europea.
+Sito per cercare le voci doganali in modo più rapido di AIDA. Descrivi la merce a parole: l'intelligenza artificiale (Gemini, Claude o un altro modello a tua scelta) propone il codice a 10 cifre con le alternative e fa le domande che servono per scegliere. Il sito mostra dazi, misure e documenti richiesti per ogni paese, presi dai dati ufficiali TARIC dell'Unione europea.
 
 È un sito completo con server proprio: account con email e password, registrazione automatica, profili e pannello di amministrazione. I dati si aggiornano da soli ogni mese. Puoi farlo girare sul tuo computer oggi e su un server con un dominio domani, con Docker o con Python.
 
@@ -8,7 +8,7 @@ Sito per cercare le voci doganali in modo più rapido di AIDA. Descrivi la merce
 
 ## Che cosa fa
 
-- **Classifica**: dalla descrizione della merce Claude individua le voci candidate. Poi sceglie il codice confrontandolo con il testo ufficiale della nomenclatura, che è in italiano. Le domande affinano la scelta.
+- **Classifica**: dalla descrizione della merce l'IA individua le voci candidate. Poi sceglie il codice confrontandolo con il testo ufficiale della nomenclatura, che è in italiano. Le domande affinano la scelta.
 - **Nomenclatura**: albero e ricerca per parola o per codice, senza intelligenza artificiale.
 - **Misure per paese**: dazi (anche preferenziali, antidumping e contingenti), condizioni, certificati e documenti del riquadro 44 e unità supplementari. Valgono per importazione ed esportazione.
 - **Profilo**:
@@ -33,9 +33,9 @@ Sito per cercare le voci doganali in modo più rapido di AIDA. Descrivi la merce
 ### Con Docker (consigliato su un server)
 
 ```bash
-git clone https://github.com/ShakeMyMids/taric-2.git
-cd taric-2
-cp taric.env.esempio taric.env        # scrivi almeno ANTHROPIC_API_KEY
+git clone https://github.com/ShakeMyMids/magic-hs.git
+cd magic-hs
+cp taric.env.esempio taric.env        # scrivi la chiave dell'IA, per esempio GEMINI_API_KEY
 docker compose up -d
 docker compose logs taric | grep "NESSUN AMMINISTRATORE"
 ```
@@ -69,22 +69,33 @@ Tutto si imposta nel file `taric.env` (modello commentato: `taric.env.esempio`) 
 
 | Variabile | A che cosa serve |
 |---|---|
-| `ANTHROPIC_API_KEY` | Chiave dell'API di Anthropic per la classificazione assistita. Senza chiave il resto del sito funziona. |
+| `GEMINI_API_KEY` oppure `ANTHROPIC_API_KEY` | Chiave del servizio di intelligenza artificiale. Senza chiave il resto del sito funziona. Altri servizi: vedi sotto. |
 | `TARIC_URL_PUBBLICO` | Indirizzo del sito (es. `https://taric.tuodominio.it`), usato nei link delle email. |
 | `TARIC_SMTP_HOST`, `_PORTA`, `_UTENTE`, `_PASSWORD`, `_MITTENTE`, `_SICUREZZA` | Server di posta per conferme, avvisi e «password dimenticata». |
 | `TARIC_DATI` | Cartella dei dati (predefinita `dati`). |
 | `TARIC_HOST`, `TARIC_PORTA` | Dove ascolta il server (predefiniti `127.0.0.1` e `8000`). |
 | `TARIC_PROXY_FIDATI` | Indirizzi dei reverse proxy da cui accettare `X-Forwarded-*`. |
 | `TARIC_AGGIORNAMENTO_AUTOMATICO` | `si` o `no`. |
-| `TARIC_MODELLO_RAPIDO`, `TARIC_MODELLO` | Modelli Claude usati (predefiniti `claude-haiku-5-5` e `claude-sonnet-5-5`). |
+| `TARIC_IA_FORNITORE`, `TARIC_IA_MODELLO_RAPIDO`, `TARIC_IA_MODELLO`, `TARIC_IA_URL`, `TARIC_IA_CHIAVE` | Scelta esplicita del servizio IA e dei modelli. |
 
 Dopo una modifica di `taric.env` riavvia il server (`docker compose restart` oppure ferma e rilancia `python -m taric`).
 
-### Claude e costi
+### Intelligenza artificiale: quale scegliere e quanto costa
 
-L'API di Anthropic si paga a consumo e a parte rispetto all'abbonamento a Claude. La chiave si crea nella [Console di Anthropic](https://console.anthropic.com). Lì conviene impostare anche un limite di spesa mensile.
+Il sito funziona con tre tipi di servizio. Basta una chiave in `taric.env`; con più chiavi vince Gemini, salvo `TARIC_IA_FORNITORE`.
 
-Nel sito ogni utente ha un limite mensile di richieste: il valore predefinito per i nuovi utenti si cambia in *Gestione → Regole di registrazione*, quello di ciascuno in *Gestione → Utenti*. Gli amministratori non hanno limite, salvo che tu ne imposti uno. Una classificazione usa di solito 2 o 3 richieste. Gli utenti non vedono mai la chiave: le chiamate a Claude le fa il server.
+| Servizio | Come si attiva | Note |
+|---|---|---|
+| **Google Gemini** (consigliato) | `GEMINI_API_KEY`, chiave da [Google AI Studio](https://aistudio.google.com) | Modelli predefiniti `gemini-3.5-flash-lite` (ricerca delle voci) e `gemini-3.7-flash` (scelta del codice). C'è un piano gratuito con limiti giornalieri bassi, adatto a provare da soli. A pagamento costa pochi centesimi a classificazione. |
+| **Claude** (Anthropic) | `ANTHROPIC_API_KEY`, chiave dalla [Console di Anthropic](https://console.anthropic.com) | Solo a consumo, separato dall'abbonamento a Claude. |
+| **Compatibile OpenAI**: Groq, Mistral, OpenRouter, OpenAI, Ollama… | `TARIC_IA_FORNITORE=openai`, `TARIC_IA_URL`, `TARIC_IA_MODELLO`, `TARIC_IA_CHIAVE` | Alcuni hanno piani gratuiti con modelli aperti, di solito meno precisi su un compito come questo. Con Ollama il modello gira sul tuo computer, gratis e senza inviare dati fuori, ma serve un computer potente. |
+
+Due cose da sapere su Gemini gratuito:
+
+- **Uso da parte di altre persone**: i [termini dell'API Gemini](https://ai.google.dev/terms) permettono solo il servizio a pagamento quando l'applicazione è offerta a utenti nell'Unione europea, in Svizzera o nel Regno Unito. Per aprire il sito ad altri attiva quindi la fatturazione sul progetto Google Cloud della chiave. Il piano gratuito resta per le tue prove.
+- **Limiti**: sono giornalieri e li vedi in AI Studio. Quando finiscono, il sito avvisa che il limite di oggi è raggiunto.
+
+In ogni caso ogni utente ha un limite mensile di richieste. Il valore predefinito per i nuovi utenti si cambia in *Gestione → Regole di registrazione*, quello di ciascuno in *Gestione → Utenti*. Gli amministratori non hanno limite, salvo che tu ne imposti uno. Una classificazione usa di solito 2 o 3 richieste. Gli utenti non vedono mai la chiave: le chiamate le fa il server. Nella console del servizio scelto conviene impostare un tetto di spesa.
 
 ### Posta
 
@@ -104,13 +115,13 @@ Su un server (VPS) con Docker e un dominio che punta al server, con le porte 80 
 TARIC_DOMINIO=taric.tuodominio.it docker compose --profile https up -d
 ```
 
-Caddy ottiene e rinnova da solo il certificato HTTPS e inoltra le richieste a TARIC 2.0. Con un reverse proxy tuo (nginx, Traefik…), inoltra a `127.0.0.1:8000` e imposta `TARIC_PROXY_FIDATI` con l'indirizzo del proxy.
+Caddy ottiene e rinnova da solo il certificato HTTPS e inoltra le richieste a MAGIC HS. Con un reverse proxy tuo (nginx, Traefik…), inoltra a `127.0.0.1:8000` e imposta `TARIC_PROXY_FIDATI` con l'indirizzo del proxy.
 
 Prima di aprire il sito ad altre persone:
 
 - Pubblica un'informativa privacy: diventi titolare dei dati degli utenti (nome, email, azienda, storico).
 - Decidi le regole di registrazione: domini approvati, registrazione aperta o chiusa, limite IA predefinito.
-- Imposta il limite di spesa nella Console di Anthropic.
+- Imposta un tetto di spesa nella console del servizio IA (Google Cloud, Console di Anthropic…).
 
 ## Dati TARIC
 
@@ -160,10 +171,10 @@ python -m pytest -q tests                       # API, accessi, registrazione, a
 TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.py   # con un'estrazione vera (circa un minuto)
 ```
 
-Per la prova completa nel browser (Playwright) avvia `tests/finto_claude.py`, che imita l'API di Claude, e un server con `ANTHROPIC_API_KEY=chiave-finta` e `TARIC_ANTHROPIC_URL=http://127.0.0.1:9100/v1/messages`, poi lancia `node tests/e2e.js http://127.0.0.1:8000 dati shots`. Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
+Per la prova completa nel browser (Playwright) avvia `tests/finto_claude.py`, che imita le API di Gemini, Claude e OpenAI, e un server con `GEMINI_API_KEY=chiave-finta` e `TARIC_IA_URL=http://127.0.0.1:9100/v1beta`, poi lancia `node tests/e2e.js http://127.0.0.1:8000 dati shots`. Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
 
 ## Fonti e licenze
 
 - **Nomenclatura e misure**: Commissione europea, DG TAXUD (dati pubblicati per il riutilizzo citando la fonte).
 - **Font**: Archivo e Courier Prime (SIL Open Font License, vedi `taric/static/fonts/`).
-- **Classificazione assistita**: Claude di Anthropic.
+- **Classificazione assistita**: il servizio IA configurato (Google Gemini, Claude di Anthropic o altro).

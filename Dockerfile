@@ -1,4 +1,4 @@
-# TARIC 2.0 - immagine del server
+# MAGIC HS - immagine del server
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

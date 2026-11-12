@@ -1,5 +1,6 @@
-"""Finto server dell'API Messages di Anthropic per le prove dell'interfaccia (nessuna chiamata reale).
-Uso: python tests/finto_claude.py 9100   -> http://127.0.0.1:9100/v1/messages"""
+"""Finto servizio IA per le prove dell'interfaccia (nessuna chiamata reale). Risponde nei formati di
+Anthropic (/v1/messages), Gemini (/v1beta/models/<modello>:generateContent) e compatibile OpenAI (/v1/chat/completions).
+Uso: python tests/finto_claude.py 9100, poi per esempio GEMINI_API_KEY=chiave-finta TARIC_IA_URL=http://127.0.0.1:9100/v1beta"""
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -31,13 +32,25 @@ def rispondi(prompt: str) -> object:
 class Gestore(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         corpo = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
-        if self.headers.get("x-api-key") != "chiave-finta":
-            self._json(401, {"type": "error", "error": {"type": "authentication_error", "message": "invalid x-api-key"}})
+        chiave = self.headers.get("x-api-key") or self.headers.get("x-goog-api-key") or (self.headers.get("authorization") or "").replace("Bearer ", "")
+        if chiave != "chiave-finta":
+            self._json(401, {"error": {"message": "API key not valid"}})
             return
-        prompt = corpo["messages"][0]["content"]
-        testo = json.dumps(rispondi(prompt), ensure_ascii=False)
-        self._json(200, {"content": [{"type": "text", "text": testo}], "stop_reason": "end_turn", "model": corpo["model"],
-                         "usage": {"input_tokens": len(prompt) // 4, "output_tokens": len(testo) // 4}})
+        if ":generateContent" in self.path:
+            prompt = corpo["contents"][0]["parts"][0]["text"]
+            testo = json.dumps(rispondi(prompt), ensure_ascii=False)
+            self._json(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": testo}]}, "finishReason": "STOP"}],
+                             "usageMetadata": {"promptTokenCount": len(prompt) // 4, "candidatesTokenCount": len(testo) // 4}})
+        elif self.path.endswith("/chat/completions"):
+            prompt = corpo["messages"][-1]["content"]
+            testo = json.dumps(rispondi(prompt), ensure_ascii=False)
+            self._json(200, {"choices": [{"message": {"role": "assistant", "content": testo}, "finish_reason": "stop"}],
+                             "usage": {"prompt_tokens": len(prompt) // 4, "completion_tokens": len(testo) // 4}})
+        else:
+            prompt = corpo["messages"][0]["content"]
+            testo = json.dumps(rispondi(prompt), ensure_ascii=False)
+            self._json(200, {"content": [{"type": "text", "text": testo}], "stop_reason": "end_turn", "model": corpo["model"],
+                             "usage": {"input_tokens": len(prompt) // 4, "output_tokens": len(testo) // 4}})
 
     def _json(self, stato: int, dati: object) -> None:
         b = json.dumps(dati).encode()

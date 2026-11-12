@@ -209,8 +209,8 @@ class GestoreDati:
             amministratori = [r["email"] for r in c.execute("SELECT email FROM utenti WHERE ruolo = 'amministratore' AND stato = 'attivo'")]
         avvisa = esito == "ok" or esito == "errore" or (esito == "non_disponibile" and self._giorno_locale() >= 8 and autore_id is None)
         if avvisa:
-            oggetto = {"ok": f"TARIC 2.0: dati di {mese} installati", "errore": f"TARIC 2.0: aggiornamento dei dati di {mese} NON riuscito",
-                       "non_disponibile": f"TARIC 2.0: l'estrazione di {mese} non è ancora disponibile"}[esito]
+            oggetto = {"ok": f"MAGIC HS: dati di {mese} installati", "errore": f"MAGIC HS: aggiornamento dei dati di {mese} NON riuscito",
+                       "non_disponibile": f"MAGIC HS: l'estrazione di {mese} non è ancora disponibile"}[esito]
             testo = messaggio + ("\n\nLa pagina continua a usare i dati della versione precedente. Dal pannello di amministrazione puoi "
                                  "riprovare o caricare a mano l'archivio dell'estrazione." if esito != "ok" else "")
             if esito == "errore" and registro:

@@ -1,4 +1,4 @@
-/* TARIC 2.0 - vista Profilo: account, preferenze, uso dell'IA, storico, preferiti, sicurezza. */
+/* MAGIC HS - vista Profilo: account, preferenze, uso dell'IA, storico, preferiti, sicurezza. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
@@ -81,7 +81,7 @@
       '<label>Password attuale<input class="campo" type="password" name="attuale" autocomplete="current-password" required></label>' +
       '<label>Nuova password (almeno 10 caratteri)<input class="campo" type="password" name="nuova" autocomplete="new-password" required minlength="10"></label></div>' +
       '<div class="fila"><button class="btn pri" type="submit">Cambia password</button></div>' + riga('password') + '</form></div>' +
-      '<div class="box s4"><div class="lab"><b>7</b> Dispositivi</div><p class="nota">Se hai usato TARIC 2.0 su un computer non tuo, chiudi le altre sessioni: resterai collegato solo qui.</p>' +
+      '<div class="box s4"><div class="lab"><b>7</b> Dispositivi</div><p class="nota">Se hai usato MAGIC HS su un computer non tuo, chiudi le altre sessioni: resterai collegato solo qui.</p>' +
       '<div class="fila"><button class="btn" type="button" data-p="esci-ovunque">Esci dagli altri dispositivi</button></div>' + riga('dispositivi') + '</div></div>';
 
     el.innerHTML = h;

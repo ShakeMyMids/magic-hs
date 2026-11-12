@@ -1,4 +1,4 @@
-# TARIC 2.0 con Docker Compose.
+# MAGIC HS con Docker Compose.
 #   Sul tuo computer:      docker compose up -d            -> http://localhost:8000
 #   Su un server con dominio e HTTPS automatico:
 #                          TARIC_DOMINIO=taric.tuodominio.it docker compose --profile https up -d
@@ -6,7 +6,7 @@
 services:
   taric:
     build: .
-    image: taric2:latest
+    image: magichs:latest
     restart: unless-stopped
     env_file:
       - path: taric.env
