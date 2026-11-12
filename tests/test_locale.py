@@ -41,8 +41,8 @@ def imposta_editori(condivisa: Path, *nomi: str) -> None:
 
 class PC:
     """Un PC con MAGIC HS. Il nome e' anche il nome utente di Windows. editore=True lo mette nell'elenco di chi
-    pubblica; tutti possono scrivere nella cartella (OneDrive chiede il permesso di modifica per il collegamento),
-    tranne con sola_lettura=True (raccolta di SharePoint sincronizzata in sola lettura)."""
+    pubblica; il PC puo' scrivere nella cartella, tranne con sola_lettura=True (il caso dei colleghi: raccolta di
+    SharePoint sincronizzata con il solo permesso di lettura)."""
 
     def __init__(self, tmp: Path, condivisa: Path, nome: str, mp: pytest.MonkeyPatch, editore: bool = True,
                  versioni: tuple[str, ...] = (), sola_lettura: bool = False):
@@ -432,6 +432,22 @@ def test_cartella_in_sola_lettura(ambiente):
     pc = PC(tmp, cond, "lbianchi", mp, editore=False, sola_lettura=True)       # nell'elenco ma senza permesso di scrittura
     io_ = pc.entra().get("/api/io").json()
     assert not io_["locale"]["editore"] and pc.attiva() == "2026-11-01"
+
+
+def test_collega_in_sola_lettura_riceve_e_non_scrive(ambiente):
+    """La configurazione consigliata: il collega ha solo la lettura, riceve dati e impostazioni e non tocca la cartella."""
+    tmp, cond, mp = ambiente
+    collega = PC(tmp, cond, "lbianchi", mp, editore=False, sola_lettura=True)     # cartella nuova, nessuno la gestisce ancora
+    cc = collega.entra()
+    assert not cc.get("/api/io").json()["locale"]["puo_gestire"]
+    assert cc.post("/api/locale/gestisco-io").status_code == 409
+    PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",))                         # l'editore pubblica i dati
+    prima = {f: f.stat().st_mtime_ns for f in cond.rglob("*")}
+    assert cc.post("/api/locale/sincronizza").json()["dati"] == "2026-11-01" and collega.attiva() == "2026-11-01"
+    io_ = cc.get("/api/io").json()
+    assert io_["ruolo"] == "utente" and not io_["locale"]["editore"] and not io_["locale"]["puo_gestire"]
+    assert cc.get("/api/admin/locale").status_code == 403
+    assert {f: f.stat().st_mtime_ns for f in cond.rglob("*")} == prima          # nella cartella non e' cambiato nulla
 
 
 def test_editori_aggiunti_e_tolti(ambiente):

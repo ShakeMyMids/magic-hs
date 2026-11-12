@@ -5,7 +5,7 @@
 Produce in dist/:
   magic-hs-windows-<versione>.zip    Python per Windows con le librerie e MAGIC HS: è il file da caricare in
                                      Gestione > Cartella condivisa > «Nuova versione del programma»
-  MAGIC-HS-cartella-<versione>.zip   la cartella «MAGIC HS» da mettere su OneDrive la prima volta (avvio,
+  MAGIC-HS-cartella-<versione>.zip   la cartella «MAGIC HS» da mettere su SharePoint la prima volta (avvio,
                                      istruzioni, programma e, con --dati, i dati TARIC di un mese)
 
 Python viene da python-build-standalone (https://github.com/astral-sh/python-build-standalone, licenza nel

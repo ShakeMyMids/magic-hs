@@ -152,7 +152,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then tag="$GITHUB_REF_NAME"; else tag="v$(sed -nE 's/^__version__ = "([^"]+)"/\1/p' taric/__init__.py)"; fi
-          note="Programma per Windows. Prima installazione: estrai MAGIC-HS-cartella-*.zip nella cartella di OneDrive da condividere (vedi LEGGIMI.txt). Aggiornamento: carica magic-hs-windows-*.zip in Gestione > Cartella condivisa."
+          note="Programma per Windows. Prima installazione: estrai MAGIC-HS-cartella-*.zip in una raccolta di SharePoint sincronizzata, in sola lettura per i colleghi (vedi LEGGIMI.txt). Aggiornamento: carica magic-hs-windows-*.zip in Gestione > Cartella condivisa."
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$tag" dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"
           else

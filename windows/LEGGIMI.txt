@@ -41,7 +41,14 @@ Non modificare i file a mano: si gestisce tutto dal programma, scheda Gestione.
   questa cartella: usane una dedicata, con un tetto di spesa.
 - Nuova versione del programma: scarica magic-hs-windows-<versione>.zip dalla pagina delle versioni
   su GitHub e caricala in Gestione > Cartella condivisa.
-- Colleghi: condividi la cartella con il permesso «Può modificare» (OneDrive lo chiede per aggiungere
-  il collegamento); ognuno sceglie «Aggiungi collegamento a I miei file» sul sito di OneDrive e poi
-  apre «Avvia MAGIC HS». Pubblica solo chi è nell'elenco, ma con il permesso di modifica un collega
-  potrebbe cancellare dei file per sbaglio: si recuperano dal cestino di OneDrive.
+- Colleghi: solo il permesso di LETTURA. Chi può modificare questa cartella può cambiare il programma
+  che parte sui PC di tutti: la modifica va data solo a chi pubblica. Per questo la cartella sta in
+  una raccolta documenti di SharePoint (o nei file di un canale di Teams), non nel tuo OneDrive:
+  OneDrive chiede il permesso di modifica per «Aggiungi collegamento a I miei file».
+  In SharePoint i colleghi sono visitatori del sito (Lettura), chi pubblica è membro (Modifica).
+  In Teams i membri del canale hanno la modifica: su questa cartella scegli Gestisci accesso,
+  interrompi l'ereditarietà e lascia ai colleghi solo «Può visualizzare».
+  Ogni collega apre la cartella sul sito di SharePoint, preme «Sincronizza» e poi apre
+  «Avvia MAGIC HS» dalla cartella sincronizzata in Esplora file.
+  La raccolta non deve chiedere l'estrazione dei file (check-out) né colonne obbligatorie: altrimenti
+  OneDrive la sincronizza in sola lettura anche per chi pubblica.
