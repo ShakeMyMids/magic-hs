@@ -240,10 +240,10 @@
       '<tr><td>Programma</td><td data-l="Su questo PC">' + esc(L.programma.in_uso) + '</td><td data-l="Per tutti">' + esc(L.programma.pubblicato || 'nessuno') + '</td></tr>' +
       '<tr><td>Dati TARIC</td><td data-l="Su questo PC">' + esc(data(L.dati.in_uso)) + '</td><td data-l="Per tutti">' + esc(data(L.dati.pubblicati)) + '</td></tr></tbody></table></div>';
     h += '<div class="box s4"><div class="lab">' + T.icona('utenti') + 'Aggiungere un collega</div><ol class="passi">' +
-      '<li>In OneDrive condividi la cartella con il collega con il permesso <b>Può modificare</b>: senza, OneDrive non gli lascia aggiungere il collegamento. Pubblica comunque solo chi è in «Chi può pubblicare».</li>' +
-      '<li>Il collega apre la cartella sul sito di OneDrive (Condivisi con me) e sceglie «Aggiungi collegamento a I miei file».</li>' +
-      '<li>Sul suo PC fa doppio clic su <b>Avvia MAGIC HS</b> nella cartella (la prima volta ci vuole un minuto). Per comodità può creare un collegamento sul desktop.</li></ol>' +
-      '<p class="nota">Con il permesso di modifica un collega potrebbe cancellare per sbaglio dei file della cartella: li recuperi dal cestino di OneDrive. Per una cartella davvero in sola lettura usa una raccolta di SharePoint o di Teams, con permesso di lettura per i colleghi e il pulsante «Sincronizza».</p></div></div>';
+      '<li>Dai al collega solo il permesso di <b>lettura</b> sulla cartella: in SharePoint come visitatore del sito, in Teams con «Gestisci accesso» > «Può visualizzare».</li>' +
+      '<li>Il collega apre la cartella sul sito di SharePoint (o nei file del canale di Teams) e preme «Sincronizza».</li>' +
+      '<li>Sul suo PC fa doppio clic su <b>Avvia MAGIC HS</b> nella cartella sincronizzata (la prima volta ci vuole un minuto). Per comodità può creare un collegamento sul desktop.</li></ol>' +
+      '<p class="nota">Chi può modificare la cartella può cambiare il programma che parte sui PC di tutti: la modifica va solo a chi è in «Chi può pubblicare». In Teams i membri del canale hanno la modifica: interrompi l\'ereditarietà delle autorizzazioni di questa cartella.</p></div></div>';
     var ed = L.editori || [];
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scudo') + 'Chi può pubblicare<span class="dx">' + ed.length + '</span></div>' +
       '<p class="nota">Nomi utente di Windows di chi pubblica per tutti dati, intelligenza artificiale e nuove versioni. Ognuno vede il proprio in Profilo; serve anche il permesso di modifica sulla cartella. Le modifiche valgono sugli altri PC entro dieci minuti.</p>' +

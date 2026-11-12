@@ -1,8 +1,8 @@
-"""Cartella condivisa del programma per Windows (per esempio una cartella di OneDrive aziendale).
+"""Cartella condivisa del programma per Windows (una raccolta di SharePoint o di Teams sincronizzata da OneDrive).
 
 Pubblica chi è nell'elenco degli editori (nomi utente di Windows in impostazioni.json) e può scrivere nella
-cartella: per aggiungere il collegamento a una cartella di OneDrive serve il permesso di modifica, quindi la
-scrittura da sola non basta a distinguere chi gestisce MAGIC HS dai colleghi. Il primo editore si indica dal
+cartella. I colleghi hanno solo la lettura: chi può scrivere può sostituire il programma che parte su tutti i PC,
+quindi l'elenco distingue chi pubblica ma non protegge da chi ha la modifica. Il primo editore si indica dal
 programma («Gestisco io MAGIC HS»). Gli altri ricevono tutto da OneDrive e non scrivono mai nella cartella. Struttura:
 
     Avvia MAGIC HS.cmd                  avvio (doppio clic)
