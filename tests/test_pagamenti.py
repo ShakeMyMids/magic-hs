@@ -211,3 +211,14 @@ def test_eliminare_un_utente_chiude_il_suo_abbonamento(sito_pagamenti: Sito):
     assert a.delete(f"/api/admin/utenti/{uid}").status_code == 200
     assert s.stripe.abbonamenti[sess["subscription"]]["status"] == "canceled"
     assert ("DELETE", f"/subscriptions/{sess['subscription']}", {}) in s.stripe.chiamate
+
+
+def test_condizioni_di_vendita_con_dati_e_prezzi(sito: Sito, monkeypatch):
+    sito.cfg.venditore = 'Rossi <Import> & C.'
+    sito.cfg.venditore_email = "info@esempio.it"
+    a = sito.admin()
+    a.put("/api/admin/impostazioni", json={"prezzi": {"giorno": 0, "settimana": 799, "mese": 1499, "anno": 14900}})
+    html = sito.client().get("/condizioni").text          # pagina pubblica, anche senza accesso
+    assert "Rossi &lt;Import&gt; &amp; C." in html and "<Import>" not in html
+    assert "Pro 1 settimana: <b>7,99 €</b>" in html and "Pro 1 giorno" not in html
+    assert 'href="mailto:info@esempio.it"' in html and "{{" not in html

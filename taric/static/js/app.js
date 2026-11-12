@@ -259,11 +259,34 @@ function impostaIA() {
   sampleFn = null; state.ai = 'no';
   if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva su questo server (manca la chiave del servizio di intelligenza artificiale). Puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
   else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi all\'amministratore. Puoi comunque aprire un codice scrivendone le cifre.';
-  else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' richieste all\'IA di questo mese: chiedi all\'amministratore di aumentare il limite.';
+  else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' richieste all\'IA di questo mese. ' +
+    (state.utente.piano && state.utente.piano.pagamenti ? 'Con il piano Pro sono illimitate: lo attivi da Profilo. ' : 'Per averne altre chiedi all\'amministratore. ') +
+    'Nomenclatura e misure restano consultabili.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
 }
 function aggiornaIo() {
-  return T.api('GET', '/api/io').then(function (u) { state.utente = u; impostaIA(); renderMsg(); return u; }, function () { return state.utente; });
+  return T.api('GET', '/api/io').then(function (u) { state.utente = u; impostaIA(); renderMsg(); segnaPro(); return u; }, function () { return state.utente; });
+}
+/* segno «Pro» accanto al nome */
+function segnaPro() {
+  var b = document.getElementById('chi-pro'), u = state.utente;
+  if (b) b.hidden = !(u && u.piano && u.piano.pro);
+}
+/* ritorno dalla pagina di pagamento di Stripe: ?pagamento=cs_... oppure ?pagamento=annullato */
+function ritornoPagamento() {
+  var m = /[?&]pagamento=([^&#]+)/.exec(location.search);
+  if (!m) return;
+  var v = decodeURIComponent(m[1]);
+  history.replaceState(null, '', location.pathname + location.hash);
+  if (v === 'annullato') { T.avviso('Pagamento annullato: non ti è stato addebitato nulla.'); return; }
+  T.avviso('Controllo il pagamento…');
+  T.api('POST', '/api/pagamento/conferma', { sessione: v }).then(function (r) {
+    return aggiornaIo().then(function () {
+      if (r.piano && r.piano.pro) T.avviso('Grazie! Il piano Pro è attivo fino al ' + T.dataOra(r.piano.fino) + '.');
+      else T.avviso('Pagamento ricevuto: il piano Pro si attiva appena Stripe lo conferma, di solito in pochi secondi.');
+      if (T.viste && T.viste.profilo) { T.viste.profilo.daRicaricare = true; if (!$('#view-profilo').hidden) T.viste.profilo.mostra(); }
+    });
+  }, function (e) { T.avviso(e.errore || 'Non riesco a controllare il pagamento: ricarica la pagina tra poco.', 'male'); });
 }
 function salvaStorico() {
   var r = state.result;
@@ -839,6 +862,8 @@ function renderMsg() {
   if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>';
   var ia = state.utente && state.utente.ia;
   if (state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
+  if (ia && ia.limite !== null && ia.limite > 0 && ia.usate >= ia.limite && state.utente.piano && state.utente.piano.pagamenti)
+    h += '<div class="fila"><a class="btn pri" href="#profilo">' + T.icona('timbro') + 'Passa a Pro</a></div>';
   if (state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Richieste all\'IA usate questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
   $('#msg').innerHTML = h;
 }
@@ -1179,7 +1204,9 @@ function start() {
   renderEsempi();
   vista(location.hash.replace('#', '') || 'classifica');
   renderAll();
+  segnaPro();
   state.avviato = true;
+  ritornoPagamento();
 }
 window.TARIC_DEBUG = { misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
 

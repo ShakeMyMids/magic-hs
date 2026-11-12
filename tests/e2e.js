@@ -1,6 +1,6 @@
 /* Collaudo end-to-end nel browser: configurazione, gestione utenti, classificazione, profilo, registrazione.
    Uso: node tests/e2e.js http://127.0.0.1:8765 <cartella dati> <cartella screenshot>
-   Richiede un server collegato al finto servizio IA di tests/finto_claude.py (vedi README, sezione Sviluppo). */
+   Richiede un server collegato ai finti servizi IA e Stripe di tests/finto_claude.py (vedi README, sezione Sviluppo). */
 const { chromium } = require(process.env.PLAYWRIGHT || '/opt/npm-tools/node_modules/playwright');
 const fs = require('fs');
 const path = require('path');
@@ -81,7 +81,7 @@ const testo = async (p, sel) => (await p.textContent(sel)) || '';
   await l.waitForSelector('#view-profilo .voce');
   const prof = await testo(l, '#view-profilo');
   ok(prof.includes('scarpe da ginnastica con tomaia in pelle'), 'classificazione nello storico');
-  ok(/\b[3-6] su 10 richieste/.test(prof.replace(/(\d{4})(\d)/g, "$1 $2")), "contatore richieste IA");
+  ok(/(^|\D)[3-6] di 10 richieste/.test(prof), "contatore richieste IA");
   ok(prof.includes('6403 99 96 10'), 'preferito con codice');
   await l.fill('form[data-p=nota] [name=nota]', 'cliente Rossi, articolo 455');
   await l.click('form[data-p=nota] button');
@@ -157,6 +157,34 @@ const testo = async (p, sel) => (await p.textContent(sel)) || '';
   await a.waitForSelector('.esito-ok:text("Modifiche salvate.")');
   await l.goto(base + '/#classifica'); await l.reload(); await l.waitForSelector('#msg .avviso');
   ok((await testo(l, '#msg')).includes('non è abilitata per il tuo account'), 'limite IA a zero applicato');
+
+  console.log('7b. piano Pro con pagamento (Stripe simulato)');
+  if (!(await a.isVisible('form[data-g=modifica]'))) await a.locator('tbody tr', { hasText: 'luca@esempio.it' }).locator('[data-g=apri]').click();
+  await a.waitForSelector('form[data-g=modifica]');
+  await a.fill('form[data-g=modifica] [name=quota]', ''); await a.click('form[data-g=modifica] button[type=submit]');
+  await a.waitForSelector('.esito-ok:text("Modifiche salvate.")');
+  await l.goto(base + '/#profilo'); await l.reload(); await l.waitForSelector('.box.piano .offerta');
+  const piano = await testo(l, '.box.piano');
+  ok(piano.includes('Gratis') && piano.includes('di 50 richieste'), 'piano Gratis con 50 richieste al mese');
+  ok(piano.includes('7,99 €') && piano.includes('14,99 €') && piano.includes('149 €'), 'prezzi dei piani Pro');
+  await l.click('.taglio:has(input[value=settimana])');
+  ok(await l.isChecked('input[value=settimana]'), 'scelta del pass settimanale');
+  await l.click('.offerta button[type=submit]'); await l.waitForSelector('.offerta .errore');
+  ok((await testo(l, '.offerta .errore')).includes('attivazione immediata'), 'serve la richiesta di attivazione immediata');
+  await l.check('.offerta [name=recesso]');
+  await l.click('.offerta button[type=submit]');
+  await l.waitForURL(/#profilo$/); await l.waitForSelector('.box.piano.e-pro');
+  ok((await testo(l, '.box.piano')).includes('Pro attivo fino al'), 'Pro attivo al ritorno dal pagamento');
+  ok(!(await l.isHidden('#chi-pro')), 'segno Pro accanto al nome');
+  ok(!l.url().includes('pagamento='), 'indirizzo ripulito dopo il ritorno');
+  await l.screenshot({ path: out + '/10-pro.png', fullPage: false });
+  await l.goto(base + '/condizioni');
+  ok((await testo(l, 'main')).includes('Pro 1 settimana: 7,99 €'), 'condizioni di vendita con i prezzi');
+  await l.goto(base + '/'); await l.waitForSelector('#esci');
+  await a.click('[data-g=sotto][data-v=pagamenti]'); await a.waitForSelector('text=Utenti Pro');
+  const pag = await testo(a, '#view-gestione');
+  ok(pag.includes('7,99 €') && pag.includes('luca@esempio.it') && pag.includes('modalità di prova'), 'pagamento e utente Pro nel pannello');
+  await a.screenshot({ path: out + '/11-pagamenti.png', fullPage: true });
 
   console.log('8. uscita e accesso errato');
   await l.click('#esci'); await l.waitForURL(/accedi/);

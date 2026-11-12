@@ -1,12 +1,12 @@
-/* MAGIC HS - vista Gestione (amministratori): utenti e richieste, regole di registrazione, dati TARIC,
-   uso dell'IA, registro degli eventi, posta non inviata. */
+/* MAGIC HS - vista Gestione (amministratori): utenti e richieste, regole di registrazione, piani e pagamenti,
+   dati TARIC, uso dell'IA, registro degli eventi, posta non inviata. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
   var el = document.getElementById('view-gestione');
   var vista = T.viste = T.viste || {};
   var st = { sotto: 'utenti', riep: null, utenti: [], imp: null, dati: null, uso: [], eventi: [], posta: null, aperto: null,
-             link: {}, msg: {}, registro: null, timer: null };
+             link: {}, msg: {}, registro: null, timer: null, pag: null };
 
   var STATI = { attivo: 'attivo', in_attesa: 'in attesa', email_da_confermare: 'email da confermare', sospeso: 'sospeso', rifiutato: 'rifiutato' };
   var ESITI = { ok: 'riuscito', errore: 'errore', non_disponibile: 'non ancora disponibile', in_corso: 'in corso', interrotto: 'interrotto' };
@@ -19,8 +19,12 @@
     quota_ia: 'Limite IA cambiato', sessioni_chiuse: 'Sessioni chiuse', impostazioni: 'Regole modificate', configurazione_iniziale: 'Configurazione iniziale',
     admin_da_riga_di_comando: 'Amministratore da riga di comando', pulizia: 'Pulizia automatica', dati_ok: 'Dati TARIC installati',
     dati_errore: 'Aggiornamento dati non riuscito', dati_non_disponibile: 'Estrazione non ancora disponibile', dati_versione_attivata: 'Versione dati cambiata',
-    backup_creato: 'Backup creato', backup_scaricato: 'Backup scaricato'
+    backup_creato: 'Backup creato', backup_scaricato: 'Backup scaricato', pagamento_avviato: 'Pagina di pagamento aperta',
+    pro_pass: 'Pro: pass pagato', pro_abbonamento: 'Pro: abbonamento', pro_manuale: 'Pro concesso a mano'
   };
+  var MOVIMENTI = { pass: 'Pass', abbonamento: 'Abbonamento: prima fattura', rinnovo: 'Rinnovo', stato_abbonamento: 'Abbonamento', in_attesa: 'Pagamento in attesa' };
+  var PIANI = { giorno: '1 giorno', settimana: '1 settimana', mese: 'mensile', anno: 'annuale' };
+  function euro(c) { return (c / 100).toFixed(2).replace('.', ',') + ' €'; }
 
   function app() { return T.app; }
   function io() { return app().utente(); }
@@ -34,6 +38,7 @@
     var chiamate = [T.api('GET', '/api/admin/riepilogo').then(function (r) { st.riep = r; })];
     if (st.sotto === 'utenti') chiamate.push(T.api('GET', '/api/admin/utenti').then(function (r) { st.utenti = r.utenti; }));
     if (st.sotto === 'regole') chiamate.push(T.api('GET', '/api/admin/impostazioni').then(function (r) { st.imp = r; }));
+    if (st.sotto === 'pagamenti') chiamate.push(T.api('GET', '/api/admin/pagamenti').then(function (r) { st.pag = r; }));
     if (st.sotto === 'dati') chiamate.push(T.api('GET', '/api/admin/dati').then(function (r) { st.dati = r; }));
     if (st.sotto === 'uso') chiamate.push(T.api('GET', '/api/admin/uso').then(function (r) { st.uso = r.uso; }));
     if (st.sotto === 'registro') chiamate.push(T.api('GET', '/api/admin/eventi?limite=300').then(function (r) { st.eventi = r.eventi; }));
@@ -46,11 +51,11 @@
     var r = st.riep, h = '';
     var attesa = r ? (r.utenti.in_attesa || 0) : 0;
     h += '<div class="sotto" role="tablist">' + [['utenti', 'Utenti' + (attesa ? '<span class="conta">' + attesa + '</span>' : ''), 'utenti'], ['regole', 'Regole di registrazione', 'regole'],
-      ['dati', 'Dati TARIC', 'database'], ['uso', 'Uso dell\'IA', 'grafico'], ['registro', 'Registro', 'registro'], ['posta', 'Posta', 'posta']].map(function (x) {
+      ['pagamenti', 'Piani e pagamenti', 'timbro'], ['dati', 'Dati TARIC', 'database'], ['uso', 'Uso dell\'IA', 'grafico'], ['registro', 'Registro', 'registro'], ['posta', 'Posta', 'posta']].map(function (x) {
       return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
     if (r) h += avvisi(r);
-    h += { utenti: utenti, regole: regole, dati: dati, uso: uso, registro: registro, posta: posta }[st.sotto]();
+    h += { utenti: utenti, regole: regole, pagamenti: pagamenti, dati: dati, uso: uso, registro: registro, posta: posta }[st.sotto]();
     el.innerHTML = h;
     pianificaRinfresco();
   }
@@ -87,7 +92,8 @@
         '<td data-l="Stato"><span class="st ' + u.stato + '">' + STATI[u.stato] + '</span>' + (u.motivo_stato ? '<span class="piccolo">' + esc(u.motivo_stato) + '</span>' : '') +
         (!u.password_impostata ? '<span class="piccolo">password non ancora scelta</span>' : '') + '</td>' +
         '<td data-l="Ruolo">' + (u.ruolo === 'amministratore' ? 'amministratore' : 'utente') + '</td>' +
-        '<td class="n" data-l="IA questo mese">' + u.usate + ' / ' + (u.limite === null ? '∞' : u.limite) + '<span class="piccolo">' + (u.limite === null ? 'senza limite' : (u.quota_ia === null ? 'predefinito' : 'personalizzato')) + '</span></td>' +
+        '<td class="n" data-l="IA questo mese">' + (u.pro && u.pro.fino ? '<span class="marca pro">Pro</span> ' : '') + u.usate + ' / ' + (u.limite === null ? '∞' : u.limite) +
+        '<span class="piccolo">' + (u.pro && u.pro.fino ? 'Pro fino al ' + esc(T.dataOra(u.pro.fino, true)) : u.limite === null ? 'senza limite' : (u.quota_ia === null ? 'piano Gratis' : 'personalizzato')) + '</span></td>' +
         '<td data-l="Ultimo accesso">' + esc(u.ultimo_accesso ? T.dataOra(u.ultimo_accesso) : 'mai') + (u.sessioni ? '<span class="piccolo">' + (u.sessioni === 1 ? '1 sessione aperta' : u.sessioni + ' sessioni aperte') + '</span>' : '') + '</td>' +
         '<td><button class="btn sm" type="button" data-g="apri" data-id="' + u.id + '" aria-expanded="' + aperto + '">' + (aperto ? 'Chiudi' : 'Gestisci') + '</button></td></tr>';
       if (aperto) h += '<tr class="evid dettaglio"><td colspan="6">' + pannelloUtente(u) + '</td></tr>';
@@ -111,6 +117,11 @@
       '<option value="utente"' + (u.ruolo === 'utente' ? ' selected' : '') + '>Utente</option><option value="amministratore"' + (u.ruolo === 'amministratore' ? ' selected' : '') + '>Amministratore</option></select></label>' +
       '<label>Limite IA al mese (vuoto = predefinito)<input class="campo" name="quota" type="number" min="0" max="100000" value="' + (u.quota_ia === null ? '' : u.quota_ia) + '"></label>' +
       '<button class="btn sm pri" type="submit">Salva</button></form>';
+    var mf = u.pro && u.pro.manuale_fino ? new Date(new Date(u.pro.manuale_fino).getTime() - 1000) : null;
+    var mfVal = mf ? mf.getFullYear() + '-' + ('0' + (mf.getMonth() + 1)).slice(-2) + '-' + ('0' + mf.getDate()).slice(-2) : '';
+    h += '<form class="fila" data-g="pro" data-id="' + u.id + '"><label>Pro concesso a mano fino al (per chi paga con bonifico)<input class="campo" type="date" name="fino" value="' + mfVal + '" required></label>' +
+      '<button class="btn sm pri" type="submit">' + (mfVal ? 'Cambia la data' : 'Concedi il Pro') + '</button>' +
+      (mfVal ? '<button class="btn sm" type="button" data-g="pro-togli" data-id="' + u.id + '">Togli</button>' : '') + '</form>';
     h += '<div class="azioni">' +
       '<button class="btn sm" type="button" data-g="link" data-id="' + u.id + '">Link per la password</button>' +
       (st.riep && st.riep.posta ? '<button class="btn sm" type="button" data-g="link-email" data-id="' + u.id + '">Manda il link via email</button>' : '') +
@@ -139,7 +150,6 @@
       '<label class="spunta"><input type="checkbox" name="approva_tutti"' + (i.approva_tutti ? ' checked' : '') + '> Approva subito tutte le email confermate (sconsigliato su un sito pubblico)</label>' +
       '<div class="due"><label>Domini approvati automaticamente (uno per riga, es. miaazienda.it)<textarea class="campo" name="domini_approvati" rows="4">' + esc(i.domini_approvati.join('\n')) + '</textarea></label>' +
       '<label>Domini bloccati<textarea class="campo" name="domini_bloccati" rows="4">' + esc(i.domini_bloccati.join('\n')) + '</textarea></label>' +
-      '<label>Richieste all\'IA al mese per i nuovi utenti (0 = IA spenta)<input class="campo" type="number" name="quota_predefinita" min="0" max="100000" value="' + i.quota_predefinita + '"></label>' +
       '<label>Massimo di richieste in attesa<input class="campo" type="number" name="massimo_in_attesa" min="1" max="10000" value="' + i.massimo_in_attesa + '"></label></div>' +
       (st.riep && !st.riep.posta ? '<p class="avviso">Con la posta non configurata gli indirizzi non si possono verificare: domini approvati e «approva tutti» non si applicano e ogni richiesta aspetta te.</p>' : '') +
       '<div class="fila"><button class="btn pri" type="submit">Salva le regole</button></div>' + riga('regole') + '</form></div></div>';
@@ -248,6 +258,52 @@
       function (e) { msg(dove, errore(e)); });
   }
 
+  /* ---------- piani e pagamenti ---------- */
+  function pagamenti() {
+    var p = st.pag;
+    if (!p) return '<p class="vuoto">Carico…</p>';
+    var h = '<div class="foglio"><div class="box s7"><div class="lab">' + T.icona('lucchetto') + 'Stripe</div>';
+    if (p.attivi) h += '<p class="esito-ok">Pagamenti attivi' + (p.prova ? ' in modalità di prova: nessun addebito vero (carta di prova 4242 4242 4242 4242).' : ' con addebiti reali.') + '</p>';
+    else h += '<p class="avviso">Pagamenti spenti: nel file taric.env del server manca la chiave TARIC_STRIPE_CHIAVE. Senza, gli utenti restano sul piano Gratis e puoi concedere il Pro a mano dalla scheda Utenti.</p>';
+    if (p.attivi && !p.webhook) h += '<p class="avviso">Manca il segreto del webhook (TARIC_STRIPE_FIRMA_WEBHOOK). I pagamenti si attivano comunque al ritorno dell\'utente, ma disdette e rinnovi arrivano solo con il controllo automatico ogni 6 ore.' +
+      (p.webhook_url ? ' Indirizzo da registrare su Stripe: ' + esc(p.webhook_url) : '') + '</p>';
+    if (p.attivi && !p.venditore) h += '<p class="avviso">Mancano i tuoi dati di venditore nelle condizioni di vendita: imposta almeno TARIC_VENDITORE e TARIC_VENDITORE_EMAIL in taric.env.</p>';
+    if (p.attivi) h += '<p class="nota">IVA ' + (p.tasse ? 'calcolata da Stripe Tax.' : 'inclusa nei prezzi (Stripe Tax spento).') + ' Ricevute, rimborsi e contestazioni si gestiscono dalla dashboard di Stripe.</p>';
+    h += '<p class="nota">Le <a href="/condizioni" target="_blank" rel="noopener">condizioni di vendita</a> sono un testo di partenza: falle controllare da un professionista prima di vendere.</p>';
+    h += '</div><div class="box s5"><div class="lab">' + T.icona('grafico') + 'Questo mese</div><p class="tv">' + euro(p.incasso_mese) + '</p><p class="tk">incassati (lordi, prima delle commissioni di Stripe)</p>' +
+      '<p class="tv">' + p.pro.length + '</p><p class="tk">' + (p.pro.length === 1 ? 'utente Pro attivo' : 'utenti Pro attivi') + '</p></div></div>';
+
+    var pr = p.prezzi;
+    function campo(id, nome) { return '<label>' + nome + '<input class="campo" name="' + id + '" inputmode="decimal" value="' + (pr[id] / 100).toFixed(2).replace('.', ',') + '"></label>'; }
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('regole') + 'Piani e prezzi</div>' +
+      '<p class="nota">Prezzi in euro, IVA inclusa. Stripe non accetta pagamenti sotto 0,50 €; con 0 il piano non è in vendita. I prezzi nuovi valgono per i nuovi acquisti: gli abbonamenti già attivi mantengono il loro prezzo.</p>' +
+      '<form class="modulo" data-g="piani" style="max-width:none"><div class="due">' +
+      '<label>Piano Gratis: richieste all\'IA al mese (vale per chi non ha un limite personale; 0 = IA spenta)<input class="campo" type="number" name="gratuito" min="0" max="100000" value="' + p.gratuito + '"></label>' +
+      '<label>Piano Pro: tetto di sicurezza nelle 24 ore (0 = nessun tetto)<input class="campo" type="number" name="tetto" min="0" max="100000" value="' + p.tetto_giorno + '"></label></div>' +
+      '<div class="due">' + campo('giorno', 'Pro 1 giorno') + campo('settimana', 'Pro 1 settimana') + campo('mese', 'Pro mensile') + campo('anno', 'Pro annuale') + '</div>' +
+      '<div class="fila"><button class="btn pri" type="submit">Salva piani e prezzi</button></div>' + riga('piani') + '</form></div></div>';
+
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utenti') + 'Utenti Pro<span class="dx">' + p.pro.length + '</span></div>';
+    if (!p.pro.length) h += '<p class="vuoto">Ancora nessun utente Pro.</p>';
+    else h += '<div class="scorri"><table class="tab"><thead><tr><th>Utente</th><th>Fino al</th><th>Come</th></tr></thead><tbody>' +
+      p.pro.map(function (x) {
+        var come = x.origine === 'abbonamento' && x.abbonamento ? 'abbonamento ' + (PIANI[x.abbonamento.piano] || '') + (x.abbonamento.rinnovo_annullato ? ', disdetto' : '') + (x.abbonamento.stato === 'past_due' ? ', addebito non riuscito' : '')
+          : x.origine === 'manuale' ? 'concesso a mano' : 'pass';
+        return '<tr><td><b>' + esc(x.nome) + '</b><span class="piccolo">' + esc(x.email) + '</span></td><td data-l="Fino al">' + esc(T.dataOra(x.fino)) + '</td><td data-l="Come">' + esc(come) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    h += '</div></div>';
+
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('registro') + 'Movimenti</div>';
+    if (!p.movimenti.length) h += '<p class="vuoto">Nessun pagamento ancora.</p>';
+    else h += '<div class="scorri"><table class="tab"><thead><tr><th>Quando</th><th>Utente</th><th>Cosa</th><th class="n">Importo</th></tr></thead><tbody>' +
+      p.movimenti.map(function (m) {
+        var cosa = (MOVIMENTI[m.tipo] || m.tipo) + (m.piano ? ' ' + (PIANI[m.piano] || m.piano) : '') + (m.tipo === 'stato_abbonamento' ? ': ' + m.dettagli : '');
+        return '<tr><td>' + esc(T.dataOra(m.quando)) + '</td><td data-l="Utente">' + esc(m.nome || 'utente eliminato') + (m.email ? '<span class="piccolo">' + esc(m.email) + '</span>' : '') + '</td>' +
+          '<td data-l="Cosa">' + esc(cosa) + '</td><td class="n" data-l="Importo">' + (m.importo ? esc(euro(m.importo)) : '') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    return h + '</div></div>';
+  }
+
   el.addEventListener('submit', function (ev) {
     var f = ev.target, g = f.getAttribute('data-g');
     if (!g) return;
@@ -267,8 +323,17 @@
       T.api('PUT', '/api/admin/impostazioni', {
         registrazione_aperta: !!d.get('registrazione_aperta'), approva_tutti: !!d.get('approva_tutti'),
         domini_approvati: righe('domini_approvati'), domini_bloccati: righe('domini_bloccati'),
-        quota_predefinita: parseInt(d.get('quota_predefinita'), 10) || 0, massimo_in_attesa: parseInt(d.get('massimo_in_attesa'), 10) || 1
+        massimo_in_attesa: parseInt(d.get('massimo_in_attesa'), 10) || 1
       }).then(function (r) { st.imp = r.impostazioni; msg('regole', 'Regole salvate.', true); }, function (e) { msg('regole', errore(e)); }).then(disegna);
+    } else if (g === 'piani') {
+      function cent(n) { var v = String(d.get(n) || '0').replace(/\s|€/g, '').replace(',', '.'); var x = Math.round(parseFloat(v) * 100); return isNaN(x) ? -1 : x; }
+      var prezzi = { giorno: cent('giorno'), settimana: cent('settimana'), mese: cent('mese'), anno: cent('anno') };
+      if (Object.keys(prezzi).some(function (k) { return prezzi[k] < 0; })) { msg('piani', 'Scrivi i prezzi in euro, per esempio 14,99.'); disegna(); return; }
+      T.api('PUT', '/api/admin/impostazioni', { quota_predefinita: parseInt(d.get('gratuito'), 10) || 0, pro_tetto_giorno: parseInt(d.get('tetto'), 10) || 0, prezzi: prezzi })
+        .then(function () { msg('piani', 'Piani e prezzi salvati.', true); }, function (e) { msg('piani', errore(e)); }).then(carica);
+    } else if (g === 'pro') {
+      T.api('PUT', '/api/admin/utenti/' + f.getAttribute('data-id') + '/pro', { fino: String(d.get('fino') || '') })
+        .then(function () { msg('utenti', 'Piano Pro concesso.', true); }, function (e) { msg('utenti', errore(e)); }).then(carica);
     } else if (g === 'aggiorna') {
       T.api('POST', '/api/admin/dati/aggiorna', { mese: String(d.get('mese') || '').trim() })
         .then(function (r) { msg('aggiorna', 'Aggiornamento di ' + r.mese + ' avviato: segui l\'avanzamento qui sopra.', true); }, function (e) { msg('aggiorna', errore(e)); }).then(carica);
@@ -287,6 +352,10 @@
     else if (g === 'backup') {
       b.disabled = true;
       T.api('POST', '/api/admin/backup').then(function () { msg('backup', 'Backup creato: lo trovi qui sotto.', true); }, function (e) { msg('backup', errore(e)); }).then(carica);
+    }
+    else if (g === 'pro-togli') {
+      T.api('PUT', '/api/admin/utenti/' + id + '/pro', { fino: null }).then(function () { msg('utenti', 'Concessione del Pro tolta.', true); },
+        function (e) { msg('utenti', errore(e)); }).then(carica);
     }
     else if (g === 'apri') { var n = parseInt(id, 10); st.aperto = st.aperto === n ? null : n; disegna(); }
     else if (g === 'approva') azione(id, 'approva', {}, 'richieste', 'Richiesta approvata: l\'utente è stato avvisato.').then(carica);

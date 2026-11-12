@@ -325,6 +325,34 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             return pagina(f"{_n}.html")
         app.get(f"/{_nome}", include_in_schema=False)(_vista)
 
+    @app.get("/condizioni", include_in_schema=False)
+    def condizioni() -> HTMLResponse:
+        """Condizioni di vendita del piano Pro, con i dati del venditore (taric.env) e i prezzi del pannello."""
+        from html import escape
+        with db.connessione() as c:
+            imp = db.impostazioni(c)
+        def e(x: str) -> str:
+            return escape(x, quote=True)
+        def euro(cent: int) -> str:
+            return f"{cent / 100:.2f}".replace(".", ",") + " €"
+        nomi = {"giorno": "Pro 1 giorno", "settimana": "Pro 1 settimana", "mese": "Pro mensile, al mese", "anno": "Pro annuale, all'anno"}
+        prezzi = "".join(f"<li>{nomi[k]}: <b>{euro(int(v))}</b></li>" for k, v in imp["prezzi"].items() if k in nomi and int(v) > 0)
+        email = cfg.venditore_email
+        valori = {
+            "{{VENDITORE}}": e(cfg.venditore or "Il gestore di questo sito (dati da completare in taric.env)"),
+            "{{PIVA}}": f", partita IVA {e(cfg.venditore_piva)}" if cfg.venditore_piva else "",
+            "{{INDIRIZZO}}": f", {e(cfg.venditore_indirizzo)}" if cfg.venditore_indirizzo else "",
+            "{{EMAIL}}": f'<a href="mailto:{e(email)}">{e(email)}</a>' if email else "l'indirizzo indicato dall'amministratore",
+            "{{GRATUITO}}": str(int(imp["quota_predefinita"])),
+            "{{TETTO}}": str(int(imp["pro_tetto_giorno"])) if int(imp["pro_tetto_giorno"]) else "un numero ragionevole di",
+            "{{PREZZI}}": prezzi or "<li>Al momento il piano Pro non è in vendita.</li>",
+            "{{DATA}}": e(cfg.extra.get("TARIC_CONDIZIONI_DATA", "") or "giorno della pubblicazione"),
+        }
+        html = (STATIC / "condizioni.html").read_text(encoding="utf-8")
+        for k, v in valori.items():
+            html = html.replace(k, v)
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
     @app.get("/configura", include_in_schema=False)
     def configura() -> Response:
         with db.connessione() as c:

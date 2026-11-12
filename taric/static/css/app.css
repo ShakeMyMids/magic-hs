@@ -394,6 +394,40 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
   .tab td .btn{margin-top:6px}
 }
 
+/* ================================================================ piano Gratis / Pro */
+.marca{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font:700 12.5px/1.2 var(--f);letter-spacing:.02em;background:var(--carta-2);color:var(--secondario)}
+.marca.pro,.marca-pro{background:var(--timbro-tenue);color:var(--timbro)}
+.marca-pro{display:inline-flex;padding:2px 8px;border-radius:999px;font:700 11.5px/1.3 var(--f);letter-spacing:.03em}
+.chi .marca-pro{margin-right:2px}
+.box.piano.e-pro{box-shadow:var(--ombra-alta);border-color:color-mix(in srgb,var(--timbro) 30%,var(--linea))}
+.offerta{display:flex;flex-direction:column;gap:14px;margin-top:6px;padding-top:16px;border-top:1px solid var(--linea)}
+.titolo-offerta{margin:0;font:650 17px/1.3 var(--f)}
+.tagli{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.taglio{position:relative;display:flex;flex-direction:column;gap:4px;padding:14px 16px 13px;border:1.5px solid var(--linea);border-radius:14px;background:var(--carta);cursor:pointer;
+  transition:border-color .18s,background-color .18s,box-shadow .18s,transform .12s}
+.taglio:hover{border-color:var(--linea-forte)}
+.taglio:active{transform:scale(.985)}
+.taglio input{position:absolute;opacity:0;pointer-events:none}
+.taglio:has(input:focus-visible){outline:2px solid var(--accento);outline-offset:2px}
+.taglio.scelto{border-color:var(--accento);background:var(--accento-tenue);box-shadow:0 8px 20px -16px var(--accento)}
+.t-nome{display:flex;align-items:center;gap:8px;font:600 14.5px/1.2 var(--f);color:var(--secondario)}
+.taglio.scelto .t-nome{color:var(--accento-forte)}
+.t-prezzo{font:680 26px/1.1 var(--f);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.t-prezzo small{margin-left:3px;font-size:14px;font-weight:500;color:var(--secondario)}
+.t-nota{font-size:13px;line-height:1.35;color:var(--secondario)}
+.t-badge{padding:1px 7px;border-radius:999px;background:var(--timbro-tenue);color:var(--timbro);font:700 11.5px/1.4 var(--f)}
+.offerta .spunta{display:flex;gap:9px;align-items:flex-start;font-size:14px;line-height:1.45;color:var(--secondario);max-width:80ch}
+.offerta .spunta input{margin-top:2px;flex:none}
+.offerta .fila .nota{flex:1 1 260px}
+
+/* pagine di testo (condizioni di vendita) */
+.documento .page{max-width:760px;justify-content:flex-start}
+.testo-lungo h3{margin:10px 0 -4px;font:650 17px/1.3 var(--f)}
+.testo-lungo p,.testo-lungo li{line-height:1.6;max-width:70ch}
+.testo-lungo p{margin:0}
+.box > p.tv,.box > p.tk{margin:0}
+.box > p.tk + p.tv{margin-top:8px}
+
 /* ritocchi */
 #msg:empty,.accesso #esito:empty{display:none}
 input[type="search"]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}

@@ -1,9 +1,19 @@
-"""Finto servizio IA per le prove dell'interfaccia (nessuna chiamata reale). Risponde nei formati di
-Anthropic (/v1/messages), Gemini (/v1beta/models/<modello>:generateContent) e compatibile OpenAI (/v1/chat/completions).
-Uso: python tests/finto_claude.py 9100, poi per esempio GEMINI_API_KEY=chiave-finta TARIC_IA_URL=http://127.0.0.1:9100/v1beta"""
+"""Finti servizi esterni per le prove dell'interfaccia (nessuna chiamata reale).
+- IA: risponde nei formati di Anthropic (/v1/messages), Gemini (/v1beta/models/<modello>:generateContent) e compatibile
+  OpenAI (/v1/chat/completions).
+- Stripe (/stripe/v1/...): pagine di pagamento, abbonamenti e portale clienti; aprendo /paga/<sessione> il pagamento
+  risulta fatto e si torna al sito come dopo un pagamento vero.
+Uso: python tests/finto_claude.py 9100, poi un server con GEMINI_API_KEY=chiave-finta TARIC_IA_URL=http://127.0.0.1:9100/v1beta
+TARIC_STRIPE_CHIAVE=sk_test_finta TARIC_STRIPE_URL=http://127.0.0.1:9100/stripe/v1"""
 import json
 import sys
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qsl, quote, urlsplit
+
+STRIPE = {"sessioni": {}, "abbonamenti": {}, "n": 0}
+BLOCCO = threading.Lock()
 
 
 def rispondi(prompt: str) -> object:
@@ -30,7 +40,74 @@ def rispondi(prompt: str) -> object:
 
 
 class Gestore(BaseHTTPRequestHandler):
+    # ------------------------------------------------------------------ finto Stripe
+    def _stripe(self, metodo: str) -> None:
+        if self.headers.get("authorization") != "Bearer sk_test_finta":
+            self._json(401, {"error": {"message": "Invalid API Key provided"}})
+            return
+        dati = dict(parse_qsl(self.rfile.read(int(self.headers.get("content-length", 0) or 0)).decode()))
+        percorso = urlsplit(self.path).path.removeprefix("/stripe/v1")
+        with BLOCCO:
+            if metodo == "POST" and percorso == "/checkout/sessions":
+                STRIPE["n"] += 1
+                sid = f"cs_test_finta_{STRIPE['n']}"
+                STRIPE["sessioni"][sid] = {
+                    "id": sid, "object": "checkout.session", "url": f"http://127.0.0.1:{self.server.server_port}/paga/{sid}",
+                    "mode": dati["mode"], "status": "open", "payment_status": "unpaid", "client_reference_id": dati.get("client_reference_id"),
+                    "metadata": {k[9:-1]: v for k, v in dati.items() if k.startswith("metadata[")}, "customer": dati.get("customer"),
+                    "amount_total": int(dati["line_items[0][price_data][unit_amount]"]), "currency": "eur", "subscription": None,
+                    "success_url": dati["success_url"], "cancel_url": dati["cancel_url"]}
+                self._json(200, STRIPE["sessioni"][sid])
+            elif metodo == "GET" and percorso.startswith("/checkout/sessions/"):
+                s = STRIPE["sessioni"].get(percorso.rsplit("/", 1)[1])
+                self._json(200, s) if s else self._json(404, {"error": {"message": "No such checkout session"}})
+            elif percorso.startswith("/subscriptions/"):
+                sub = STRIPE["abbonamenti"].get(percorso.rsplit("/", 1)[1])
+                if sub and metodo == "DELETE":
+                    sub.update(status="canceled", ended_at=int(time.time()))
+                self._json(200, sub) if sub else self._json(404, {"error": {"message": "No such subscription"}})
+            elif metodo == "POST" and percorso == "/billing_portal/sessions":
+                self._json(200, {"url": f"http://127.0.0.1:{self.server.server_port}/portale?torna={quote(dati['return_url'], safe='')}"})
+            else:
+                self._json(404, {"error": {"message": "sconosciuto"}})
+
+    def do_GET(self):  # noqa: N802
+        u = urlsplit(self.path)
+        if u.path.startswith("/stripe/v1/"):
+            self._stripe("GET")
+        elif u.path.startswith("/paga/"):
+            with BLOCCO:
+                s = STRIPE["sessioni"].get(u.path.rsplit("/", 1)[1])
+                if s is None:
+                    self._json(404, {"errore": "sessione sconosciuta"})
+                    return
+                s.update(status="complete", payment_status="paid", customer=s["customer"] or "cus_" + s["id"])
+                if s["mode"] == "subscription":
+                    sub = "sub_" + s["id"]
+                    STRIPE["abbonamenti"][sub] = {"id": sub, "object": "subscription", "status": "active", "customer": s["customer"],
+                                                  "metadata": dict(s["metadata"]), "cancel_at_period_end": False, "cancel_at": None,
+                                                  "current_period_end": int(time.time()) + (365 if s["metadata"].get("piano") == "anno" else 30) * 86400}
+                    s["subscription"] = sub
+            self._vai(s["success_url"].replace("{CHECKOUT_SESSION_ID}", s["id"]))
+        elif u.path == "/portale":
+            self._vai(dict(parse_qsl(u.query)).get("torna", "/"))
+        else:
+            self._json(404, {"errore": "sconosciuto"})
+
+    def do_DELETE(self):  # noqa: N802
+        self._stripe("DELETE")
+
+    def _vai(self, dove: str) -> None:
+        self.send_response(302)
+        self.send_header("location", dove)
+        self.send_header("content-length", "0")
+        self.end_headers()
+
+    # ------------------------------------------------------------------ finta IA
     def do_POST(self):  # noqa: N802
+        if self.path.startswith("/stripe/v1/"):
+            self._stripe("POST")
+            return
         corpo = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
         chiave = self.headers.get("x-api-key") or self.headers.get("x-goog-api-key") or (self.headers.get("authorization") or "").replace("Bearer ", "")
         if chiave != "chiave-finta":

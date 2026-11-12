@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Condizioni di vendita · MAGIC HS</title>
+<link rel="stylesheet" href="/static/css/app.css">
+<link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
+<meta name="theme-color" content="#dfdad0">
+</head>
+<!-- Testo di partenza: va fatto controllare da un professionista prima di vendere (vedi README, «Piani e pagamenti»).
+     I segnaposto tra doppie graffe li compila il server con i dati di taric.env e con i prezzi impostati nel pannello Gestione. -->
+<body class="accesso documento">
+<div class="page">
+  <header class="barra">
+    <a class="logo" href="/" data-marchio><span>MAGIC <b>HS</b></span></a>
+    <div class="lato"><button class="tasto-ico" type="button" id="tema" aria-label="Cambia tema"></button></div>
+  </header>
+  <main>
+    <div class="foglio"><div class="box testo-lungo">
+      <h2>Condizioni di vendita del piano Pro</h2>
+      <p class="presenta">In vigore dal {{DATA}}.</p>
+
+      <h3>Chi vende</h3>
+      <p>{{VENDITORE}}{{PIVA}}{{INDIRIZZO}}. Per qualsiasi richiesta: {{EMAIL}}.</p>
+
+      <h3>Il servizio</h3>
+      <p>MAGIC HS aiuta a cercare la voce doganale (codice TARIC a 10 cifre) di una merce e a consultare le misure applicabili. Le proposte della classificazione assistita sono generate da un modello di intelligenza artificiale e non hanno valore legale: la classificazione dichiarata resta responsabilità di chi presenta la dichiarazione, che deve verificarla su AIDA o sul TARIC dell'Unione europea, oppure chiedere un'Informazione tariffaria vincolante.</p>
+
+      <h3>Piani</h3>
+      <ul class="punti">
+        <li><b>Gratis</b>: {{GRATUITO}} richieste al mese alla classificazione assistita; nomenclatura, misure e documenti senza limiti.</li>
+        <li><b>Pro</b>: richieste alla classificazione assistita senza limite mensile, con un tetto di sicurezza di {{TETTO}} richieste nelle 24 ore contro l'uso automatico. Una classificazione usa di solito 2 o 3 richieste.</li>
+      </ul>
+
+      <h3>Prezzi e pagamento</h3>
+      <ul class="punti">{{PREZZI}}</ul>
+      <p>I prezzi sono in euro, IVA inclusa. Il pagamento avviene con carta sulla pagina sicura di Stripe; i dati della carta non passano da MAGIC HS. I pass da 1 giorno e da 1 settimana si pagano una volta e non si rinnovano; acquistandone un altro mentre il Pro è attivo, la durata si somma. Gli abbonamenti mensile e annuale si rinnovano da soli alla fine di ogni periodo, allo stesso prezzo, finché non li disdici.</p>
+
+      <h3>Disdetta</h3>
+      <p>Puoi disdire l'abbonamento in qualsiasi momento da Profilo, «Gestisci abbonamento e fatture». Il Pro resta attivo fino alla fine del periodo già pagato e non ci sono altri addebiti.</p>
+
+      <h3>Diritto di recesso</h3>
+      <p>Se acquisti come consumatore hai 14 giorni dall'acquisto per recedere scrivendo a {{EMAIL}}. Al momento dell'acquisto chiedi espressamente che il servizio inizi subito: se il servizio è stato interamente fornito prima della fine dei 14 giorni (per esempio un pass da 1 giorno già scaduto) il diritto di recesso non si applica; se recedi da un abbonamento prima della fine dei 14 giorni, ti viene rimborsato il prezzo meno la parte di servizio già fornita. Chi acquista per la propria attività professionale (con partita IVA) non ha diritto di recesso.</p>
+
+      <h3>Disponibilità e responsabilità</h3>
+      <p>Il servizio è offerto con la massima cura, ma può avere interruzioni per manutenzione o problemi tecnici, propri o dei fornitori (hosting, servizio di intelligenza artificiale, pagamenti). I dati TARIC vengono aggiornati ogni mese dall'estrazione pubblicata dalla Commissione europea. Fatti salvi i casi di dolo o colpa grave e i diritti inderogabili del consumatore, il venditore non risponde dei danni derivanti dall'uso delle proposte di classificazione.</p>
+
+      <h3>Dati personali</h3>
+      <p>Per il piano Pro vengono conservati il tuo account, la scadenza del piano e lo storico dei pagamenti. I dati di pagamento sono trattati da Stripe come titolare autonomo. Le descrizioni delle merci che chiedi di classificare vengono inviate al servizio di intelligenza artificiale per ottenere la proposta.</p>
+
+      <h3>Legge applicabile</h3>
+      <p>Queste condizioni sono regolate dalla legge italiana. Per i consumatori è competente il foro del luogo di residenza o domicilio del consumatore.</p>
+    </div></div>
+  </main>
+  <footer class="piede"><p>Strumento non ufficiale, senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.</p></footer>
+</div>
+<script src="/static/js/icone.js"></script>
+<script src="/static/js/comune.js"></script>
+</body>
+</html>
