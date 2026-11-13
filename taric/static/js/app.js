@@ -295,6 +295,7 @@ function cercaOra() {
     state.anima = true; state.risChiusi = true; renderAll(); qEl.blur(); return;
   }
   state.risChiusi = false; renderRisultati(); renderMsg(); qEl.blur();
+  if (!cerca(q).length) segnalaVuota(q, true);
   var r = $('#risultati'); if (r && !r.hidden && r.scrollIntoView) r.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function rigaRisultato(i, n) {
@@ -318,6 +319,7 @@ function renderRisultati() {
   }
   var ponte = (testuale && state.utente && state.utente.ia && state.utente.ia.configurata) ? '<button class="btn sm" type="button" data-act="chiedi">' + T.icona('scintille') + 'Classifica con l\'IA</button>' : '';
   h = '<div class="box ris-box' + (nuovi ? ' arriva' : '') + '"><div class="lab">' + T.icona('cerca') + 'Risultati<span class="dx">' + (res.length === 150 ? 'più di 150' : res.length) + '</span></div><div class="albero">';
+  if (!res.length && testuale) segnalaVuota(q, false);
   if (!res.length) h += '<div class="trow info"><span class="txt nota">Nessun risultato. ' +
     (testuale ? 'La nomenclatura usa termini suoi (per esempio «foratrici» per i trapani): prova un\'altra parola' + (ponte ? ' oppure fai classificare la merce all\'IA.' : '.') : 'Controlla le cifre del codice.') + '</span>' + ponte + '</div>';
   h += res.slice(0, state.risTutti ? res.length : MOSTRATI).map(rigaRisultato).join('');
@@ -1040,36 +1042,55 @@ var VUOTE = {};
 /* singolare e plurale hanno la stessa radice: per le parole più lunghe si toglie la vocale finale («bicicletta» trova
    anche «biciclette», «orologio» trova «orologi», «fungo» trova «funghi») */
 function radice(t) { return (t.length >= 4 && /^[a-z]+$/.test(t)) ? t.replace(/[aeio]$/, '') : t; }
-/* sinonimi (js/sinonimi.js) per radice: «scarpe» e «scarpa» portano entrambe a «calzature» */
-var SIN = null;
+/* sinonimi per radice: «scarpe» e «scarpa» portano entrambe a «calzature». Quelli di js/sinonimi.js e quelli aggiunti
+   dall'amministratore in Gestione › Ricerca (/api/sinonimi) */
+var SIN = null, SIN_AGGIUNTI = {};
 function sinonimiDi(r) {
   if (!SIN) {
     SIN = {};
-    var s = window.TARIC_SINONIMI || {};
-    Object.keys(s).forEach(function (k) {
-      var c = radice(piano(k).trim());
-      SIN[c] = (SIN[c] || []).concat(s[k].map(function (x) { return piano(x).trim(); }));
+    [window.TARIC_SINONIMI || {}, SIN_AGGIUNTI].forEach(function (s) {
+      Object.keys(s).forEach(function (k) {
+        var c = radice(piano(k).trim());
+        SIN[c] = (SIN[c] || []).concat(s[k].map(function (x) { return piano(x).trim(); }));
+      });
     });
   }
   return SIN[r] || [];
 }
+function caricaSinonimi() {
+  return T.api('GET', '/api/sinonimi').then(function (r) { SIN_AGGIUNTI = r.sinonimi || {}; SIN = null; if (state.avviato) renderRisultati(); },
+    function () { /* restano quelli del file */ });
+}
+/* ricerche senza risultati: arrivano all'amministratore (senza nome) per aggiungere sinonimi */
+var segnalate = {}, vuotaT = null;
+function segnalaVuota(q, subito) {
+  clearTimeout(vuotaT);
+  var k = piano(q).trim();
+  if (k.length < 3 || segnalate[k]) return;
+  vuotaT = setTimeout(function () {
+    if (piano($('#q').value).trim() !== k || state.modo !== 'parole') return;        // nel frattempo la ricerca è cambiata
+    segnalate[k] = 1;
+    T.api('POST', '/api/ricerche-vuote', { testo: k }).catch(function () { /* niente */ });
+  }, subito ? 0 : 2500);
+}
 /* punteggio di una parola (o espressione) in un testo già «piano»: più basso è meglio, -1 = assente. Un sinonimo vale
-   solo come parola intera o inizio di parola e viene un po' dopo la parola cercata. */
+   solo come parola intera o inizio di parola e viene un po' dopo la parola cercata. I pesi sono tarati su un banco di
+   prova di ricerche comuni (parola intera prima di tutto, poi inizio di parola o altra desinenza, poi il resto). */
 function parolaCercata(parola, sinonimo) {
   var extra = sinonimo ? 1 : 0;
-  if (parola.indexOf(' ') >= 0) return function (t) { var p = t.indexOf(' ' + parola); return p < 0 ? -1 : 1 + (p > 0 ? 2 : 0) + extra; };
+  if (parola.indexOf(' ') >= 0) return function (t) { var p = t.indexOf(' ' + parola); return p < 0 ? -1 : 2 + (p > 0 ? 3 : 0) + extra; };
   var r = radice(parola), forma = new RegExp(' ' + r + '(?:[aeio]|io|h[ei])? ');
   return function (t) {
     var pos = t.indexOf(' ' + parola + ' '), sc = 0, mm;                         // la parola stessa
     if (pos < 0) {
-      if ((pos = t.indexOf(' ' + parola)) >= 0) sc += 1;                         // inizio di una parola
-      else if ((mm = forma.exec(t))) { pos = mm.index; sc += 1; }                // stessa parola, altra desinenza
+      if ((pos = t.indexOf(' ' + parola)) >= 0) sc += 2;                         // inizio di una parola
+      else if ((mm = forma.exec(t))) { pos = mm.index; sc += 2; }                // stessa parola, altra desinenza
       else if (sinonimo) return -1;
-      else if ((pos = t.indexOf(' ' + r)) >= 0) sc += 3;                         // stessa radice, parola più lunga
-      else if ((pos = t.indexOf(r)) >= 0) sc += 5;                               // dentro una parola
+      else if ((pos = t.indexOf(' ' + r)) >= 0) sc += 8;                         // stessa radice, parola più lunga
+      else if ((pos = t.indexOf(r)) >= 0) sc += 12;                              // dentro una parola
       else return -1;
     }
-    return sc + (pos > 0 ? 2 : 0) + extra;
+    return sc + (pos > 0 ? 3 : 0) + extra;
   };
 }
 function cerca(q) {
@@ -1093,7 +1114,7 @@ function cerca(q) {
       for (var n = 0; n < alt[m].length; n++) { var p = alt[m][n](t); if (p >= 0 && (best < 0 || p < best)) best = p; }
       if (best < 0) ok = false; else sc += best;
     }
-    if (ok) hits.push([sc + HP[j] / 2 + Math.min(t.length, 200) / 40, j]);
+    if (ok) hits.push([sc + HP[j] * 0.35 + Math.min(t.length, 200) / 40, j]);         // a parità, prima le voci più generali e brevi
   }
   hits.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
   return hits.slice(0, 150).map(function (x) { return x[1]; });
@@ -1260,6 +1281,7 @@ T.app = {
   dati: function () { return { iso: DATA_ISO, it: DATA_IT }; },
   utente: function () { return state.utente; },
   aggiornaIo: aggiornaIo,
+  caricaSinonimi: caricaSinonimi,
   preferiti: state.preferiti,
   vista: vista,
   apriCodice: function (c) {
@@ -1304,6 +1326,7 @@ function avvia() {
     state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
     try { state.modo = localStorage.getItem('magic-hs.modo') === 'ia' ? 'ia' : 'parole'; } catch (e) { /* senza archivio: ricerca per parole */ }
     impostaIA();
+    caricaSinonimi();
     return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
   }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
 }

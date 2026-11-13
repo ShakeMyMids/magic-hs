@@ -143,6 +143,23 @@ SCHEMA = [
     ALTER TABLE uso_ia ADD COLUMN token_cache INTEGER NOT NULL DEFAULT 0;
     CREATE INDEX uso_ia_operazione ON uso_ia(utente_id, operazione);
     """,
+    # versione 4: parole cercate senza risultati (anonime), sinonimi aggiunti in Gestione, archivio aziendale (storico condiviso)
+    """
+    CREATE TABLE ricerche_vuote (
+        testo TEXT PRIMARY KEY,
+        volte INTEGER NOT NULL DEFAULT 1,
+        prima TEXT NOT NULL,
+        ultima TEXT NOT NULL
+    );
+    CREATE TABLE sinonimi (
+        parola TEXT PRIMARY KEY,
+        termini TEXT NOT NULL,
+        autore_id INTEGER REFERENCES utenti(id) ON DELETE SET NULL,
+        quando TEXT NOT NULL
+    );
+    ALTER TABLE storico ADD COLUMN condivisa INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX storico_condivisa ON storico(condivisa, id);
+    """,
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {

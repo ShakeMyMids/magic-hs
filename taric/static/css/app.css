@@ -560,6 +560,8 @@ html.con-finestra{overflow:hidden}
 .tab tr.dettaglio td{padding:0 0 14px;border-top:0}
 .pannello{display:grid;gap:10px;padding:12px 14px;border-radius:var(--r-m);background:var(--carta-2);border:1px solid var(--linea)}
 .pannello form.fila{align-items:flex-end}
+.campo.corto{flex:0 1 210px}
+.voce form.fila{margin-top:8px}
 .pannello label.corto{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--secondario)}
 .pannello label.corto .campo{width:140px;flex:none}
 .pannello .campo[readonly]{flex:1 1 260px;font-size:13px}

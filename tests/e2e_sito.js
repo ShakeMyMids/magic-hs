@@ -91,6 +91,7 @@ async function accedi(p, email, password) {
   await capo.waitForSelector('#esito >> text=Sottovoci');
   ok(true, 'codice digitato: si apre con le sottovoci');
   await capo.fill('#q', 'qwzxj'); await capo.waitForSelector('#risultati >> text=Nessun risultato');
+  await capo.press('#q', 'Enter');                                       // la ricerca vuota arriva all'amministratore
   ok(await capo.isVisible('#risultati [data-act="chiedi"]'), "nessun risultato: proposta di classificare con l'IA");
   await capo.click('#interruttore-ia');
   ok((await capo.textContent('#titolo-q')) === 'Che merce devi classificare?' && (await capo.textContent('#vai')).trim() === 'Classifica' && await capo.isHidden('#risultati'),
@@ -102,7 +103,23 @@ async function accedi(p, email, password) {
   await capo.click('#tab-gestione');
   await capo.waitForSelector('button[data-g="u-apri"]');
   ok((await capo.$$('button[data-g="u-apri"]')).length === 1 && await capo.isVisible('td >> text=capo@azienda.it'), 'in Utenti c\'è l\'amministratore');
-  ok((await capo.$$('.sotto button')).length === 4, 'Utenti, IA, Dati TARIC, Registro');
+  ok((await capo.$$('.sotto button')).length === 5, 'Utenti, IA, Dati TARIC, Ricerca, Registro');
+
+  // parole cercate senza risultati e sinonimo aggiunto dall'amministratore
+  await capo.click('button[data-v="ricerca"]');
+  await capo.waitForSelector('text=«qwzxj»');
+  ok(true, 'Ricerca: la parola senza risultati arriva in Gestione');
+  await capo.fill('form[data-g="sinonimo"][data-parola=""] input[name="parola"]', 'muletto');
+  await capo.fill('form[data-g="sinonimo"][data-parola=""] input[name="termini"]', 'zxqvwk');
+  await capo.click('form[data-g="sinonimo"][data-parola=""] button[type=submit]');
+  await capo.waitForSelector('text=Nella nomenclatura non c\'è: «zxqvwk»');
+  ok(true, 'sinonimo con un termine che non esiste: rifiutato');
+  await capo.fill('form[data-g="sinonimo"][data-parola=""] input[name="termini"]', 'carrelli');
+  await capo.click('form[data-g="sinonimo"][data-parola=""] button[type=submit]');
+  await capo.waitForSelector('text=Sinonimo salvato');
+  await capo.click('#tab-classifica'); await cerca(capo, 'muletto');
+  ok(await capo.isVisible('#risultati >> text=Carrelli-elevatori'), 'il sinonimo aggiunto vale subito: «muletto» trova i carrelli elevatori');
+  await capo.fill('#q', ''); await capo.click('#tab-gestione'); await capo.click('button[data-v="utenti"]');
   await capo.click('button[data-v="ia"]');
   await capo.waitForSelector('form[data-g="s-limiti"]');
   ok(await capo.isVisible('text=finto-modello'), 'IA unica del server attiva');
@@ -157,9 +174,9 @@ async function accedi(p, email, password) {
   await luca.screenshot({ path: out + '/5-profilo.png', fullPage: true });
 
   // password dimenticata: link preparato dall'amministratore
-  await capo.click('button[data-v="utenti"]'); await capo.waitForSelector('button[data-g="u-apri"]');
-  const righe = await capo.$$('button[data-g="u-apri"]');
-  for (const r of righe) { const tr = await r.evaluateHandle(e => e.closest('tr')); if ((await tr.evaluate(e => e.textContent)).includes('luca@azienda.it')) { await r.click(); break; } }
+  await capo.click('button[data-v="utenti"]');
+  // selettore stabile: la tabella si ridisegna quando arrivano i dati, un riferimento all'elemento si perderebbe
+  await capo.click('tr:has-text("luca@azienda.it") button[data-g="u-apri"]');
   await capo.click('button[data-g="u-link"]');
   await capo.waitForSelector('[data-g="link-campo"]');
   const link = await capo.inputValue('[data-g="link-campo"]');

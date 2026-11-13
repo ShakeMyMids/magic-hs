@@ -33,6 +33,7 @@ from .config import Config
 from .dati import GestoreDati
 from .db import Database, iso
 from .ia import ErroreIA, ServizioIA, mese_corrente
+from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
 
 log = logging.getLogger("taric")
 STATIC = Path(__file__).with_name("static")
@@ -107,6 +108,15 @@ class Mese(BaseModel):
 
 class Versione(BaseModel):
     versione: str = Field(pattern=r"^\d{4}-\d{2}-01$")
+
+
+# ricerca per parole: parole senza risultati e sinonimi aggiunti dall'amministratore
+class RicercaVuota(BaseModel):
+    testo: str = Field(min_length=1, max_length=200)
+
+
+class Sinonimo(BaseModel):
+    termini: list[str] = Field(min_length=1, max_length=6)
 
 
 # account, accesso e gestione degli utenti
@@ -726,6 +736,73 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 np += c.execute("INSERT INTO preferiti(utente_id, codice, nota, quando) VALUES (?, ?, ?, ?) ON CONFLICT(utente_id, codice) DO NOTHING",
                                 (u["id"], codice, str(p.get("nota") or "").strip()[:500], str(p.get("quando") or iso())[:40])).rowcount
         return json_ok(storico=nuove, preferiti=np)
+
+    # ------------------------------------------------------------------ ricerca per parole: sinonimi e parole senza risultati
+    @app.get("/api/sinonimi")
+    def sinonimi(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Sinonimi aggiunti in Gestione: si sommano a quelli di js/sinonimi.js."""
+        with db.connessione() as c:
+            return {"sinonimi": {r["parola"]: json.loads(r["termini"]) for r in c.execute("SELECT parola, termini FROM sinonimi ORDER BY parola")}}
+
+    @app.post("/api/ricerche-vuote")
+    def ricerca_vuota(body: RicercaVuota, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Una ricerca per parole senza risultati, senza dire chi l'ha fatta: l'amministratore ne ricava i sinonimi."""
+        testo = piano(body.testo).strip()[:80]
+        if len(testo) < 3 or not re.search(r"[a-z]", testo):
+            return json_ok()
+        adesso = iso()
+        with db.transazione() as c:
+            c.execute("INSERT INTO ricerche_vuote(testo, volte, prima, ultima) VALUES (?, 1, ?, ?) "
+                      "ON CONFLICT(testo) DO UPDATE SET volte = volte + 1, ultima = excluded.ultima", (testo, adesso, adesso))
+            c.execute("DELETE FROM ricerche_vuote WHERE testo NOT IN (SELECT testo FROM ricerche_vuote ORDER BY ultima DESC LIMIT 1000)")
+        return json_ok()
+
+    @app.get("/api/admin/ricerca")
+    def admin_ricerca(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.connessione() as c:
+            vuote = [dict(r) for r in c.execute("SELECT testo, volte, prima, ultima FROM ricerche_vuote ORDER BY volte DESC, ultima DESC LIMIT 200")]
+            sin = [{"parola": r["parola"], "termini": json.loads(r["termini"]), "quando": r["quando"], "autore": r["nome"] or ""}
+                   for r in c.execute("SELECT s.parola, s.termini, s.quando, u.nome FROM sinonimi s LEFT JOIN utenti u ON u.id = s.autore_id ORDER BY s.parola")]
+        return {"vuote": vuote, "sinonimi": sin}
+
+    @app.put("/api/admin/sinonimi/{parola}")
+    def metti_sinonimo(parola: str, body: Sinonimo, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        chiave = piano(parola).strip()
+        if not RE_PAROLA.fullmatch(chiave) or len(chiave) < 2 or len(chiave) > 40:
+            raise Errore(422, "Il sinonimo vale per una sola parola, come «muletto».", "parola")
+        termini = list(dict.fromkeys(piano(x).strip() for x in body.termini if piano(x).strip()))
+        if not termini or any(len(x) > 60 for x in termini):
+            raise Errore(422, "Scrivi uno o più termini della nomenclatura, separati da virgole.", "termini")
+        v = dati.attiva()
+        if v:                               # ogni termine deve portare a qualcosa, come i sinonimi di js/sinonimi.js
+            testi = testi_nomenclatura(dati.versioni / v / "nomenclatura.js")
+            mancano = [x for x in termini if not presente(testi, x)]
+            if mancano:
+                raise Errore(422, "Nella nomenclatura non c'è: " + ", ".join(f"«{x}»" for x in mancano) + ". Usa le parole del testo ufficiale.", "termini")
+        with db.transazione() as c:
+            c.execute("INSERT INTO sinonimi(parola, termini, autore_id, quando) VALUES (?, ?, ?, ?) "
+                      "ON CONFLICT(parola) DO UPDATE SET termini = excluded.termini, autore_id = excluded.autore_id, quando = excluded.quando",
+                      (chiave, json.dumps(termini, ensure_ascii=False), a["id"], iso()))
+            c.execute("DELETE FROM ricerche_vuote WHERE testo = ?", (chiave,))
+            db.evento(c, "sinonimo", autore_id=a["id"], dettagli=f"{chiave} -> {', '.join(termini)}")
+        return json_ok(parola=chiave, termini=termini)
+
+    @app.delete("/api/admin/sinonimi/{parola}")
+    def togli_sinonimo(parola: str, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.transazione() as c:
+            n = c.execute("DELETE FROM sinonimi WHERE parola = ?", (piano(parola).strip(),)).rowcount
+            if n:
+                db.evento(c, "sinonimo_tolto", autore_id=a["id"], dettagli=piano(parola).strip())
+        return json_ok(tolti=n)
+
+    @app.delete("/api/admin/ricerche-vuote")
+    def svuota_ricerche(testo: str = "", a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.transazione() as c:
+            if testo:
+                n = c.execute("DELETE FROM ricerche_vuote WHERE testo = ?", (piano(testo).strip(),)).rowcount
+            else:
+                n = c.execute("DELETE FROM ricerche_vuote").rowcount
+        return json_ok(tolte=n)
 
     # ------------------------------------------------------------------ IA
     @app.post("/api/ia")

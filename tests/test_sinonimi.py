@@ -4,30 +4,12 @@ from __future__ import annotations
 
 import json
 import re
-import unicodedata
 from pathlib import Path
+
+from taric.ricerca import piano, presente
 
 RADICE = Path(__file__).resolve().parents[1]
 STATICO = RADICE / "taric" / "static"
-
-
-def piano(s: str) -> str:
-    """Come piano() di app.js: minuscole, senza accenti, parole separate da uno spazio, uno spazio ai due lati."""
-    s = "".join(c for c in unicodedata.normalize("NFD", s.lower()) if unicodedata.category(c) != "Mn")
-    return " " + re.sub(r"[^a-z0-9]+", " ", s).strip() + " "
-
-
-def radice(t: str) -> str:
-    return re.sub(r"[aeio]$", "", t) if len(t) >= 4 and re.fullmatch(r"[a-z]+", t) else t
-
-
-def trovato(testi: list[str], termine: str) -> bool:
-    """Come parolaCercata(termine, true) di app.js: espressione cosi' com'e', oppure parola intera, inizio di parola o
-    stessa parola con un'altra desinenza."""
-    if " " in termine:
-        return any(" " + termine in t for t in testi)
-    forma = re.compile(" " + radice(termine) + r"(?:[aeio]|io|h[ei])? ")
-    return any(" " + termine in t or forma.search(t) for t in testi)
 
 
 def sinonimi() -> dict[str, list[str]]:
@@ -56,7 +38,7 @@ def test_sinonimi_validi_e_presenti_nella_nomenclatura():
     for chiave, termini in d.items():
         assert re.fullmatch(r"[a-z0-9]+", piano(chiave).strip()), f"una sola parola come chiave: {chiave!r}"
         assert isinstance(termini, list) and termini and all(isinstance(x, str) and x.strip() for x in termini), chiave
-        mancano += [f"{chiave} -> {x}" for x in termini if not trovato(testi, piano(x).strip())]
+        mancano += [f"{chiave} -> {x}" for x in termini if not presente(testi, x)]
     assert not mancano, mancano
 
 
