@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>Accedi · MAGIC HS</title>
+<link rel="stylesheet" href="/static/css/app.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#e1e6eb">
+</head>
+<body class="accesso" data-pagina="accedi">
+<div class="page">
+  <header class="barra">
+    <span class="logo" data-marchio><span>MAGIC <b>HS</b></span></span>
+    <div class="lato"><button class="tasto-ico" type="button" id="tema" aria-label="Cambia tema"></button></div>
+  </header>
+  <main>
+    <div class="foglio"><div class="box">
+      <div class="scena" data-scena></div>
+      <div class="sotto" role="tablist">
+        <button class="btn sm" type="button" data-a="accedi" aria-current="page">Accedi</button>
+        <button class="btn sm" type="button" data-a="richiedi">Richiedi un account</button>
+      </div>
+
+      <form class="modulo" id="accedi" novalidate>
+        <label>Email<input class="campo" type="email" name="email" autocomplete="username" required></label>
+        <label>Password<input class="campo" type="password" name="password" autocomplete="current-password" required></label>
+        <label class="spunta"><input type="checkbox" name="ricordami" checked> Resta collegato su questo dispositivo</label>
+        <div class="fila"><button class="btn pri" type="submit">Accedi</button></div>
+        <p class="nota">Password dimenticata? Chiedi all'amministratore di MAGIC HS un link per sceglierne una nuova.</p>
+      </form>
+
+      <form class="modulo" id="richiedi" novalidate hidden>
+        <p class="nota" id="richiedi-nota">L'amministratore riceve la richiesta: quando la approva puoi accedere con la tua email e la password scelta qui.</p>
+        <div class="due">
+          <label>Nome e cognome<input class="campo" name="nome" autocomplete="name" required minlength="2" maxlength="100"></label>
+          <label>Azienda o ufficio<input class="campo" name="azienda" autocomplete="organization" maxlength="150"></label>
+        </div>
+        <label>Email<input class="campo" type="email" name="email" autocomplete="email" required></label>
+        <label>Password (almeno 10 caratteri)<input class="campo" type="password" name="password" autocomplete="new-password" required minlength="10"></label>
+        <label>Messaggio per l'amministratore (facoltativo)<textarea class="campo" name="richiesta" rows="2" maxlength="1000" placeholder="Per esempio il tuo reparto"></textarea></label>
+        <label class="trappola" aria-hidden="true">Sito web<input name="sito_web" tabindex="-1" autocomplete="off"></label>
+        <div class="fila"><button class="btn pri" type="submit">Invia la richiesta</button></div>
+      </form>
+      <div id="esito" role="alert"></div>
+    </div></div>
+  </main>
+  <footer class="piede"><p>Strumento non ufficiale, senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.</p></footer>
+</div>
+<script src="/static/js/icone.js"></script>
+<script src="/static/js/disegni.js"></script>
+<script src="/static/js/comune.js"></script>
+<script src="/static/js/accesso.js"></script>
+</body>
+</html>

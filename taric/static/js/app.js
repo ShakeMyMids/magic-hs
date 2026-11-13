@@ -245,16 +245,16 @@ function creaIA() {
   };
 }
 function impostaIA() {
-  var ia = state.utente && state.utente.ia;
+  var u = state.utente, ia = u && u.ia, intanto = ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
   sampleFn = null; state.ai = 'no';
-  if (!ia || !ia.disponibile) state.aiMotivo = 'La classificazione assistita non è attiva: scegli un servizio di intelligenza artificiale in Impostazioni.' +
-    ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
+  if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva: ' +
+    (u && u.server ? (u.ruolo === 'amministratore' ? 'inserisci la chiave di Gemini nel servizio su Render (Gestione, «Intelligenza artificiale»).'
+      : 'la deve attivare l\'amministratore di MAGIC HS.') : 'scegli un servizio di intelligenza artificiale in Impostazioni.') + intanto;
+  else if (ia.tetto) state.aiMotivo = 'Questo mese le classificazioni con l\'IA sono finite per tutti: chiedi all\'amministratore.' + intanto;
+  else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi all\'amministratore.' + intanto;
+  else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' classificazioni con l\'IA di questo mese: ' +
+    'per averne altre chiedi all\'amministratore. Nomenclatura e misure restano consultabili.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
-}
-/* IA non attiva: la guida alla chiave gratuita di Gemini (js/attiva-ia.js) */
-function pulsanteGuida() {
-  var ia = state.utente && state.utente.ia;
-  return ia && !ia.configurata && T.guidaGemini ? '<div class="fila"><button class="btn sm" type="button" data-act="guida-ia">' + T.icona('scintille') + 'Attivala gratis con Google Gemini</button></div>' : '';
 }
 function aggiornaIo() {
   return T.api('GET', '/api/io').then(function (u) { state.utente = u; impostaIA(); renderMsg(); return u; }, function () { return state.utente; });
@@ -829,9 +829,9 @@ function renderStato() {
 }
 function renderMsg() {
   var h = '';
-  if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>' + (state.error === state.aiMotivo ? pulsanteGuida() : '');
+  if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>';
   var ia = state.utente && state.utente.ia;
-  if (state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>' + pulsanteGuida();
+  if (state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
   if (state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Classificazioni con l\'IA questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
   $('#msg').innerHTML = h;
 }
@@ -1082,7 +1082,6 @@ document.addEventListener('click', function (ev) {
     state.qmsg = ''; state.answers = state.answers.concat(add); renderFornite(); classifica(true);
   }
   else if (act === 'traduci') traduci();
-  else if (act === 'guida-ia') { if (T.guidaGemini) T.guidaGemini(); }
   else if (act === 'preferito') {
     var pc = t.getAttribute('data-c'), cera = state.preferiti[pc];
     if (cera) delete state.preferiti[pc]; else state.preferiti[pc] = { nota: '' };
@@ -1183,10 +1182,12 @@ document.addEventListener('taric:tema', function (ev) {
   T.api('PUT', '/api/io/preferenze', { paese: u.preferenze.paese || '', flusso: u.preferenze.flusso || 'import', tema: ev.detail }).catch(function () { /* resta solo su questo dispositivo */ });
 });
 
-if (T.web) $('#esci').hidden = true;          // sito: non c'è un programma da chiudere
-else $('#esci').addEventListener('click', function () {
+/* sito: esce dall'account; programma per Windows: chiude il programma */
+$('#esci').addEventListener('click', function () {
+  if (T.server) { T.api('POST', '/api/esci', null, { resta: true }).then(vaiAllAccesso, vaiAllAccesso); return; }
   T.api('POST', '/api/locale/chiudi', null, { resta: true }).then(function () { chiuso(false); }, function () { chiuso(true); });
 });
+function vaiAllAccesso() { location.href = '/accedi'; }
 
 /* il programma si chiude da solo quando non si usa; la pagina lo tiene vivo e avvisa se non c'è più */
 function chiuso(daSolo) {
@@ -1214,12 +1215,24 @@ function tieniVivo() {
 function avvia() {
   T.api('GET', '/api/io').then(function (u) {
     state.utente = u;
+    T.server = !!u.server;
     $('#chi-nome').textContent = u.nome;
     $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
-    $('#chi-iniziali').parentNode.title = u.nome;
-    if (!T.web) tieniVivo();
+    $('#chi-iniziali').parentNode.title = u.nome + (u.email ? ' · ' + u.email : '');
     $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
-    if (!T.web && u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Impostazioni se c'è una versione nuova
+    if (T.server) {
+      $('#esci').title = 'Esci'; $('#esci').setAttribute('aria-label', 'Esci da MAGIC HS'); $('#esci').innerHTML = T.icona('esci');
+      $('#tab-gestione').lastChild.textContent = 'Gestione';
+      if (u.ruolo === 'amministratore' && T.segnaRichieste) T.segnaRichieste();      // puntino sulla scheda Gestione per le richieste da approvare
+    } else {
+      // ultima versione del programma per Windows: MAGIC HS diventa un sito
+      var nota = document.createElement('p');
+      nota.className = 'nota trasloco';
+      nota.innerHTML = T.icona('info') + '<span><b>MAGIC HS diventa un sito</b>: chiedi l\'indirizzo a chi gestisce MAGIC HS. Storico e preferiti si portano lì con Profilo › I tuoi dati › Esporta.</span>';
+      $('#view-classifica .domanda').appendChild(nota);
+      tieniVivo();
+      if (u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Impostazioni se c'è una versione nuova
+    }
     T.tema(u.preferenze.tema);
     state.country = u.preferenze.paese || '';
     state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';

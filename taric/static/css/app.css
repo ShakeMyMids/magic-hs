@@ -466,9 +466,20 @@ html.con-finestra{overflow:hidden}
 .passi li::marker{color:var(--accento-forte);font-weight:650}
 .passi .fila{margin-top:8px}
 .passi form .campo{flex:1 1 200px}
-.da-sapere{display:grid;gap:6px;padding-top:12px;border-top:1px solid var(--linea)}
 .box.invito{border-color:color-mix(in srgb,var(--d-cont-1) 45%,var(--linea));background:linear-gradient(135deg,color-mix(in srgb,var(--d-cont-1) 9%,var(--carta)),var(--carta) 60%)}
 .box.invito .lab .ico{color:var(--d-cont-1)}
+
+/* programma per Windows: avviso del passaggio al sito */
+.nota.trasloco{display:flex;gap:8px;align-items:flex-start;margin:0;padding:10px 12px;border-radius:var(--r-m);background:var(--carta-2);border:1px solid var(--linea)}
+.nota.trasloco .ico{flex:none;width:18px;height:18px;margin-top:1px;color:var(--accento)}
+
+/* gestione degli utenti del sito: pannello sotto la riga della persona */
+.tab tr.dettaglio td{padding:0 0 14px;border-top:0}
+.pannello{display:grid;gap:10px;padding:12px 14px;border-radius:var(--r-m);background:var(--carta-2);border:1px solid var(--linea)}
+.pannello form.fila{align-items:flex-end}
+.pannello label.corto{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--secondario)}
+.pannello label.corto .campo{width:140px;flex:none}
+.pannello .campo[readonly]{flex:1 1 260px;font-size:13px}
 
 /* festa: la gru carica sulla nave il container dell'IA, che si illumina; sirena, timbro e la nave salpa.
    Lo stato finale è quello senza animazioni (movimento ridotto) */

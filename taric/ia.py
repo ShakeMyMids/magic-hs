@@ -198,6 +198,11 @@ class ServizioIA:
         q = self.db.impostazioni(c)["quota_predefinita"]
         return None if q is None else int(q)
 
+    def tetto_raggiunto(self, c: sqlite3.Connection) -> bool:
+        """Sito: le classificazioni del mese di tutti insieme hanno raggiunto il tetto scelto dall'amministratore."""
+        tetto = self.db.impostazioni(c)["tetto_mese"]
+        return tetto is not None and self.uso_mese(c)["classificazioni"] >= int(tetto)
+
     @staticmethod
     def usate(c: sqlite3.Connection, utente_id: int, mese: str | None = None) -> int:
         """Classificazioni del mese che hanno raggiunto il servizio (anche se la risposta non era utilizzabile).
@@ -259,6 +264,8 @@ class ServizioIA:
                     raise ErroreIA("rate_limited", 429)
                 if not gia and lim is not None and self.usate(c, uid) >= lim:
                     raise ErroreIA("quota_esaurita", 429)
+                if not gia and self.tetto_raggiunto(c):
+                    raise ErroreIA("tetto_raggiunto", 429)
         with self._lock:
             if self._in_corso.get(uid, 0) >= 2:
                 raise ErroreIA("rate_limited", 429)

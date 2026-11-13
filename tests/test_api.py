@@ -36,7 +36,7 @@ def test_ia_risponde_json_e_conta_le_classificazioni(pc: PC):
     assert c.post("/api/ia", json={"prompt": "x", "livello": "standard", "operazione": "cl-1"}).json()["risultato"] == [1, 2]
     assert pc.claude.richieste[1]["corpo"]["model"] == "claude-sonnet-5-5"
     assert c.get("/api/io").json()["ia"] | {"mese": ""} == {"disponibile": True, "configurata": True, "nome": "Claude (Anthropic)",
-                                                            "limite": None, "usate": 1, "mese": ""}
+                                                            "limite": None, "usate": 1, "mese": "", "tetto": False}
     for k in range(3):                                                    # nessun limite mensile
         assert c.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": f"cl-{k + 2}"}).status_code == 200
     assert c.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": "tr-1", "tipo": "traduzione"}).status_code == 200

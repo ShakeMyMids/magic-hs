@@ -34,10 +34,7 @@ function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } els
   await p.waitForSelector('text=scegli un servizio di intelligenza artificiale in Impostazioni');
   ok(true, 'senza IA: dove sceglierla');
   await p.screenshot({ path: out + '/1-classifica-senza-ia.png' });
-  await p.click('[data-act="guida-ia"]');
-  await p.waitForSelector('.finestra.guida >> text=Resta su questo PC, protetta da Windows.');
-  await p.keyboard.press('Escape');
-  ok(!(await p.$('.velo')), 'guida alla chiave di Gemini, chiusa con Esc');
+  ok(await p.isVisible('.trasloco >> text=MAGIC HS diventa un sito'), 'avviso del passaggio al sito');
   await p.fill('#q', '');
   // la nuova versione si scarica da sola: puntino sulla scheda Impostazioni
   await p.waitForFunction(() => document.getElementById('tab-gestione').classList.contains('novita'), null, { timeout: 30000 });

@@ -1,8 +1,12 @@
-"""Applicazione MAGIC HS sul PC (FastAPI): pagine, profilo, storico, preferiti, IA, dati TARIC e impostazioni.
+"""Applicazione MAGIC HS (FastAPI): pagine, profilo, storico, preferiti, IA, dati TARIC e gestione. Due modalita':
 
-La avvia programma.py su 127.0.0.1. C'e' un solo utente, che entra con la chiave dell'avvio (chiave_ingresso) e decide
-tutto da se': servizio IA (chiave protetta da Windows, segreti.py), dati TARIC (pronti da GitHub o preparati qui,
-dati.py), nuove versioni del programma (da GitHub, installate da sole: aggiornamenti.py).
+- sito (cfg.server, «python -m taric server», su Render): account con email e password; chi si registra resta in
+  attesa finche' un amministratore non lo approva (gli indirizzi di MAGIC_HS_AMMINISTRATORI entrano subito come
+  amministratori). Un solo servizio IA, con la chiave nelle variabili d'ambiente del server (GEMINI_API_KEY), un limite
+  mensile di classificazioni per persona e un tetto mensile per tutti. Storico e preferiti sono nell'account.
+- programma per Windows (programma.py, su 127.0.0.1): un solo utente, che entra con la chiave dell'avvio
+  (chiave_ingresso) e decide tutto da se': servizio IA (chiave protetta da Windows, segreti.py), dati TARIC, nuove
+  versioni del programma (aggiornamenti.py). In ritiro: resta finche' i colleghi non passano al sito.
 """
 from __future__ import annotations
 
@@ -48,7 +52,8 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
 
 MESSAGGI_IA = {
     "not_configured": "La classificazione assistita non è attiva: manca la chiave del servizio di intelligenza artificiale.",
-    "quota_esaurita": "La classificazione assistita è spenta.",
+    "quota_esaurita": "Hai usato tutte le classificazioni con l'IA di questo mese: per averne altre chiedi all'amministratore.",
+    "tetto_raggiunto": "Questo mese le classificazioni con l'IA sono finite per tutti: chiedi all'amministratore.",
     "rate_limited": "Troppe richieste in questo momento. Riprova tra un minuto.",
     "limite_giornaliero": "Il servizio di intelligenza artificiale ha raggiunto il suo limite di oggi (succede con i piani gratuiti). Riprova domani.",
     "overloaded": "Il servizio di intelligenza artificiale è sovraccarico. Riprova tra qualche minuto.",
@@ -121,6 +126,62 @@ class ImpostazioniIA(BaseModel):
 
 class ChiaveIstanza(BaseModel):
     chiave: str = Field(max_length=200)
+
+
+# sito: account, accesso e gestione degli utenti
+class Iscrizione(BaseModel):
+    nome: str = Field(min_length=2, max_length=100)
+    azienda: str = Field(default="", max_length=150)
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=200)
+    richiesta: str = Field(default="", max_length=1000)          # messaggio per l'amministratore
+    sito_web: str = Field(default="", max_length=200)            # trappola per i bot: deve restare vuoto
+    modulo: str = Field(max_length=100)
+
+
+class Accesso(BaseModel):
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=200)
+    ricordami: bool = True
+
+
+class CambioPassword(BaseModel):
+    attuale: str = Field(max_length=200)
+    nuova: str = Field(max_length=200)
+
+
+class NuovaPassword(BaseModel):
+    gettone: str = Field(max_length=100)
+    password: str = Field(max_length=200)
+
+
+class ModificaUtente(BaseModel):
+    nome: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    azienda: Optional[str] = Field(default=None, max_length=150)
+    ruolo: Optional[Literal["utente", "amministratore"]] = None
+    quota_ia: Optional[int] = Field(default=None, ge=0, le=100000)     # None (inviato) = limite predefinito
+
+
+class Motivo(BaseModel):
+    motivo: str = Field(default="", max_length=500)
+
+
+class ImpostazioniSito(BaseModel):
+    quota_predefinita: Optional[int] = Field(default=None, ge=0, le=100000)
+    tetto_mese: Optional[int] = Field(default=None, ge=0, le=10_000_000)
+    registrazione_aperta: Optional[bool] = None
+
+
+def segreto_moduli(cartella: Path) -> bytes:
+    """Segreto per firmare il modulo di registrazione, salvato nella cartella dei dati (sul disco del server)."""
+    f = cartella / "segreto-moduli.key"
+    if not f.exists():
+        f.write_text(secrets.token_hex(32), encoding="utf-8")
+        try:
+            f.chmod(0o600)
+        except OSError:
+            pass
+    return f.read_text(encoding="utf-8").strip().encode()
 
 
 # ------------------------------------------------------------------ applicazione
@@ -196,18 +257,28 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 log.warning("aggiornamento del programma non riuscito: %s", e)
         return info
 
-    with db.transazione() as c:
-        nome = (os.environ.get("USERNAME") or os.environ.get("USER") or "").strip()[:100]
-        c.execute("INSERT INTO utenti(email, nome, ruolo, stato, email_confermata, creato, aggiornato) "
-                  "VALUES (?, ?, 'amministratore', 'attivo', 1, ?, ?) ON CONFLICT(email) DO UPDATE SET stato = 'attivo', ruolo = 'amministratore', quota_ia = NULL",
-                  (EMAIL_LOCALE, nome if len(nome) >= 2 else "Utente", iso(), iso()))
-    importa_vecchia_cartella()
-    applica_ia()
+    server = cfg.server
+    cookie = "magic_hs" if server else COOKIE
+    segreto = segreto_moduli(cfg.dati) if server else b""
+    if server:
+        with db.transazione() as c:       # gli indirizzi di MAGIC_HS_AMMINISTRATORI sono sempre amministratori attivi
+            for email in sorted(cfg.amministratori):
+                c.execute("UPDATE utenti SET ruolo = 'amministratore', stato = 'attivo' WHERE email = ? AND hash_password IS NOT NULL", (email,))
+        if not cfg.amministratori:
+            log.warning("nessun amministratore: indica la tua email in MAGIC_HS_AMMINISTRATORI e registrati")
+    else:
+        with db.transazione() as c:
+            nome = (os.environ.get("USERNAME") or os.environ.get("USER") or "").strip()[:100]
+            c.execute("INSERT INTO utenti(email, nome, ruolo, stato, email_confermata, creato, aggiornato) "
+                      "VALUES (?, ?, 'amministratore', 'attivo', 1, ?, ?) ON CONFLICT(email) DO UPDATE SET stato = 'attivo', ruolo = 'amministratore', quota_ia = NULL",
+                      (EMAIL_LOCALE, nome if len(nome) >= 2 else "Utente", iso(), iso()))
+        importa_vecchia_cartella()
+        applica_ia()
 
     @asynccontextmanager
     async def vita(_app: FastAPI) -> AsyncIterator[None]:
         if pianificatore:
-            dati.avvia_pianificatore(copie, ogni_ciclo=[aggiorna_programma], attesa=600)
+            dati.avvia_pianificatore(copie, ogni_ciclo=[] if server else [aggiorna_programma], attesa=600)
         yield
         dati.ferma()
 
@@ -220,18 +291,29 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     # ------------------------------------------------------------------ utilita'
     def utente_corrente(request: Request) -> sqlite3.Row | None:
         with db.connessione() as c:
-            return S.utente_da_sessione(c, request.cookies.get(COOKIE))
+            return S.utente_da_sessione(c, request.cookies.get(cookie))
 
     def richiede_utente(request: Request) -> sqlite3.Row:
         u = utente_corrente(request)
         if u is None:
-            raise Errore(401, "Sessione scaduta: riapri MAGIC HS dal suo collegamento.", "non_autenticato")
+            raise Errore(401, "Sessione scaduta: accedi di nuovo." if server else "Sessione scaduta: riapri MAGIC HS dal suo collegamento.",
+                         "non_autenticato")
         return u
 
     def richiede_admin(u: sqlite3.Row = Depends(richiede_utente)) -> sqlite3.Row:
         if u["ruolo"] != "amministratore":
-            raise Errore(403, "Funzione non disponibile.", "vietato")
+            raise Errore(403, "Funzione riservata all'amministratore." if server else "Funzione non disponibile.", "vietato")
         return u
+
+    def ip(request: Request) -> str:
+        return (request.client.host if request.client else "")[:64]
+
+    def base_url(request: Request) -> str:
+        return cfg.indirizzo or str(request.base_url).rstrip("/")
+
+    def imposta_cookie(resp: Response, request: Request, gettone: str, durata: int, ricordami: bool = True) -> None:
+        resp.set_cookie(cookie, gettone, max_age=durata if ricordami else None, httponly=True,
+                        secure=request.url.scheme == "https", samesite="lax", path="/")
 
     def json_ok(**kw: Any) -> dict[str, Any]:
         return {"ok": True, **kw}
@@ -241,14 +323,15 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     @app.middleware("http")
     async def protezioni(request: Request, call_next: Any) -> Response:
-        # solo dal PC stesso e con il suo indirizzo (contro i siti che puntano a 127.0.0.1 con un altro nome)
-        if request.headers.get("host", "") not in host_locali:
-            return PlainTextResponse("Richiesta non consentita.", status_code=403)
-        app.state.ultimo_contatto = time.monotonic()
+        if not server:
+            # solo dal PC stesso e con il suo indirizzo (contro i siti che puntano a 127.0.0.1 con un altro nome)
+            if request.headers.get("host", "") not in host_locali:
+                return PlainTextResponse("Richiesta non consentita.", status_code=403)
+            app.state.ultimo_contatto = time.monotonic()
         if request.url.path.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS"):
             origine = request.headers.get("origin")
             atteso = f"{request.url.scheme}://{request.url.netloc}"
-            if request.headers.get("x-taric") != "1" or (origine and origine != atteso):
+            if request.headers.get("x-taric") != "1" or (origine and origine != atteso and origine != cfg.indirizzo):
                 return JSONResponse({"errore": "Richiesta non consentita.", "codice": "csrf"}, status_code=403)
             if request.headers.get("sec-fetch-site") not in (None, "same-origin", "none"):
                 return JSONResponse({"errore": "Richiesta non consentita.", "codice": "csrf"}, status_code=403)
@@ -259,6 +342,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
         resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        if request.url.scheme == "https":
+            resp.headers["Strict-Transport-Security"] = "max-age=31536000"
         if request.url.path.startswith("/api/"):
             resp.headers["Cache-Control"] = "no-store"
         return resp
@@ -279,7 +364,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.get("/", include_in_schema=False)
     def home(request: Request) -> Response:
         if utente_corrente(request) is None:
-            return pagina("locale.html")
+            return RedirectResponse("/accedi", 303) if server else pagina("locale.html")
         v = dati.attiva()
         if v is None:
             return pagina("attesa.html")
@@ -307,50 +392,311 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def stato() -> dict[str, Any]:
         return {"dati_pronti": dati.attiva() is not None, "aggiornamento": (dati.in_corso or {}).get("fase")}
 
-    # ------------------------------------------------------------------ ingresso e chiusura
-    @app.get("/entra", include_in_schema=False)
-    def entra(request: Request, k: str = "") -> Response:
-        """Indirizzo aperto dall'avvio nel browser: la chiave e' nel file dell'istanza, leggibile solo dall'utente di Windows."""
-        if not chiave_ingresso or not hmac.compare_digest(k.encode(), chiave_ingresso.encode()):
-            return pagina("locale.html")
-        resp = RedirectResponse("/", 303)
-        if utente_corrente(request) is None:
+    @app.get("/api/salute", include_in_schema=False)
+    def salute() -> dict[str, Any]:
+        """Controllo di Render: il servizio risponde e il database si apre."""
+        with db.connessione() as c:
+            c.execute("SELECT 1").fetchone()
+        return {"ok": True, "versione": __version__}
+
+    # ------------------------------------------------------------------ ingresso e chiusura (programma per Windows)
+    if not server:
+        @app.get("/entra", include_in_schema=False)
+        def entra(request: Request, k: str = "") -> Response:
+            """Indirizzo aperto dall'avvio nel browser: la chiave e' nel file dell'istanza, leggibile solo dall'utente di Windows."""
+            if not chiave_ingresso or not hmac.compare_digest(k.encode(), chiave_ingresso.encode()):
+                return pagina("locale.html")
+            resp = RedirectResponse("/", 303)
+            if utente_corrente(request) is None:
+                with db.transazione() as c:
+                    uid = c.execute("SELECT id FROM utenti WHERE email = ?", (EMAIL_LOCALE,)).fetchone()["id"]
+                    gettone, durata = S.crea_sessione(c, uid, request.headers.get("user-agent", ""))
+                resp.set_cookie(COOKIE, gettone, max_age=durata, httponly=True, samesite="lax", path="/")
+            return resp
+
+        @app.get("/api/locale/ping")
+        def locale_ping() -> dict[str, Any]:
+            return {"app": "magic-hs", "istanza": istanza, "versione": __version__}
+
+        @app.post("/api/locale/ferma")
+        def locale_ferma(body: ChiaveIstanza) -> dict[str, Any]:
+            """Chiamata da un avvio di una versione diversa del programma, che prende il posto di questa."""
+            if not chiave_ingresso or not hmac.compare_digest(body.chiave.encode(), chiave_ingresso.encode()):
+                raise Errore(403, "Chiave non valida.", "vietato")
+            app.state.ferma()
+            return json_ok()
+
+        @app.post("/api/locale/chiudi")
+        def locale_chiudi(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+            app.state.ferma()
+            return json_ok()
+
+    # ------------------------------------------------------------------ sito: account, accesso, gestione degli utenti
+    if server:
+        @app.get("/accedi", include_in_schema=False)
+        def pagina_accedi(request: Request) -> Response:
+            return RedirectResponse("/", 303) if utente_corrente(request) is not None else pagina("accedi.html")
+
+        @app.get("/reimposta-password", include_in_schema=False)
+        def pagina_reimposta() -> Response:
+            return pagina("reimposta.html")
+
+        @app.get("/api/modulo")
+        def modulo() -> dict[str, Any]:
+            with db.connessione() as c:
+                aperta = bool(db.impostazioni(c)["registrazione_aperta"])
+            return {"modulo": S.firma_modulo(segreto), "registrazione_aperta": aperta}
+
+        @app.post("/api/registrazione")
+        def registrazione(body: Iscrizione, request: Request) -> Response:
+            email = S.normalizza_email(body.email)
+            if body.sito_web or not S.verifica_modulo(segreto, body.modulo):
+                raise Errore(400, "Il modulo è scaduto o non è valido: ricarica la pagina e riprova.", "modulo")
+            if not S.email_valida(email):
+                raise Errore(422, "Indirizzo email non valido.", "email")
+            if (problema := S.problema_password(body.password, email)):
+                raise Errore(422, problema, "password")
+            chiave = "registrazione-ip:" + ip(request)
             with db.transazione() as c:
-                uid = c.execute("SELECT id FROM utenti WHERE email = ?", (EMAIL_LOCALE,)).fetchone()["id"]
-                gettone, durata = S.crea_sessione(c, uid, request.headers.get("user-agent", ""))
-            resp.set_cookie(COOKIE, gettone, max_age=durata, httponly=True, samesite="lax", path="/")
-        return resp
+                troppi = S.conta(c, chiave, 3600) >= 5
+                if not troppi:
+                    S.registra(c, chiave)
+            if troppi:
+                raise Errore(429, "Troppe registrazioni da questa rete: riprova più tardi.", "troppi_tentativi")
+            amministratore = email in cfg.amministratori
+            with db.transazione() as c:
+                if not amministratore and not db.impostazioni(c)["registrazione_aperta"]:
+                    raise Errore(403, "Le registrazioni sono chiuse: chiedi all'amministratore di MAGIC HS.", "chiuse")
+                if c.execute("SELECT 1 FROM utenti WHERE email = ?", (email,)).fetchone():
+                    raise Errore(409, "Esiste già un account con questa email: accedi, oppure chiedi all'amministratore un link per la password.", "esiste")
+                uid = c.execute(
+                    "INSERT INTO utenti(email, nome, azienda, richiesta, hash_password, ruolo, stato, email_confermata, creato, aggiornato) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                    (email, body.nome.strip(), body.azienda.strip(), body.richiesta.strip(), S.hash_password(body.password),
+                     "amministratore" if amministratore else "utente", "attivo" if amministratore else "in_attesa", iso(), iso())).lastrowid
+                db.evento(c, "registrazione", uid, uid, f"{email}" + (" (amministratore)" if amministratore else ""))
+                if amministratore:
+                    gettone, durata = S.crea_sessione(c, uid, request.headers.get("user-agent", ""), ip(request))
+            resp = JSONResponse(json_ok(stato="attivo" if amministratore else "in_attesa"))
+            if amministratore:
+                imposta_cookie(resp, request, gettone, durata)
+            return resp
 
-    @app.get("/api/locale/ping")
-    def locale_ping() -> dict[str, Any]:
-        return {"app": "magic-hs", "istanza": istanza, "versione": __version__}
+        @app.post("/api/accedi")
+        def accedi(body: Accesso, request: Request) -> Response:
+            email = S.normalizza_email(body.email)
+            k_email, k_ip = "accesso-email:" + email, "accesso-ip:" + ip(request)
+            # i tentativi falliti si salvano prima di rispondere con l'errore (fuori dalla transazione che verrebbe annullata)
+            with db.transazione() as c:
+                bloccato = S.conta(c, k_email, 900) >= 5 or S.conta(c, k_ip, 900) >= 30
+                u = None if bloccato else c.execute("SELECT * FROM utenti WHERE email = ?", (email,)).fetchone()
+                sbagliata = not bloccato and not S.verifica_password(u["hash_password"] if u else None, body.password)
+                if sbagliata:
+                    S.registra(c, k_email)
+                    S.registra(c, k_ip)
+                    if u is not None and S.conta(c, k_email, 900) == 5:
+                        db.evento(c, "accesso_bloccato", u["id"], dettagli=f"5 password errate da {ip(request)}")
+            if bloccato:
+                raise Errore(429, "Troppi tentativi non riusciti: riprova tra 15 minuti.", "troppi_tentativi")
+            if sbagliata or u is None:
+                raise Errore(401, "Email o password non corretti.", "credenziali")
+            messaggi = {"in_attesa": "La tua richiesta è in attesa di approvazione: quando l'amministratore la approva puoi accedere.",
+                        "sospeso": "Il tuo account è sospeso: chiedi all'amministratore di MAGIC HS.",
+                        "rifiutato": "La tua richiesta di accesso non è stata accolta."}
+            if u["stato"] != "attivo":
+                raise Errore(403, messaggi.get(u["stato"], "Account non attivo."), u["stato"])
+            with db.transazione() as c:
+                S.azzera(c, k_email)
+                if S.da_rifare(u["hash_password"]):
+                    c.execute("UPDATE utenti SET hash_password = ? WHERE id = ?", (S.hash_password(body.password), u["id"]))
+                gettone, durata = S.crea_sessione(c, u["id"], request.headers.get("user-agent", ""), ip(request), body.ricordami)
+            resp = JSONResponse(json_ok())
+            imposta_cookie(resp, request, gettone, durata, body.ricordami)
+            return resp
 
-    @app.post("/api/locale/ferma")
-    def locale_ferma(body: ChiaveIstanza) -> dict[str, Any]:
-        """Chiamata da un avvio di una versione diversa del programma, che prende il posto di questa."""
-        if not chiave_ingresso or not hmac.compare_digest(body.chiave.encode(), chiave_ingresso.encode()):
-            raise Errore(403, "Chiave non valida.", "vietato")
-        app.state.ferma()
-        return json_ok()
+        @app.post("/api/esci")
+        def esci(request: Request) -> Response:
+            with db.transazione() as c:
+                S.chiudi_sessione(c, request.cookies.get(cookie))
+            resp = JSONResponse(json_ok())
+            resp.delete_cookie(cookie, path="/")
+            return resp
 
-    @app.post("/api/locale/chiudi")
-    def locale_chiudi(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
-        app.state.ferma()
-        return json_ok()
+        @app.post("/api/io/password")
+        def cambia_password(body: CambioPassword, request: Request, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+            if not S.verifica_password(u["hash_password"], body.attuale):
+                raise Errore(403, "La password attuale non è corretta.", "credenziali")
+            if (problema := S.problema_password(body.nuova, u["email"])):
+                raise Errore(422, problema, "password")
+            with db.transazione() as c:
+                c.execute("UPDATE utenti SET hash_password = ?, aggiornato = ? WHERE id = ?", (S.hash_password(body.nuova), iso(), u["id"]))
+                S.chiudi_tutte(c, u["id"], tranne=request.cookies.get(cookie))
+                db.evento(c, "password_cambiata", u["id"], u["id"])
+            return json_ok()
+
+        @app.post("/api/io/esci-ovunque")
+        def esci_ovunque(request: Request, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+            with db.transazione() as c:
+                S.chiudi_tutte(c, u["id"], tranne=request.cookies.get(cookie))
+            return json_ok()
+
+        @app.post("/api/reimposta-password")
+        def reimposta_password(body: NuovaPassword, request: Request) -> Response:
+            """Link monouso preparato dall'amministratore (Gestione > Utenti): nuova password e accesso."""
+            with db.transazione() as c:
+                r = c.execute("SELECT utente_id FROM gettoni WHERE hash = ? AND scopo = 'reimposta_password'", (S.impronta(body.gettone.strip()),)).fetchone()
+                u = c.execute("SELECT * FROM utenti WHERE id = ?", (r["utente_id"],)).fetchone() if r else None
+                if u is not None and (problema := S.problema_password(body.password, u["email"])):
+                    raise Errore(422, problema, "password")
+                uid = S.usa_gettone(c, body.gettone.strip(), "reimposta_password")
+                if uid is None or u is None:
+                    raise Errore(400, "Il link non è valido o è scaduto: chiedine uno nuovo all'amministratore.", "gettone")
+                c.execute("UPDATE utenti SET hash_password = ?, aggiornato = ? WHERE id = ?", (S.hash_password(body.password), iso(), uid))
+                S.chiudi_tutte(c, uid)
+                S.azzera(c, "accesso-email:" + u["email"])
+                db.evento(c, "password_reimpostata", uid, uid)
+                attivo = u["stato"] == "attivo"
+                if attivo:
+                    gettone, durata = S.crea_sessione(c, uid, request.headers.get("user-agent", ""), ip(request))
+            resp = JSONResponse(json_ok(entrato=attivo))
+            if attivo:
+                imposta_cookie(resp, request, gettone, durata)
+            return resp
+
+        # ---------------------------------------------------------------- gestione degli utenti
+        def utente_o_404(c: sqlite3.Connection, uid: int) -> sqlite3.Row:
+            r = c.execute("SELECT * FROM utenti WHERE id = ?", (uid,)).fetchone()
+            if r is None:
+                raise Errore(404, "Utente inesistente.", "non_trovato")
+            return r
+
+        @app.get("/api/admin/utenti")
+        def admin_utenti(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            mese = mese_corrente()
+            with db.connessione() as c:
+                uso = {r["utente_id"]: dict(r) for r in c.execute(
+                    "SELECT utente_id, COUNT(DISTINCT CASE WHEN tipo = 'classifica' AND operazione != '' AND (esito = 'ok' OR token_in > 0) "
+                    "THEN operazione END) AS classificazioni, COUNT(*) AS richieste, COALESCE(SUM(token_in), 0) AS token_in, "
+                    "COALESCE(SUM(token_out), 0) AS token_out FROM uso_ia WHERE mese = ? GROUP BY utente_id", (mese,))}
+                out = []
+                for r in c.execute("SELECT * FROM utenti WHERE email != ? ORDER BY CASE stato WHEN 'in_attesa' THEN 0 ELSE 1 END, nome",
+                                   (EMAIL_LOCALE,)).fetchall():
+                    d = {k: r[k] for k in ("id", "nome", "email", "azienda", "richiesta", "ruolo", "stato", "quota_ia", "motivo_stato",
+                                           "creato", "ultimo_accesso")}
+                    d["limite"] = ia.limite(c, r)
+                    d["uso"] = uso.get(r["id"], {"classificazioni": 0, "richieste": 0, "token_in": 0, "token_out": 0})
+                    d["fisso"] = r["email"] in cfg.amministratori            # amministratore da MAGIC_HS_AMMINISTRATORI
+                    out.append(d)
+            return {"utenti": out, "mese": mese, "io": a["id"]}
+
+        @app.patch("/api/admin/utenti/{uid}")
+        def admin_modifica(uid: int, body: ModificaUtente, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            campi = body.model_fields_set
+            with db.transazione() as c:
+                u = utente_o_404(c, uid)
+                if "ruolo" in campi and body.ruolo and body.ruolo != u["ruolo"]:
+                    if uid == a["id"] or u["email"] in cfg.amministratori:
+                        raise Errore(409, "Questo ruolo non si può cambiare da qui.", "ruolo")
+                    c.execute("UPDATE utenti SET ruolo = ? WHERE id = ?", (body.ruolo, uid))
+                    db.evento(c, "ruolo", uid, a["id"], body.ruolo)
+                if "quota_ia" in campi:
+                    c.execute("UPDATE utenti SET quota_ia = ? WHERE id = ?", (body.quota_ia, uid))
+                    db.evento(c, "quota_ia", uid, a["id"], "predefinito" if body.quota_ia is None else str(body.quota_ia))
+                if "nome" in campi and body.nome:
+                    c.execute("UPDATE utenti SET nome = ? WHERE id = ?", (body.nome.strip(), uid))
+                if "azienda" in campi and body.azienda is not None:
+                    c.execute("UPDATE utenti SET azienda = ? WHERE id = ?", (body.azienda.strip(), uid))
+                c.execute("UPDATE utenti SET aggiornato = ? WHERE id = ?", (iso(), uid))
+            return json_ok()
+
+        @app.post("/api/admin/utenti/{uid}/{azione}")
+        def admin_azione(uid: int, azione: Literal["approva", "rifiuta", "sospendi", "riattiva", "link-password", "esci-ovunque"],
+                         request: Request, body: Optional[Motivo] = None, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            motivo = (body.motivo if body else "").strip()
+            with db.transazione() as c:
+                u = utente_o_404(c, uid)
+                if (uid == a["id"] or u["email"] in cfg.amministratori) and azione in ("rifiuta", "sospendi"):
+                    raise Errore(409, "Non puoi sospendere questo account.", "se_stesso")
+                if azione in ("approva", "riattiva"):
+                    if u["hash_password"] is None:
+                        raise Errore(409, "L'utente non ha una password: prepara un link per impostarla.", "senza_password")
+                    c.execute("UPDATE utenti SET stato = 'attivo', motivo_stato = '', aggiornato = ? WHERE id = ?", (iso(), uid))
+                    db.evento(c, "approvato" if azione == "approva" else "riattivato", uid, a["id"], u["email"])
+                elif azione in ("rifiuta", "sospendi"):
+                    c.execute("UPDATE utenti SET stato = ?, motivo_stato = ?, aggiornato = ? WHERE id = ?",
+                              ("rifiutato" if azione == "rifiuta" else "sospeso", motivo, iso(), uid))
+                    S.chiudi_tutte(c, uid)
+                    db.evento(c, "rifiutato" if azione == "rifiuta" else "sospeso", uid, a["id"], motivo)
+                elif azione == "link-password":
+                    link = f"{base_url(request)}/reimposta-password#{S.crea_gettone(c, uid, 'reimposta_password', 72)}"
+                    db.evento(c, "link_password", uid, a["id"], u["email"])
+                    return json_ok(link=link)
+                else:
+                    S.chiudi_tutte(c, uid)
+                    db.evento(c, "sessioni_chiuse", uid, a["id"])
+            return json_ok()
+
+        @app.delete("/api/admin/utenti/{uid}")
+        def admin_elimina(uid: int, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            with db.transazione() as c:
+                u = utente_o_404(c, uid)
+                if uid == a["id"] or u["email"] in cfg.amministratori:
+                    raise Errore(409, "Non puoi eliminare questo account.", "se_stesso")
+                c.execute("DELETE FROM utenti WHERE id = ?", (uid,))
+                db.evento(c, "utente_eliminato", None, a["id"], f"{u['email']} ({u['nome']})")
+            return json_ok()
+
+        # ---------------------------------------------------------------- intelligenza artificiale e regole del sito
+        @app.get("/api/admin/ia")
+        def admin_ia(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            with db.connessione() as c:
+                imp = db.impostazioni(c)
+                uso = {**ia.uso_mese(c), "mese": mese_corrente()}
+                in_attesa = c.execute("SELECT COUNT(*) FROM utenti WHERE stato = 'in_attesa'").fetchone()[0]
+            return {"attiva": ia.disponibile, "ia_nome": cfg.ia_nome, "fornitore": cfg.ia_fornitore,
+                    "modelli": {"rapido": cfg.modello_rapido, "principale": cfg.modello} if ia.disponibile else None,
+                    "uso": uso, "quota_predefinita": imp["quota_predefinita"], "tetto_mese": imp["tetto_mese"],
+                    "registrazione_aperta": imp["registrazione_aperta"], "in_attesa": in_attesa}
+
+        @app.put("/api/admin/impostazioni")
+        def admin_impostazioni(body: ImpostazioniSito, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            valori = {k: getattr(body, k) for k in body.model_fields_set}
+            with db.transazione() as c:
+                db.salva_impostazioni(c, valori)
+                db.evento(c, "impostazioni_sito", autore_id=a["id"], dettagli=json.dumps(valori, ensure_ascii=False))
+            return json_ok()
+
+        @app.post("/api/admin/ia/prova")
+        def admin_ia_prova(livello: Literal["rapido", "standard"] = "rapido", a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            return prova_ia(livello)
+
+        @app.post("/api/admin/ia/modelli")
+        def admin_ia_modelli(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            return elenco_modelli()
+
+        @app.get("/api/admin/backup")
+        def admin_backup(a: sqlite3.Row = Depends(richiede_admin)) -> FileResponse:
+            """Copia del database da tenere fuori dal server (account, storico, preferiti, uso dell'IA)."""
+            f = copie.crea()
+            with db.transazione() as c:
+                db.evento(c, "backup_scaricato", autore_id=a["id"], dettagli=f.name)
+            return FileResponse(f, media_type="application/zip", filename=f.name)
 
     # ------------------------------------------------------------------ profilo
     def descrivi_utente(c: sqlite3.Connection, u: sqlite3.Row) -> dict[str, Any]:
         lim = ia.limite(c, u)
+        tetto = ia.tetto_raggiunto(c)
         try:
             pref = json.loads(u["preferenze"] or "{}")
         except ValueError:
             pref = {}
-        return {"id": u["id"], "nome": u["nome"], "azienda": u["azienda"], "ruolo": u["ruolo"],
+        return {"id": u["id"], "nome": u["nome"], "azienda": u["azienda"], "ruolo": u["ruolo"], "server": server,
+                **({"email": u["email"]} if server else {}),
                 "preferenze": {"paese": pref.get("paese", ""), "flusso": pref.get("flusso", "import"), "tema": pref.get("tema", "auto")},
-                "ia": {"disponibile": ia.disponibile and lim != 0, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
-                       "usate": ia.usate(c, u["id"]), "mese": mese_corrente()},
+                "ia": {"disponibile": ia.disponibile and lim != 0 and not tetto, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
+                       "usate": ia.usate(c, u["id"]), "mese": mese_corrente(), "tetto": tetto},
                 "dati": {"versione": dati.attiva(), "aggiornamento": (dati.in_corso or {}).get("fase")},
-                "programma": {"versione": __version__, "pronta": programma["pronta"]}}
+                **({} if server else {"programma": {"versione": __version__, "pronta": programma["pronta"]}})}
 
     @app.get("/api/io")
     def io(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
@@ -491,10 +837,31 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         except ErroreIA as e:
             return JSONResponse({"errore": MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"]), "codice": e.codice}, status_code=e.stato_http)
 
-    # ------------------------------------------------------------------ impostazioni del PC
+    # ------------------------------------------------------------------ prova del servizio IA ed elenco dei modelli (PC e sito)
+    def prova_ia(livello: str) -> dict[str, Any]:
+        try:
+            return json_ok(**ia.prova(livello))
+        except ErroreIA as e:
+            messaggio = {
+                "not_configured": "Nessun servizio IA impostato." + (" Inserisci GEMINI_API_KEY nelle variabili del servizio su Render." if server
+                                                                      else " Scegline uno e salva."),
+                "server_misconfigured": "Il servizio rifiuta la chiave o non trova il modello: controlla chiave, indirizzo e nome del modello.",
+                "upstream_error": "Non riesco a raggiungere il servizio: controlla l'indirizzo e, se in azienda c'è un proxy, chiedi all'IT.",
+            }.get(e.codice) or MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
+            raise Errore(e.stato_http, messaggio, e.codice)
+
+    def elenco_modelli() -> dict[str, Any]:
+        try:
+            return json_ok(modelli=ia.modelli())
+        except ErroreIA as e:
+            raise Errore(e.stato_http, "Non riesco a leggere l'elenco dei modelli: controlla chiave e indirizzo, oppure scrivi il nome a mano.", e.codice)
+
+    # ------------------------------------------------------------------ gestione: dati TARIC e registro (PC e sito)
     @app.get("/api/admin/riepilogo")
     def admin_riepilogo(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso}
+        with db.connessione() as c:
+            in_attesa = c.execute("SELECT COUNT(*) FROM utenti WHERE stato = 'in_attesa'").fetchone()[0] if server else 0
+        return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso, "in_attesa": in_attesa}
 
     @app.get("/api/admin/eventi")
     def admin_eventi(limite: int = 200, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
@@ -556,67 +923,58 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             db.evento(c, "dati_versione_attivata", autore_id=a["id"], dettagli=body.versione)
         return json_ok()
 
-    @app.get("/api/admin/locale")
-    def admin_locale(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        v = ia_salvata()
-        chiave = svela(str(v.get("chiave") or ""), cfg.dati)
-        with db.connessione() as c:
-            uso = {**ia.uso_mese(c), "mese": mese_corrente()}
-        return {"ia": {"fornitore": str(v.get("fornitore") or ""), "url": str(v.get("url") or ""), "modello": str(v.get("modello") or ""),
-                       "modello_rapido": str(v.get("modello_rapido") or ""),
-                       "chiave": ("…" + chiave[-4:]) if len(chiave) > 8 else ("impostata" if chiave else ""),
-                       "chiave_illeggibile": bool(v.get("chiave")) and not chiave},
-                "attiva": ia.disponibile, "ia_nome": cfg.ia_nome, "fornitore_attivo": cfg.ia_fornitore,
-                "modelli_in_uso": {"rapido": cfg.modello_rapido, "principale": cfg.modello} if ia.disponibile else None,
-                "uso": uso, "aggiornate": v.get("aggiornate", ""),
-                "programma": {"in_uso": __version__, "pronta": programma["pronta"], "errore": programma["errore"]}}
+    # ------------------------------------------------------------------ servizio IA e versione del programma del PC
+    if not server:
+        @app.get("/api/admin/locale")
+        def admin_locale(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            v = ia_salvata()
+            chiave = svela(str(v.get("chiave") or ""), cfg.dati)
+            with db.connessione() as c:
+                uso = {**ia.uso_mese(c), "mese": mese_corrente()}
+            return {"ia": {"fornitore": str(v.get("fornitore") or ""), "url": str(v.get("url") or ""), "modello": str(v.get("modello") or ""),
+                           "modello_rapido": str(v.get("modello_rapido") or ""),
+                           "chiave": ("…" + chiave[-4:]) if len(chiave) > 8 else ("impostata" if chiave else ""),
+                           "chiave_illeggibile": bool(v.get("chiave")) and not chiave},
+                    "attiva": ia.disponibile, "ia_nome": cfg.ia_nome, "fornitore_attivo": cfg.ia_fornitore,
+                    "modelli_in_uso": {"rapido": cfg.modello_rapido, "principale": cfg.modello} if ia.disponibile else None,
+                    "uso": uso, "aggiornate": v.get("aggiornate", ""),
+                    "programma": {"in_uso": __version__, "pronta": programma["pronta"], "errore": programma["errore"]}}
 
-    @app.put("/api/admin/locale/ia")
-    def admin_locale_ia(body: ImpostazioniIA, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        chiave = svela(str(ia_salvata().get("chiave") or ""), cfg.dati) if body.chiave is None else body.chiave.strip()
-        url = body.url.strip().rstrip("/")
-        if url and not re.match(r"^https?://[^\s/]+(/\S*)?$", url):
-            raise Errore(422, "Indirizzo del servizio non valido: deve iniziare con https://.", "url")
-        if body.fornitore == "openai" and not url:
-            raise Errore(422, "Indica l'indirizzo del servizio (per Azure OpenAI: https://<risorsa>.openai.azure.com/openai/v1).", "url")
-        if body.fornitore == "openai" and not body.modello.strip():
-            raise Errore(422, "Indica il modello (per Azure OpenAI: il nome della distribuzione).", "modello")
-        if body.fornitore in ("gemini", "anthropic") and not chiave:
-            raise Errore(422, "Inserisci la chiave del servizio.", "chiave")
-        try:
-            salva_ia(body.fornitore, chiave, url, body.modello.strip(), body.modello_rapido.strip(), a["nome"])
-        except OSError as e:
-            raise Errore(500, f"Non riesco a proteggere la chiave su questo PC: {e}", "chiave")
-        with db.transazione() as c:
-            db.evento(c, "impostazioni_ia", autore_id=a["id"], dettagli=body.fornitore or "nessuna")
-        return json_ok(attiva=ia.disponibile, ia_nome=cfg.ia_nome)
+        @app.put("/api/admin/locale/ia")
+        def admin_locale_ia(body: ImpostazioniIA, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            chiave = svela(str(ia_salvata().get("chiave") or ""), cfg.dati) if body.chiave is None else body.chiave.strip()
+            url = body.url.strip().rstrip("/")
+            if url and not re.match(r"^https?://[^\s/]+(/\S*)?$", url):
+                raise Errore(422, "Indirizzo del servizio non valido: deve iniziare con https://.", "url")
+            if body.fornitore == "openai" and not url:
+                raise Errore(422, "Indica l'indirizzo del servizio (per Azure OpenAI: https://<risorsa>.openai.azure.com/openai/v1).", "url")
+            if body.fornitore == "openai" and not body.modello.strip():
+                raise Errore(422, "Indica il modello (per Azure OpenAI: il nome della distribuzione).", "modello")
+            if body.fornitore in ("gemini", "anthropic") and not chiave:
+                raise Errore(422, "Inserisci la chiave del servizio.", "chiave")
+            try:
+                salva_ia(body.fornitore, chiave, url, body.modello.strip(), body.modello_rapido.strip(), a["nome"])
+            except OSError as e:
+                raise Errore(500, f"Non riesco a proteggere la chiave su questo PC: {e}", "chiave")
+            with db.transazione() as c:
+                db.evento(c, "impostazioni_ia", autore_id=a["id"], dettagli=body.fornitore or "nessuna")
+            return json_ok(attiva=ia.disponibile, ia_nome=cfg.ia_nome)
 
-    @app.post("/api/admin/locale/ia/modelli")
-    def admin_locale_modelli(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        """Modelli offerti dal servizio salvato (suggerimenti per i campi «Modello»)."""
-        try:
-            return json_ok(modelli=ia.modelli())
-        except ErroreIA as e:
-            raise Errore(e.stato_http, "Non riesco a leggere l'elenco dei modelli: controlla chiave e indirizzo, oppure scrivi il nome a mano.", e.codice)
+        @app.post("/api/admin/locale/ia/modelli")
+        def admin_locale_modelli(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            """Modelli offerti dal servizio salvato (suggerimenti per i campi «Modello»)."""
+            return elenco_modelli()
 
-    @app.post("/api/admin/locale/ia/prova")
-    def admin_locale_prova(livello: Literal["rapido", "standard"] = "rapido", a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        try:
-            return json_ok(**ia.prova(livello))
-        except ErroreIA as e:
-            messaggio = {
-                "not_configured": "Nessun servizio IA impostato: scegline uno e salva.",
-                "server_misconfigured": "Il servizio rifiuta la chiave o non trova il modello: controlla chiave, indirizzo e nome del modello.",
-                "upstream_error": "Non riesco a raggiungere il servizio: controlla l'indirizzo e, se in azienda c'è un proxy, chiedi all'IT.",
-            }.get(e.codice) or MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
-            raise Errore(e.stato_http, messaggio, e.codice)
+        @app.post("/api/admin/locale/ia/prova")
+        def admin_locale_prova(livello: Literal["rapido", "standard"] = "rapido", a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            return prova_ia(livello)
 
-    @app.get("/api/admin/locale/aggiornamento")
-    def admin_aggiornamento(forza: bool = False, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        """Ultima versione su GitHub; se e' piu' recente la installa per il prossimo avvio."""
-        info = aggiorna_programma(forza)
-        return {"in_uso": __version__, "ultima": info.get("versione", ""), "data": info.get("data", ""), "pagina": info.get("pagina", ""),
-                "pronta": programma["pronta"], "errore": programma["errore"] or info.get("errore", "")}
+        @app.get("/api/admin/locale/aggiornamento")
+        def admin_aggiornamento(forza: bool = False, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+            """Ultima versione su GitHub; se e' piu' recente la installa per il prossimo avvio."""
+            info = aggiorna_programma(forza)
+            return {"in_uso": __version__, "ultima": info.get("versione", ""), "data": info.get("data", ""), "pagina": info.get("pagina", ""),
+                    "pronta": programma["pronta"], "errore": programma["errore"] or info.get("errore", "")}
 
     return app
 

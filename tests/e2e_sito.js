@@ -1,175 +1,152 @@
-// Prova nel browser della versione sito: niente programma sul PC, tutto nel browser. IA finta su un altro indirizzo
-// (chiamate dal browser con CORS, come i servizi veri), storico e preferiti che restano dopo il ricaricamento,
-// esporta e importa, i tre fornitori, la guida alla chiave di Gemini con la festa finale, uso senza rete (service
-// worker), telefono e tema scuro. Le chiamate a Gemini della guida vanno al servizio finto.
-// Uso: python strumenti/sito.py --uscita P/magic-hs dati-AAAA-MM-01.zip
-//      python tests/finto_claude.py 9100 &      python -m http.server 8800 --bind 127.0.0.1 --directory P &
-//      node tests/e2e_sito.js http://localhost:8800/magic-hs/ cartella-schermate
+// Prova nel browser del sito (modalità server, come su Render): l'amministratore si registra ed entra, un collega chiede
+// l'account e aspetta l'approvazione, classificazioni fino al limite mensile, link per la password, sospensione, uscita,
+// telefono e tema scuro. IA finta (tests/finto_claude.py) come servizio unico del server.
+// Uso: python tests/finto_claude.py 9100 dati-AAAA-MM-01.zip &
+//      TARIC_DATI=P MAGIC_HS_AMMINISTRATORI=capo@azienda.it TARIC_IA_FORNITORE=openai TARIC_IA_URL=http://127.0.0.1:9100/v1 \
+//        TARIC_IA_MODELLO=finto-modello TARIC_IA_CHIAVE=chiave-finta TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati \
+//        python -m taric server --porta 8810 &
+//      node tests/e2e_sito.js http://localhost:8810 cartella-schermate
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 const fs = require('fs');
-const SITO = process.argv[2] || 'http://localhost:8800/magic-hs/';
+const B = process.argv[2] || 'http://localhost:8810';
 const out = process.argv[3] || 'shots-sito';
-const IA = 'http://127.0.0.1:9100';
 fs.mkdirSync(out, { recursive: true });
-let errori = [];
+const errori = [];
 function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } else console.log('ok: ' + m); }
-async function ricarica(p) {
-  await p.reload();
-  await p.waitForFunction(() => document.getElementById('dato') && document.getElementById('dato').textContent.length > 0);
+function attenzione(p, nome) {
+  p.on('pageerror', e => errori.push(nome + ' errore JS: ' + e.message));
+  p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errori.push(nome + ' console: ' + m.text()); });
+  p.on('dialog', d => d.accept(''));
 }
+async function pronta(p) { await p.waitForFunction(() => document.getElementById('dato') && document.getElementById('dato').textContent.length > 0, null, { timeout: 30000 }); }
 async function classifica(p, testo) {
   await p.click('#tab-classifica');
   await p.fill('#q', testo); await p.click('#vai');
-  await p.waitForFunction(() => document.querySelector('.timbro') && document.querySelector('.timbro').textContent.includes('Proposta'), null, { timeout: 30000 });
 }
+async function richiedi(p, nome, email, password, messaggio) {
+  await p.goto(B + '/accedi#richiedi');
+  await p.waitForSelector('#richiedi:not([hidden])');
+  await p.fill('#richiedi input[name=nome]', nome);
+  await p.fill('#richiedi input[name=email]', email);
+  await p.fill('#richiedi input[name=password]', password);
+  if (messaggio) await p.fill('#richiedi textarea[name=richiesta]', messaggio);
+  await p.waitForTimeout(3300);                       // il modulo firmato vale dopo qualche secondo (contro i bot)
+  await p.click('#richiedi button[type=submit]');
+}
+async function accedi(p, email, password) {
+  await p.goto(B + '/accedi');
+  await p.fill('#accedi input[name=email]', email);
+  await p.fill('#accedi input[name=password]', password);
+  await p.click('#accedi button[type=submit]');
+}
+
 (async () => {
   const b = await chromium.launch();
-  const ctx = await b.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light', acceptDownloads: true });
-  await ctx.route('https://generativelanguage.googleapis.com/**', async (route) => {     // Gemini della guida: servizio finto
-    const r = await route.fetch({ url: route.request().url().replace('https://generativelanguage.googleapis.com', IA) });
-    await route.fulfill({ response: r });
-  });
-  const p = await ctx.newPage();
-  p.on('pageerror', e => errori.push('errore JS: ' + e.message));
-  p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errori.push('console: ' + m.text()); });
-  p.on('dialog', d => d.accept());
+  const ca = await b.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light' });
+  const capo = await ca.newPage(); attenzione(capo, 'capo');
 
-  // apertura: niente chiave d'ingresso, niente pulsante Chiudi
-  await p.goto(SITO);
-  await p.waitForSelector('#vai');
-  await p.waitForFunction(() => document.getElementById('dato').textContent.length > 0);
-  ok((await p.textContent('#tab-gestione')).trim() === 'Impostazioni' && await p.isVisible('#tab-gestione'), 'scheda Impostazioni');
-  ok(await p.isHidden('#esci'), 'nessun pulsante Chiudi nel sito');
-  ok((await p.textContent('#chi-nome')) === 'Utente', 'nome predefinito');
-  ok((await p.inputValue('#q')) === '' && (await p.innerHTML('#esito')).trim() === '', 'all\'apertura nessuna ricerca d\'esempio');
-  await p.fill('#q', 'trapano'); await p.click('#vai');
-  await p.waitForSelector('text=scegli un servizio di intelligenza artificiale in Impostazioni');
-  ok(true, 'senza IA: dove sceglierla');
-  await p.screenshot({ path: out + '/1-classifica.png' });
+  // pagina d'accesso; l'amministratore (MAGIC_HS_AMMINISTRATORI) si registra ed entra subito
+  await capo.goto(B + '/');
+  await capo.waitForSelector('#accedi');
+  ok(capo.url().endsWith('/accedi'), 'senza account: pagina d\'accesso');
+  await capo.screenshot({ path: out + '/0-accedi.png' });
+  await richiedi(capo, 'Mario Capo', 'capo@azienda.it', 'Porto-Container-42');
+  await pronta(capo);
+  ok(await capo.isVisible('#tab-gestione') && (await capo.textContent('#tab-gestione')).trim() === 'Gestione', 'amministratore dentro, scheda Gestione');
+  ok((await capo.getAttribute('#esci', 'title')) === 'Esci', 'pulsante Esci');
+  await capo.click('#tab-gestione');
+  await capo.waitForSelector('button[data-g="u-apri"]');
+  ok((await capo.$$('button[data-g="u-apri"]')).length === 1 && await capo.isVisible('td >> text=capo@azienda.it'), 'in Utenti c\'è l\'amministratore');
+  ok((await capo.$$('.sotto button')).length === 4, 'Utenti, IA, Dati TARIC, Registro');
+  await capo.click('button[data-v="ia"]');
+  await capo.waitForSelector('form[data-g="s-limiti"]');
+  ok(await capo.isVisible('text=finto-modello'), 'IA unica del server attiva');
+  await capo.click('button[data-g="s-prova"]');
+  await capo.waitForSelector('.finestra.festa', { timeout: 20000 });
+  await capo.waitForTimeout(5000);
+  await capo.screenshot({ path: out + '/1-festa.png' });
+  await capo.click('.festa [data-f="chiudi"]');
+  await capo.fill('input[name=quota_predefinita]', '2');
+  await capo.click('form[data-g="s-limiti"] button[type=submit]');
+  await capo.waitForSelector('form[data-g="s-limiti"] >> text=Salvato.');
+  ok(true, 'limite mensile per persona: 2');
+  await capo.screenshot({ path: out + '/2-ia.png', fullPage: true });
 
-  // guida alla chiave gratuita di Gemini, dalla Classifica
-  await p.click('[data-act="guida-ia"]');
-  await p.waitForSelector('.finestra.guida');
-  ok(await p.isVisible('.finestra.guida a[href="https://aistudio.google.com/apikey"]') && await p.isVisible('text=termini dell\'API Gemini'), 'guida con il collegamento ad AI Studio e i termini per l\'Europa');
-  await p.fill('.guida input[name=chiave]', 'corta');
-  await p.click('.guida button[type=submit]');
-  await p.waitForSelector('text=La chiave sembra incompleta');
-  await p.fill('.guida input[name=chiave]', 'chiave-sbagliata-1234567890');
-  await p.click('.guida button[type=submit]');
-  await p.waitForSelector('text=Google non accetta questa chiave', { timeout: 20000 });
-  ok(true, 'chiavi sbagliate: messaggi chiari');
-  await p.screenshot({ path: out + '/1b-guida.png' });
-  await p.fill('.guida input[name=chiave]', 'chiave-finta-gemini-1234567890');
-  await p.click('.guida button[type=submit]');
-  await p.waitForSelector('.finestra.festa >> text=Intelligenza artificiale collegata', { timeout: 20000 });
-  ok(!(await p.$('.finestra.guida')), 'guida chiusa, festa per l\'IA collegata');
-  await p.waitForTimeout(5200);
-  await p.screenshot({ path: out + '/1c-festa.png' });
-  await p.click('.festa [data-f="classifica"]');
-  await p.waitForFunction(() => document.activeElement && document.activeElement.id === 'q');
-  ok(!(await p.$('.velo')) && !(await p.isVisible('[data-act="guida-ia"]')), 'dalla festa alla Classifica, senza più l\'avviso');
-  await classifica(p, 'trapano a percussione con Gemini');
-  ok(true, 'classificazione con la chiave della guida');
+  // un collega chiede l'account e aspetta
+  const cl = await b.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light' });
+  const luca = await cl.newPage(); attenzione(luca, 'luca');
+  await richiedi(luca, 'Luca Bianchi', 'luca@azienda.it', 'Spedizioni-2026!', 'Ufficio import');
+  await luca.waitForSelector('text=Richiesta inviata');
+  await accedi(luca, 'luca@azienda.it', 'Spedizioni-2026!');
+  await luca.waitForSelector('text=in attesa di approvazione');
+  ok(true, 'richiesta in attesa: non entra');
+  await luca.screenshot({ path: out + '/3-in-attesa.png' });
 
-  // impostazioni: servizio compatibile OpenAI su un altro indirizzo
-  await p.click('#tab-gestione');
-  await p.waitForSelector('form[data-g="ia-locale"]');
-  ok((await p.$$('.sotto button')).length === 2 && !(await p.isVisible('text=Registro')), 'solo IA e dati TARIC nelle impostazioni');
-  ok(await p.isVisible('text=In uso: gemini-3.7-flash'), 'Gemini collegato dalla guida');
-  ok(await p.isVisible('text=La chiave resta in questo browser'), 'nota sulla chiave nel browser');
-  await p.selectOption('select[name=fornitore]', 'openai');
-  await p.fill('input[name=url]', IA + '/v1');
-  await p.fill('input[name=modello]', 'finto-modello');
-  await p.fill('input[name=chiave]', 'chiave-sbagliata-1234');
-  await p.click('form[data-g="ia-locale"] button[type=submit]');
-  await p.waitForSelector('text=la prova non è riuscita', { timeout: 20000 });
-  ok(await p.isVisible('text=Il servizio rifiuta la chiave') && !(await p.$('.festa')), 'chiave sbagliata: prova automatica, messaggio chiaro, niente festa');
-  await p.click('button[data-g="cambia-chiave"]');
-  await p.fill('input[name=chiave]', 'chiave-finta');
-  await p.click('form[data-g="ia-locale"] button[type=submit]');
-  await p.waitForSelector('.finestra.festa', { timeout: 20000 });
-  await p.click('.festa [data-f="chiudi"]');
-  await p.waitForSelector('text=risponde (finto-modello)', { timeout: 10000 });
-  ok(true, 'chiave nuova: prova riuscita e festa');
-  ok(await p.isVisible('text=Chiave salvata: …inta'), 'chiave mascherata');
-  await p.click('button[data-g="prova-ia"]');
-  await p.waitForSelector('text=Il servizio risponde', { timeout: 15000 });
-  await p.click('button[data-g="modelli-ia"]');
-  await p.waitForSelector('text=2 modelli disponibili');
-  ok(true, 'prova del servizio ed elenco dei modelli dal browser');
-  await p.screenshot({ path: out + '/2-ia.png', fullPage: true });
-  await p.click('button[data-v="dati"]');
-  await p.waitForSelector('text=Versioni sul sito');
-  ok(await p.isVisible('text=Arrivano da soli con il sito'), 'dati dal sito');
-  await p.click('button[data-g="riepilogo"]');
-  await p.waitForSelector('pre.registro');
-  ok((await p.textContent('pre.registro')).length > 100, 'riepilogo della versione');
-  await p.screenshot({ path: out + '/3-dati.png', fullPage: true });
+  // l'amministratore approva
+  await capo.reload(); await pronta(capo);
+  await capo.waitForFunction(() => document.getElementById('tab-gestione').classList.contains('novita'));
+  ok(true, 'puntino sulla Gestione per la richiesta');
+  await capo.click('#tab-gestione'); await capo.click('button[data-v="utenti"]');
+  await capo.waitForSelector('text=Da approvare');
+  ok(await capo.isVisible('text=«Ufficio import»'), 'messaggio della richiesta');
+  await capo.screenshot({ path: out + '/4-da-approvare.png', fullPage: true });
+  await capo.click('button[data-g="u-approva"]');
+  await capo.waitForSelector('text=Approvato: Luca Bianchi');
 
-  // classificazione, preferito, storico
-  await classifica(p, 'trapano a percussione elettrico');
-  ok(true, 'classificazione con l\'IA dal browser');
-  await p.click('button[data-act="preferito"]');
-  await p.waitForSelector('button[data-act="preferito"][aria-pressed="true"]');
-  await p.click('#tab-profilo');
-  await p.waitForSelector('.voce >> text=trapano a percussione elettrico', { timeout: 8000 });
-  ok(await p.isVisible('text=2 classificazioni a'), 'uso del mese nel profilo');
-  // tutto resta dopo il ricaricamento
-  await ricarica(p);
-  await p.click('#tab-profilo');
-  await p.waitForSelector('.voce >> text=trapano a percussione elettrico', { timeout: 8000 });
-  ok((await p.$$('[data-p="togli-preferito"]')).length === 1, 'storico e preferito restano nel browser');
-  await p.fill('input[name=nome]', 'Mario Rossi'); await p.click('form[data-p="salva-account"] button[type=submit]');
-  await p.waitForSelector('text=Dati salvati.');
-  // esporta, svuota, importa
-  const [scarico] = await Promise.all([p.waitForEvent('download'), p.click('button[data-p="esporta"]')]);
-  const file = out + '/esportazione.json';
-  await scarico.saveAs(file);
-  const esportato = JSON.parse(fs.readFileSync(file, 'utf8'));
-  ok(esportato.formato === 'magic-hs' && esportato.storico.length === 2 && esportato.preferiti.length === 1 && esportato.profilo.nome === 'Mario Rossi', 'esportazione');
-  await p.click('button[data-p="svuota"]');
-  await p.waitForSelector('text=Ancora nessuna classificazione.');
-  await p.click('button[data-p="togli-preferito"]');
-  await p.waitForSelector('text=Nessuna voce preferita.');
-  await p.setInputFiles('input[data-p="importa"]', file);
-  await p.waitForSelector('text=Importate 2 classificazioni e 1 preferito.');
-  await p.waitForSelector('.voce >> text=trapano a percussione elettrico');
-  ok((await p.$$('[data-p="togli-preferito"]')).length === 1, 'importazione di storico e preferiti');
-  await p.setInputFiles('input[data-p="importa"]', file);
-  await p.waitForSelector('text=Importate 0 classificazioni e 0 preferiti.');
-  ok(true, 'importare due volte non duplica');
-  await p.screenshot({ path: out + '/4-profilo.png', fullPage: true });
-
-  // gli altri due fornitori, con la risposta nello strumento (Claude) e nello schema (Gemini)
-  for (const [nome, ia] of [['Claude', { fornitore: 'anthropic', chiave: 'chiave-finta', url: IA + '/v1/messages' }],
-                            ['Gemini', { fornitore: 'gemini', chiave: 'chiave-finta', url: IA + '/v1beta' }]]) {
-    await p.evaluate(v => localStorage.setItem('magic-hs.ia', JSON.stringify(v)), ia);
-    await ricarica(p);
-    await classifica(p, 'scarpe sportive ' + nome);
-    ok(true, 'classificazione con ' + nome);
+  // il collega entra e classifica fino al limite
+  await accedi(luca, 'luca@azienda.it', 'Spedizioni-2026!');
+  await pronta(luca);
+  ok(await luca.isHidden('#tab-gestione'), 'niente Gestione per i colleghi');
+  for (const t of ['trapano a percussione elettrico', 'scarpe sportive di pelle']) {
+    await classifica(luca, t);
+    await luca.waitForFunction(() => document.querySelector('.timbro') && document.querySelector('.timbro').textContent.includes('Proposta'), null, { timeout: 30000 });
+    await luca.waitForTimeout(400);
   }
+  ok(true, 'due classificazioni con l\'IA del server');
+  await classifica(luca, 'bicicletta elettrica');
+  await luca.waitForSelector('text=Hai usato tutte le 2 classificazioni');
+  ok(true, 'limite mensile raggiunto: messaggio chiaro');
+  await luca.click('#tab-profilo');
+  await luca.waitForSelector('text=Il tuo account');
+  ok(await luca.isVisible('text=2 di 2 classificazioni') && await luca.isVisible('text=luca@azienda.it'), 'profilo con account e uso');
+  await luca.screenshot({ path: out + '/5-profilo.png', fullPage: true });
 
-  // senza rete: l'app si apre lo stesso (service worker)
-  const pronto = await p.evaluate(() => navigator.serviceWorker.ready.then(r => !!r.active));
-  ok(pronto, 'service worker attivo');
-  await ricarica(p);                // ora i dati passano dal service worker
-  await p.waitForTimeout(500);
-  await ctx.setOffline(true);
-  await ricarica(p);
-  await p.waitForFunction(() => document.getElementById('dato').textContent.length > 0);
-  await p.click('#tab-nomenclatura'); await p.fill('#nq', '8467');
-  await p.waitForSelector('#albero >> text=8467');
-  ok(true, 'senza rete: app e nomenclatura disponibili');
-  await ctx.setOffline(false);
+  // password dimenticata: link preparato dall'amministratore
+  await capo.click('button[data-v="utenti"]'); await capo.waitForSelector('button[data-g="u-apri"]');
+  const righe = await capo.$$('button[data-g="u-apri"]');
+  for (const r of righe) { const tr = await r.evaluateHandle(e => e.closest('tr')); if ((await tr.evaluate(e => e.textContent)).includes('luca@azienda.it')) { await r.click(); break; } }
+  await capo.click('button[data-g="u-link"]');
+  await capo.waitForSelector('[data-g="link-campo"]');
+  const link = await capo.inputValue('[data-g="link-campo"]');
+  ok(link.indexOf('/reimposta-password#') > 0, 'link per la password');
+  await capo.screenshot({ path: out + '/6-utente.png', fullPage: true });
+  const nuova = await (await b.newContext()).newPage(); attenzione(nuova, 'reimposta');
+  await nuova.goto(link.replace(/^https?:\/\/[^/]+/, B));
+  await nuova.fill('input[name=password]', 'Nuova-Password-2026'); await nuova.fill('input[name=ripeti]', 'Nuova-Password-2026');
+  await nuova.click('#reimposta button[type=submit]');
+  await pronta(nuova);
+  ok(!nuova.url().includes('#'), 'nuova password ed entrato');
+
+  // sospensione: il collega esce
+  await capo.click('button[data-g="u-sospendi"]');
+  await capo.waitForSelector('text=Account sospeso.');
+  await nuova.reload();
+  await nuova.waitForSelector('#accedi');
+  ok(true, 'sospeso: torna alla pagina d\'accesso');
 
   // telefono e tema scuro
   const t = await b.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', deviceScaleFactor: 2 });
-  const q = await t.newPage();
-  q.on('pageerror', e => errori.push('errore JS (tel): ' + e.message));
-  await q.goto(SITO + '#gestione'); await q.waitForSelector('form[data-g="ia-locale"]');
-  await q.screenshot({ path: out + '/5-tel-ia.png', fullPage: true });
-  await q.goto(SITO + '#profilo'); await q.waitForSelector('text=I tuoi dati');
-  await q.screenshot({ path: out + '/6-tel-profilo.png', fullPage: true });
+  const q = await t.newPage(); attenzione(q, 'tel');
+  await q.goto(B + '/accedi'); await q.waitForSelector('#accedi');
+  await q.screenshot({ path: out + '/7-tel-accedi.png', fullPage: true });
+  await accedi(q, 'capo@azienda.it', 'Porto-Container-42'); await pronta(q);
+  await q.goto(B + '/#gestione'); await q.waitForSelector('button[data-g="u-apri"]');
+  await q.screenshot({ path: out + '/8-tel-utenti.png', fullPage: true });
+
+  // uscita
+  await capo.click('#esci');
+  await capo.waitForSelector('#accedi');
+  ok(capo.url().endsWith('/accedi'), 'Esci: di nuovo alla pagina d\'accesso');
   await b.close();
   console.log(errori.length ? 'ERRORI:\n' + errori.join('\n') : 'tutto ok');
   process.exit(errori.length ? 1 : 0);

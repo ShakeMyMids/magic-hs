@@ -1,4 +1,4 @@
-"""Strumenti comuni dei test: finti servizi esterni (IA e GitHub) e un «PC» con MAGIC HS."""
+"""Strumenti comuni dei test: finti servizi esterni (IA e GitHub), un «PC» con MAGIC HS e il «sito» (modalita' server)."""
 from __future__ import annotations
 
 import hashlib
@@ -11,6 +11,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from taric import sicurezza as S
 from taric.app import crea_app
 from taric.config import carica
 
@@ -199,7 +200,8 @@ def ambiente(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, pyt
     monkeypatch.setenv("TARIC_CONFIG", str(tmp_path / "nessuno.env"))
     for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "TARIC_IA_FORNITORE", "TARIC_IA_URL", "TARIC_IA_CHIAVE",
               "TARIC_IA_MODELLO", "TARIC_IA_MODELLO_RAPIDO", "TARIC_MODELLO", "TARIC_MODELLO_RAPIDO", "TARIC_DATI", "TARIC_AVVIO",
-              "TARIC_PROGRAMMI", "TARIC_DATI_URL", "TARIC_AGGIORNAMENTI_URL", "TARIC_FONTE_URL"):
+              "TARIC_PROGRAMMI", "TARIC_DATI_URL", "TARIC_AGGIORNAMENTI_URL", "TARIC_FONTE_URL", "TARIC_SERVER",
+              "MAGIC_HS_AMMINISTRATORI", "MAGIC_HS_INDIRIZZO", "RENDER_EXTERNAL_URL"):
         monkeypatch.delenv(k, raising=False)
     return tmp_path, monkeypatch
 
@@ -209,3 +211,73 @@ def pc(ambiente) -> PC:
     """Un PC con i dati di novembre 2026 e Claude come servizio IA."""
     tmp, mp = ambiente
     return PC(tmp, mp, versioni=("2026-11-01",), ia={"fornitore": "anthropic", "chiave": "chiave-di-prova"})
+
+
+INDIRIZZO = "https://magic-hs.onrender.com"
+CAPO = "capo@azienda.it"
+
+
+class Sito:
+    """Il sito (modalita' server, come su Render) con i dati di novembre 2026, finti IA e GitHub. L'amministratore e'
+    CAPO (MAGIC_HS_AMMINISTRATORI); ia=True mette la chiave di Gemini nelle variabili del server."""
+
+    def __init__(self, tmp: Path, mp: pytest.MonkeyPatch, ia: bool = True, extra: dict[str, str] | None = None):
+        self.cartella = tmp / "render"
+        dati_finti(self.cartella / "dati" / "taric" / "versioni", "2026-11-01")
+        (self.cartella / "dati" / "taric" / "attiva.txt").write_text("2026-11-01")
+        self.claude = FintoClaude()
+        self.github = FintoGitHub()
+        originale = S.verifica_modulo          # nelle prove il modulo si invia subito (niente attesa minima contro i bot)
+        mp.setattr(S, "verifica_modulo", lambda segreto, valore, minimo_s=3, massimo_s=7200: originale(segreto, valore, 0, massimo_s))
+        self.extra = {"TARIC_SERVER": "1", "TARIC_DATI": str(self.cartella / "dati"), "MAGIC_HS_AMMINISTRATORI": CAPO,
+                      "MAGIC_HS_INDIRIZZO": INDIRIZZO, **({"GEMINI_API_KEY": "chiave-gemini-server"} if ia else {}), **(extra or {})}
+        self.mp = mp
+        self.riavvia()
+
+    def riavvia(self, **extra: str) -> None:
+        """Come un nuovo avvio del servizio (per esempio dopo aver cambiato le variabili su Render)."""
+        self.extra.update(extra)
+        self.cfg = carica(self.extra)
+        web = httpx.Client(transport=httpx.MockTransport(self.github), follow_redirects=True)
+        self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False,
+                            client_aggiornamenti=web, client_dati=web)
+        self.app.state.ia.attendi = lambda s: None
+
+    def client(self, base: str = INDIRIZZO) -> TestClient:
+        return TestClient(self.app, base_url=base, headers={"X-Taric": "1"})
+
+    def modulo(self, c: TestClient) -> str:
+        return c.get("/api/modulo").json()["modulo"]
+
+    def registra(self, nome: str, email: str, password: str = "Porto-Container-42", **altro: str) -> tuple[TestClient, dict]:
+        c = self.client()
+        r = c.post("/api/registrazione", json={"nome": nome, "email": email, "password": password, "modulo": self.modulo(c), **altro})
+        return c, {"stato_http": r.status_code, **r.json()}
+
+    def accedi(self, email: str, password: str = "Porto-Container-42") -> TestClient:
+        c = self.client()
+        r = c.post("/api/accedi", json={"email": email, "password": password})
+        assert r.status_code == 200, r.text
+        return c
+
+    def capo(self) -> TestClient:
+        c, r = self.registra("Mario Capo", CAPO)
+        assert r["stato"] == "attivo", r
+        return c
+
+    def collega(self, capo: TestClient, nome: str = "Luca Bianchi", email: str = "luca@azienda.it") -> TestClient:
+        """Un collega registrato e approvato dall'amministratore, gia' entrato."""
+        _, r = self.registra(nome, email)
+        assert r["stato"] == "in_attesa", r
+        uid = next(x["id"] for x in capo.get("/api/admin/utenti").json()["utenti"] if x["email"] == email)
+        assert capo.post(f"/api/admin/utenti/{uid}/approva").status_code == 200
+        return self.accedi(email)
+
+    def id_di(self, capo: TestClient, email: str) -> int:
+        return next(x["id"] for x in capo.get("/api/admin/utenti").json()["utenti"] if x["email"] == email)
+
+
+@pytest.fixture
+def sito(ambiente) -> Sito:
+    tmp, mp = ambiente
+    return Sito(tmp, mp)

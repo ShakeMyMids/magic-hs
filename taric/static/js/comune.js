@@ -27,7 +27,8 @@
     }, function (e) {
       if (e && e.name === 'AbortError') throw e;
       if (T.alOffline) T.alOffline();            // forse il programma si è chiuso
-      throw { stato: 0, codice: 'offline', errore: 'MAGIC HS non risponde: se l\'hai chiuso, riaprilo da «Avvia MAGIC HS».' };
+      throw { stato: 0, codice: 'offline', errore: T.server ? 'MAGIC HS non risponde: controlla la connessione e riprova.'
+        : 'MAGIC HS non risponde: se l\'hai chiuso, riaprilo da «Avvia MAGIC HS».' };
     });
   };
 

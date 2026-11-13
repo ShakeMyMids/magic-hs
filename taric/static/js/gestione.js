@@ -1,19 +1,25 @@
-/* MAGIC HS - vista Impostazioni di questo PC: intelligenza artificiale, dati TARIC, versione del programma,
-   registro degli eventi. Nella versione sito (T.web) restano intelligenza artificiale e dati TARIC: i dati e le
-   versioni arrivano con il sito. */
+/* MAGIC HS - vista Gestione. Nel sito (T.server), per l'amministratore: utenti (richieste da approvare, limiti,
+   link per la password), intelligenza artificiale unica (stato, prova, limiti, uso per persona), dati TARIC con la copia
+   del database, registro. Nel programma per Windows è «Impostazioni» del PC: intelligenza artificiale, dati TARIC,
+   versione del programma, registro. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
   var el = document.getElementById('view-gestione');
   var vista = T.viste = T.viste || {};
-  var st = { sotto: 'ia', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, loc: null, cambiaChiave: false,
-             agg: null, modelli: [] };
+  var st = { sotto: '', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, loc: null, cambiaChiave: false,
+             agg: null, modelli: [], utenti: null, iaS: null, aperto: 0, link: null };
 
   var ESITI = { ok: 'riuscito', errore: 'errore', non_disponibile: 'non ancora disponibile', in_corso: 'in corso', interrotto: 'interrotto' };
   var EVENTI = {
     dati_ok: 'Dati TARIC installati', dati_errore: 'Aggiornamento dati non riuscito', dati_non_disponibile: 'Estrazione non ancora disponibile',
     dati_versione_attivata: 'Versione dati cambiata', impostazioni_ia: 'Intelligenza artificiale cambiata',
-    programma_pubblicato: 'Nuova versione del programma scaricata', editori: 'Chi può pubblicare cambiato'
+    programma_pubblicato: 'Nuova versione del programma scaricata', editori: 'Chi può pubblicare cambiato',
+    registrazione: 'Richiesta di account', approvato: 'Account approvato', rifiutato: 'Richiesta rifiutata', sospeso: 'Account sospeso',
+    riattivato: 'Account riattivato', link_password: 'Link per la password', password_cambiata: 'Password cambiata',
+    password_reimpostata: 'Password reimpostata', accesso_bloccato: 'Accesso bloccato (password errate)', utente_eliminato: 'Account eliminato',
+    ruolo: 'Ruolo cambiato', quota_ia: 'Limite personale cambiato', impostazioni_sito: 'Limiti e registrazioni cambiati',
+    backup_scaricato: 'Copia del database scaricata', sessioni_chiuse: 'Uscita da tutti i dispositivi'
   };
   var FORNITORI = [['', 'Nessuno: solo consultazione'], ['openai', 'Azure OpenAI o altro servizio compatibile OpenAI'], ['gemini', 'Google Gemini'], ['anthropic', 'Anthropic Claude']];
   /* modelli predefiniti (come in config.FORNITORI): [principale, rapido] */
@@ -26,12 +32,13 @@
   function msg(dove, testo, ok) { st.msg[dove] = testo ? { testo: testo, ok: !!ok } : null; }
   function errore(e) { return (e && e.errore) || 'Operazione non riuscita.'; }
 
-  vista.gestione = { mostra: function () { disegna(); carica(); } };
-  document.addEventListener('taric:ia', function () { st.modelli = []; msg('ia', ''); if (!el.hidden) carica(); });   // collegata dalla guida
+  vista.gestione = { mostra: function () { if (!st.sotto) st.sotto = T.server ? 'utenti' : 'ia'; disegna(); carica(); } };
 
   function carica() {
-    var chiamate = [T.api('GET', '/api/admin/riepilogo').then(function (r) { st.riep = r; })];
-    if (st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/locale').then(function (r) { st.loc = r; }));
+    var chiamate = [T.api('GET', '/api/admin/riepilogo').then(function (r) { st.riep = r; segnaRichieste(r); })];
+    if (T.server && (st.sotto === 'utenti' || st.sotto === 'ia')) chiamate.push(T.api('GET', '/api/admin/utenti').then(function (r) { st.utenti = r; }));
+    if (T.server && st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/ia').then(function (r) { st.iaS = r; }));
+    if (!T.server && st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/locale').then(function (r) { st.loc = r; }));
     if (st.sotto === 'dati') chiamate.push(T.api('GET', '/api/admin/dati').then(function (r) { st.dati = r; }));
     if (st.sotto === 'registro') chiamate.push(T.api('GET', '/api/admin/eventi?limite=300').then(function (r) { st.eventi = r.eventi; }));
     if (st.sotto === 'programma' && !st.agg) controllaVersioni(false);     // a parte: GitHub può essere lento
@@ -41,20 +48,22 @@
   /* ------------------------------------------------------------------ disegno */
   function disegna() {
     var r = st.riep, h = '';
-    var schede = [['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['programma', 'Programma', 'pacco'], ['registro', 'Registro', 'registro']];
-    if (T.web) schede = schede.slice(0, 2);
+    var schede = T.server ? [['utenti', 'Utenti', 'utenti'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['registro', 'Registro', 'registro']]
+      : [['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['programma', 'Programma', 'pacco'], ['registro', 'Registro', 'registro']];
     h += '<div class="sotto" role="tablist">' + schede.map(function (x) {
       return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
     if (r) h += avvisi(r);
-    h += { dati: dati, registro: registro, programma: programma, ia: iaLocale }[st.sotto]();
+    h += { dati: dati, registro: registro, programma: programma, ia: T.server ? iaSito : iaLocale, utenti: utenti }[st.sotto]();
     el.innerHTML = h;
     pianificaRinfresco();
   }
 
   function avvisi(r) {
     var a = [], h = '';
-    if (!r.ia && st.sotto !== 'ia') a.push('La classificazione assistita è spenta: scegli un servizio nella scheda Intelligenza artificiale.');
+    if (T.server && r.in_attesa && st.sotto !== 'utenti') a.push(r.in_attesa === 1 ? 'C\'è una richiesta di account da approvare: vai su Utenti.' : 'Ci sono ' + r.in_attesa + ' richieste di account da approvare: vai su Utenti.');
+    if (!r.ia && st.sotto !== 'ia') a.push(T.server ? 'La classificazione assistita è spenta: inserisci la chiave di Gemini nel servizio su Render (vedi Intelligenza artificiale).'
+      : 'La classificazione assistita è spenta: scegli un servizio nella scheda Intelligenza artificiale.');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC: vai su Dati TARIC.');
     if (a.length) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Da sistemare</div>' + a.map(function (t) { return '<p class="avviso">' + esc(t) + '</p>'; }).join('') + '</div></div>';
     if (st.agg && st.agg.pronta && st.sotto !== 'programma') h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Novità</div>' +
@@ -72,12 +81,15 @@
       ' codici dichiarabili, ' + (att.misure_import || '?') + ' misure all\'importazione e ' + (att.misure_export || '?') + ' all\'esportazione; ' + (att.righe_en || 0) + ' righe ancora in inglese.</p>' +
       (att.avvisi && att.avvisi.length ? '<p class="avviso">' + esc(att.avvisi.join(' · ')) + '</p>' : '');
     else h += '<p class="avviso">Nessun dato installato.</p>';
-    if (T.web) return h + '<p class="nota">Arrivano da soli con il sito, a ogni inizio mese.</p></div></div>' + versioniDati(d);
     if (d.in_corso) h += '<p class="esito-ok">Aggiornamento di ' + esc(d.in_corso.mese) + ' in corso: ' + esc(d.in_corso.fase) + '…</p>';
     h += '<p class="nota">A ogni inizio mese arrivano da soli, pronti da GitHub; se non ci sono ancora li prepara questo PC.</p>';
     h += (d.prossimo ? '<p class="nota">Prossimo tentativo per ' + esc(d.prossimo) + ' entro dieci minuti.</p>' : '') + '</div>';
     h += '<div class="box s4"><div class="lab">' + T.icona('aggiorna') + 'Aggiorna adesso</div><form class="modulo" data-g="aggiorna"><label>Mese (vuoto = corrente)<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Scarica e installa</button></div>' + riga('aggiorna') + '</form></div></div>';
+
+    if (T.server) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scarica') + 'Copia del database</div>' +
+      '<p class="nota">Account, storico, preferiti e uso dell\'IA di tutti. Il server ne fa una al giorno sul suo disco; scaricane una ogni tanto da tenere altrove.</p>' +
+      '<div class="fila"><a class="btn sm" href="/api/admin/backup" download>' + T.icona('scarica') + 'Scarica la copia</a></div></div></div>';
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('carica') + 'Carica a mano un\'estrazione</div><p class="nota">I file Excel del mese (CIRCABC «TARIC and Quota data and information») in un archivio .zip.</p>' +
       '<form class="modulo" data-g="carica"><div class="due"><label>Archivio .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
@@ -98,12 +110,12 @@
     return st.registro ? '<div class="lab" style="margin-top:8px">' + esc(st.registro.titolo) + '<span class="dx"><button class="link" type="button" data-g="chiudi-registro">chiudi</button></span></div><pre class="registro">' + esc(st.registro.testo) + '</pre>' : '';
   }
   function versioniDati(d) {
-    return '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + (T.web ? 'Versioni sul sito' : 'Versioni installate') + '</div><div class="scorri"><table class="tab"><thead><tr><th>Situazione al</th><th class="n">Righe</th><th class="n">Misure import</th><th>Generata</th><th></th></tr></thead><tbody>' +
+    return '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Versioni installate</div><div class="scorri"><table class="tab"><thead><tr><th>Situazione al</th><th class="n">Righe</th><th class="n">Misure import</th><th>Generata</th><th></th></tr></thead><tbody>' +
       d.versioni.map(function (v) {
         return '<tr' + (v.attiva ? ' class="evid"' : '') + '><td>' + esc(v.versione.split('-').reverse().join('/')) + (v.attiva ? ' <span class="st ok">in uso</span>' : '') + '</td><td class="n" data-l="Righe">' + (v.righe || '') + '</td><td class="n" data-l="Misure import">' + (v.misure_import || '') +
           '</td><td data-l="Generata">' + esc(T.dataOra(v.generato)) + '</td><td class="azioni"><button class="btn sm" type="button" data-g="riepilogo" data-v="' + esc(v.versione) + '">Riepilogo</button>' +
           (v.attiva ? '' : '<button class="btn sm" type="button" data-g="usa" data-v="' + esc(v.versione) + '">Usa questa</button>') + '</td></tr>';
-      }).join('') + '</tbody></table></div>' + (T.web ? registroAperto() : '') + '</div></div>';
+      }).join('') + '</tbody></table></div></div></div>';
   }
 
 
@@ -135,11 +147,7 @@
     var L = st.loc;
     if (!L) return '<p class="vuoto">Carico…</p>';
     var ia = L.ia, f = ia.fornitore, def = PREDEFINITI[f] || ['', ''];
-    var h = '';
-    if (!L.attiva && T.guidaGemini) h += '<div class="foglio"><div class="box invito"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita gratis</div>' +
-      '<p class="nota">Ti servono una chiave gratuita di Google Gemini e un paio di minuti.</p>' +
-      '<div class="fila"><button class="btn pri" type="button" data-g="guida-gemini">' + T.icona('libro') + 'Guida passo passo</button></div></div></div>';
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scintille') + 'Intelligenza artificiale' +
+    var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scintille') + 'Intelligenza artificiale' +
       '<span class="dx"><span class="st ' + (L.attiva ? 'ok' : 'sospeso') + '">' + (L.attiva ? 'attiva' : 'spenta') + '</span></span></div>';
     if (L.attiva && L.modelli_in_uso) h += '<p class="nota">In uso: ' + esc(L.modelli_in_uso.principale) +
       (L.modelli_in_uso.rapido && L.modelli_in_uso.rapido !== L.modelli_in_uso.principale ? ', e ' + esc(L.modelli_in_uso.rapido) + ' per la ricerca delle voci' : '') + '.</p>';
@@ -163,18 +171,15 @@
 
     var u = L.uso || {}, cons = CONSOLE[L.fornitore_attivo];
     var cache = u.token_in ? Math.round(u.token_cache / u.token_in * 100) : 0;
-    h += '<div class="foglio"><div class="box s6"><div class="lab">' + T.icona('grafico') + (T.web ? 'Uso in questo browser' : 'Uso su questo PC') + '<span class="dx">' + esc(meseIt(u.mese)) + '</span></div>' +
+    h += '<div class="foglio"><div class="box s6"><div class="lab">' + T.icona('grafico') + 'Uso su questo PC<span class="dx">' + esc(meseIt(u.mese)) + '</span></div>' +
       '<p class="cosa">' + numero(u.classificazioni) + (u.classificazioni === 1 ? ' classificazione' : ' classificazioni') + '</p>' +
       '<p class="nota">' + numero(u.richieste) + ' richieste, ' + numero(u.token_in) + ' token in ingresso' + (u.token_in ? ' (' + cache + '% dalla cache, che costano molto meno)' : '') +
       ' e ' + numero(u.token_out) + ' in uscita. La spesa è nella console del servizio' +
       (cons ? ' (<a href="' + esc(cons[1]) + '" target="_blank" rel="noopener">' + esc(cons[0]) + '</a>)' : '') + ', dove conviene impostare un tetto di spesa.</p></div>' +
       '<div class="box s6"><div class="lab">' + T.icona('info') + 'Da sapere</div>' +
-      (T.web ? '<p class="nota"><b>La chiave resta in questo browser</b> e va direttamente al servizio scelto, senza passare da altri server. Usane una dedicata a MAGIC HS, con un tetto di spesa.</p>' +
-        '<p class="nota"><b>Senza costi</b>: con Ollama il modello gira sul tuo PC (indirizzo http://localhost:11434/v1, servizio «compatibile OpenAI»), avviato con OLLAMA_ORIGINS=' + esc(location.origin) + ' perché accetti le richieste di questo sito. Senza IA restano nomenclatura, misure, storico e preferiti.</p>'
-        : '<p class="nota"><b>La chiave resta su questo PC</b>, protetta da Windows: solo il tuo utente la può leggere.</p>' +
-        '<p class="nota"><b>Senza costi</b>: con Ollama il modello gira sul tuo PC (indirizzo http://localhost:11434/v1, servizio «compatibile OpenAI»). Senza IA restano nomenclatura, misure, storico e preferiti.</p>') +
-      '<p class="nota"><b>Azure OpenAI</b>: indirizzo https://&lt;risorsa&gt;.openai.azure.com/openai/v1 e nome della distribuzione come modello.</p>' +
-      (T.guidaGemini ? '<p class="nota"><b>Google Gemini</b>: <button class="link" type="button" data-g="guida-gemini">guida alla chiave gratuita</button>.</p>' : '') + '</div></div>';
+      '<p class="nota"><b>La chiave resta su questo PC</b>, protetta da Windows: solo il tuo utente la può leggere.</p>' +
+      '<p class="nota"><b>Senza costi</b>: con Ollama il modello gira sul tuo PC (indirizzo http://localhost:11434/v1, servizio «compatibile OpenAI»). Senza IA restano nomenclatura, misure, storico e preferiti.</p>' +
+      '<p class="nota"><b>Azure OpenAI</b>: indirizzo https://&lt;risorsa&gt;.openai.azure.com/openai/v1 e nome della distribuzione come modello.</p></div></div>';
     return h;
   }
   function meseIt(m) {
@@ -182,6 +187,167 @@
     var x = /^(\d{4})-(\d{2})$/.exec(m || ''); return x ? nomi[+x[2] - 1] + ' ' + x[1] : '';
   }
 
+
+  /* ================================================================ sito: utenti */
+  var STATI = { in_attesa: ['da approvare', 'sospeso'], attivo: ['attivo', 'ok'], sospeso: ['sospeso', 'errore'], rifiutato: ['rifiutato', 'errore'] };
+  function persona(x) {
+    return '<b>' + esc(x.nome) + '</b>' + (x.ruolo === 'amministratore' ? ' <span class="st ok">amministratore</span>' : '') +
+      '<div class="nota">' + esc(x.email) + (x.azienda ? ' · ' + esc(x.azienda) : '') + '</div>';
+  }
+  function limiteDi(x) { return x.limite === null ? 'senza limite' : (x.limite === 0 ? 'IA spenta' : x.limite + ' al mese'); }
+
+  function utenti() {
+    var U = st.utenti;
+    if (!U) return '<p class="vuoto">Carico…</p>';
+    var attesa = U.utenti.filter(function (x) { return x.stato === 'in_attesa'; }), altri = U.utenti.filter(function (x) { return x.stato !== 'in_attesa'; });
+    var h = '';
+    if (attesa.length) {
+      h += '<div class="foglio"><div class="box invito"><div class="lab">' + T.icona('nuovo-utente') + 'Da approvare<span class="dx">' + attesa.length + '</span></div><div class="elenco">' +
+        attesa.map(function (x) {
+          return '<div class="voce"><div>' + persona(x) + (x.richiesta ? '<p class="nota">«' + esc(x.richiesta) + '»</p>' : '') +
+            '<div class="nota">Richiesta del ' + esc(T.dataOra(x.creato)) + '</div></div>' +
+            '<div class="azioni"><button class="btn sm pri" type="button" data-g="u-approva" data-id="' + x.id + '">' + T.icona('spunta') + 'Approva</button>' +
+            '<button class="btn sm" type="button" data-g="u-rifiuta" data-id="' + x.id + '">Rifiuta</button></div></div>';
+        }).join('') + '</div></div></div>';
+    }
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utenti') + 'Persone<span class="dx">' + altri.length + '</span></div>' + riga('utenti');
+    if (!altri.length) h += '<p class="vuoto">Ancora nessuno: chi si registra compare qui da approvare.</p>';
+    else {
+      h += '<div class="scorri"><table class="tab"><thead><tr><th>Persona</th><th>Stato</th><th class="n">IA a ' + esc(meseIt(U.mese)) + '</th><th>Ultimo accesso</th><th></th></tr></thead><tbody>' +
+        altri.map(function (x) {
+          var s = STATI[x.stato] || [x.stato, ''], aperto = st.aperto === x.id;
+          var r = '<tr' + (aperto ? ' class="evid"' : '') + '><td>' + persona(x) + '</td><td data-l="Stato"><span class="st ' + s[1] + '">' + s[0] + '</span></td>' +
+            '<td class="n" data-l="IA">' + numero(x.uso.classificazioni) + (x.limite !== null ? ' / ' + numero(x.limite) : '') + '</td>' +
+            '<td data-l="Ultimo accesso">' + esc(x.ultimo_accesso ? T.dataOra(x.ultimo_accesso) : 'mai') + '</td>' +
+            '<td class="azioni"><button class="btn sm" type="button" data-g="u-apri" data-id="' + x.id + '" aria-expanded="' + aperto + '">' + (aperto ? 'Chiudi' : 'Modifica') + '</button></td></tr>';
+          if (aperto) r += '<tr class="dettaglio"><td colspan="5">' + dettaglioUtente(x, U.io) + '</td></tr>';
+          return r;
+        }).join('') + '</tbody></table></div>';
+    }
+    return h + '<p class="nota">Chi si registra dalla pagina d\'accesso resta in attesa finché non lo approvi. Password dimenticata: prepara un link e mandalo alla persona.</p></div></div>';
+  }
+
+  function dettaglioUtente(x, io) {
+    var me = x.id === io, h = '<div class="pannello">';
+    h += '<form class="fila" data-g="u-limite" data-id="' + x.id + '"><label class="corto">Classificazioni con l\'IA al mese' +
+      '<input class="campo" type="number" min="0" max="100000" name="quota" value="' + (x.quota_ia === null ? '' : esc(x.quota_ia)) + '" placeholder="predefinito"></label>' +
+      '<button class="btn sm" type="submit">Salva</button><span class="nota">Ora: ' + esc(limiteDi(x)) + (x.quota_ia === null ? ' (predefinito)' : '') + '. Vuoto = predefinito, 0 = IA spenta.</span></form>';
+    h += '<div class="fila"><button class="btn sm" type="button" data-g="u-link" data-id="' + x.id + '">' + T.icona('chiave') + 'Link per la password</button>';
+    if (!me && !x.fisso) {
+      h += x.ruolo === 'amministratore' ? '<button class="btn sm" type="button" data-g="u-ruolo" data-id="' + x.id + '" data-v="utente">Togli amministratore</button>'
+        : '<button class="btn sm" type="button" data-g="u-ruolo" data-id="' + x.id + '" data-v="amministratore">Rendi amministratore</button>';
+      h += x.stato === 'attivo' ? '<button class="btn sm" type="button" data-g="u-sospendi" data-id="' + x.id + '">Sospendi</button>'
+        : '<button class="btn sm" type="button" data-g="u-riattiva" data-id="' + x.id + '">Riattiva</button>';
+      h += '<button class="btn sm" type="button" data-g="u-elimina" data-id="' + x.id + '">' + T.icona('cestino') + 'Elimina</button>';
+    }
+    h += '</div>';
+    if (st.link && st.link.id === x.id) h += '<div class="fila"><input class="campo" readonly value="' + esc(st.link.link) + '" aria-label="Link per la password" data-g="link-campo">' +
+      '<button class="btn sm pri" type="button" data-g="u-copia">' + T.icona('copia') + 'Copia</button></div>' +
+      '<p class="nota">Mandalo a ' + esc(x.nome) + ': vale 3 giorni e una volta sola.</p>';
+    if (x.motivo_stato) h += '<p class="nota">Motivo: ' + esc(x.motivo_stato) + '</p>';
+    return h + '</div>';
+  }
+
+  /* ================================================================ sito: intelligenza artificiale unica */
+  function iaSito() {
+    var A = st.iaS, U = st.utenti;
+    if (!A) return '<p class="vuoto">Carico…</p>';
+    var h = '<div class="foglio"><div class="box s7"><div class="lab">' + T.icona('scintille') + 'Intelligenza artificiale' +
+      '<span class="dx"><span class="st ' + (A.attiva ? 'ok' : 'sospeso') + '">' + (A.attiva ? 'attiva' : 'spenta') + '</span></span></div>';
+    if (A.attiva) h += '<p class="cosa">' + esc(A.ia_nome) + '</p><p class="nota">Modelli: ' + esc(A.modelli.principale) +
+      (A.modelli.rapido !== A.modelli.principale ? ', e ' + esc(A.modelli.rapido) + ' per la ricerca delle voci' : '') + '.</p>' +
+      '<div class="fila"><button class="btn" type="button" data-g="s-prova">Prova</button><button class="btn" type="button" data-g="s-modelli">Elenco dei modelli</button></div>';
+    else h += '<ol class="passi"><li>Su Google AI Studio, nel progetto con la <b>fatturazione attiva</b>, crea una chiave API.</li>' +
+      '<li>Su Render apri il servizio <b>magic-hs</b> › <b>Environment</b> e aggiungi <b>GEMINI_API_KEY</b> con la chiave.</li>' +
+      '<li>Salva: il servizio si riavvia da solo. Poi torna qui e premi Prova.</li></ol>';
+    if (st.modelli.length) h += '<p class="nota">Modelli disponibili: ' + esc(st.modelli.join(', ')) + '. Per cambiarli: TARIC_IA_MODELLO e TARIC_IA_MODELLO_RAPIDO su Render.</p>';
+    h += riga('ia') + '<p class="nota">La chiave sta solo nel servizio su Render: non arriva mai ai browser.</p></div>';
+
+    h += '<div class="box s5"><div class="lab">' + T.icona('regole') + 'Limiti e registrazioni</div><form class="modulo" data-g="s-limiti">' +
+      '<label>Classificazioni con l\'IA al mese per persona<input class="campo" type="number" min="0" max="100000" name="quota_predefinita" value="' + (A.quota_predefinita === null ? '' : esc(A.quota_predefinita)) + '" placeholder="vuoto = senza limite"></label>' +
+      '<label>Tetto al mese per tutti insieme<input class="campo" type="number" min="0" max="10000000" name="tetto_mese" value="' + (A.tetto_mese === null ? '' : esc(A.tetto_mese)) + '" placeholder="vuoto = nessun tetto"></label>' +
+      '<label class="spunta"><input type="checkbox" name="registrazione_aperta"' + (A.registrazione_aperta ? ' checked' : '') + '> Si possono chiedere nuovi account</label>' +
+      '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('limiti') +
+      '<p class="nota">Gli amministratori non hanno limite personale; per una persona si cambia in Utenti › Modifica.</p></form></div></div>';
+
+    var u = A.uso || {}, cache = u.token_in ? Math.round(u.token_cache / u.token_in * 100) : 0;
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('grafico') + 'Uso a ' + esc(meseIt(u.mese)) + '</div>' +
+      '<p class="cosa">' + numero(u.classificazioni) + (u.classificazioni === 1 ? ' classificazione' : ' classificazioni') + (A.tetto_mese !== null ? ' su ' + numero(A.tetto_mese) : '') + '</p>' +
+      '<p class="nota">' + numero(u.richieste) + ' richieste, ' + numero(u.token_in) + ' token in ingresso' + (u.token_in ? ' (' + cache + '% dalla cache, che costano molto meno)' : '') +
+      ' e ' + numero(u.token_out) + ' in uscita. La spesa esatta è nella <a href="https://console.cloud.google.com/billing" target="_blank" rel="noopener">fatturazione di Google Cloud</a>, dove conviene impostare un budget con avvisi.</p>';
+    var chi = U ? U.utenti.filter(function (x) { return x.uso.richieste; }).sort(function (a, b) { return b.uso.classificazioni - a.uso.classificazioni; }) : [];
+    if (chi.length) h += '<div class="scorri"><table class="tab"><thead><tr><th>Persona</th><th class="n">Classificazioni</th><th class="n">Limite</th><th class="n">Richieste</th><th class="n">Token</th></tr></thead><tbody>' +
+      chi.map(function (x) {
+        return '<tr><td>' + esc(x.nome) + '</td><td class="n" data-l="Classificazioni">' + numero(x.uso.classificazioni) + '</td><td class="n" data-l="Limite">' + esc(limiteDi(x)) +
+          '</td><td class="n" data-l="Richieste">' + numero(x.uso.richieste) + '</td><td class="n" data-l="Token">' + numero(x.uso.token_in + x.uso.token_out) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    return h + '</div></div>';
+  }
+
+  /* puntino sulla scheda Gestione quando ci sono richieste da approvare */
+  function segnaRichieste(r) {
+    var tab = document.getElementById('tab-gestione');
+    if (!tab || !T.server) return;
+    tab.classList.toggle('novita', !!r.in_attesa);
+    if (r.in_attesa) tab.title = r.in_attesa === 1 ? 'Una richiesta di account da approvare' : r.in_attesa + ' richieste di account da approvare'; else tab.removeAttribute('title');
+  }
+  T.segnaRichieste = function () { T.api('GET', '/api/admin/riepilogo').then(segnaRichieste, function () { /* niente puntino */ }); };
+
+  function azioneUtente(id, azione, corpo, fatto) {
+    return T.api('POST', '/api/admin/utenti/' + id + '/' + azione, corpo || null).then(function (r) { msg('utenti', fatto, true); return r; },
+      function (e) { msg('utenti', errore(e)); }).then(function (r) { carica(); return r; });
+  }
+  function azioneSito(g, b, id, v) {
+    var x = st.utenti && st.utenti.utenti.filter(function (u) { return String(u.id) === String(id); })[0];
+    if (g === 'u-apri') { st.aperto = st.aperto === +id ? 0 : +id; st.link = null; disegna(); }
+    else if (g === 'u-approva') azioneUtente(id, 'approva', null, 'Approvato: ' + (x ? x.nome : '') + ' può accedere.');
+    else if (g === 'u-rifiuta') {
+      var mr = window.prompt('Rifiutare la richiesta di ' + (x ? x.nome : '') + '? Motivo (facoltativo, solo per il registro):', '');
+      if (mr !== null) azioneUtente(id, 'rifiuta', { motivo: mr }, 'Richiesta rifiutata.');
+    } else if (g === 'u-sospendi') {
+      var ms = window.prompt('Sospendere ' + (x ? x.nome : '') + '? Non potrà più accedere finché non lo riattivi. Motivo (facoltativo):', '');
+      if (ms !== null) azioneUtente(id, 'sospendi', { motivo: ms }, 'Account sospeso.');
+    } else if (g === 'u-riattiva') azioneUtente(id, 'riattiva', null, 'Account riattivato.');
+    else if (g === 'u-link') {
+      b.disabled = true;
+      T.api('POST', '/api/admin/utenti/' + id + '/link-password').then(function (r) { st.link = { id: +id, link: r.link }; disegna(); },
+        function (e) { msg('utenti', errore(e)); disegna(); });
+    } else if (g === 'u-copia') { var c = el.querySelector('[data-g="link-campo"]'); if (c) T.copia(c.value); }
+    else if (g === 'u-ruolo') {
+      T.api('PATCH', '/api/admin/utenti/' + id, { ruolo: v }).then(function () { msg('utenti', v === 'amministratore' ? 'Ora è amministratore.' : 'Non è più amministratore.', true); },
+        function (e) { msg('utenti', errore(e)); }).then(carica);
+    } else if (g === 'u-elimina') {
+      if (!window.confirm('Eliminare l\'account di ' + (x ? x.nome : '') + ' con il suo storico e i preferiti? Non si può annullare.')) return true;
+      T.api('DELETE', '/api/admin/utenti/' + id).then(function () { st.aperto = 0; msg('utenti', 'Account eliminato.', true); }, function (e) { msg('utenti', errore(e)); }).then(carica);
+    } else if (g === 's-prova') {
+      b.disabled = true; msg('ia', 'Provo il servizio…', true); disegna();
+      var rapida;
+      T.api('POST', '/api/admin/ia/prova').then(function (r) { rapida = r; return T.api('POST', '/api/admin/ia/prova?livello=standard'); }).then(function (r) {
+        msg('ia', 'Il servizio risponde (' + rapida.modello + (r.modello !== rapida.modello ? ' e ' + r.modello : '') + ').', true);
+        var chiave = 'magic-hs.festa:' + st.iaS.ia_nome + ':' + r.modello;
+        try { if (!localStorage.getItem(chiave) && T.festaIA) { localStorage.setItem(chiave, '1'); T.festaIA({ nome: st.iaS.ia_nome, secondi: Math.max(rapida.secondi, r.secondi) }); } }
+        catch (e) { /* senza archivio del browser niente festa */ }
+      }, function (e) { msg('ia', (rapida ? 'Il modello rapido risponde, il principale no: ' : '') + errore(e)); }).then(disegna);
+    } else if (g === 's-modelli') {
+      b.disabled = true;
+      T.api('POST', '/api/admin/ia/modelli').then(function (r) { st.modelli = r.modelli || []; if (!st.modelli.length) msg('ia', 'Il servizio non ha indicato modelli.', true); },
+        function (e) { msg('ia', errore(e)); }).then(disegna);
+    } else return false;
+    return true;
+  }
+  function moduloSito(g, f, d) {
+    if (g === 'u-limite') {
+      var q = String(d.get('quota') || '').trim();
+      T.api('PATCH', '/api/admin/utenti/' + f.getAttribute('data-id'), { quota_ia: q === '' ? null : parseInt(q, 10) })
+        .then(function () { msg('utenti', 'Limite salvato.', true); }, function (e) { msg('utenti', errore(e)); }).then(carica);
+    } else if (g === 's-limiti') {
+      var qp = String(d.get('quota_predefinita') || '').trim(), tm = String(d.get('tetto_mese') || '').trim();
+      T.api('PUT', '/api/admin/impostazioni', { quota_predefinita: qp === '' ? null : parseInt(qp, 10), tetto_mese: tm === '' ? null : parseInt(tm, 10),
+        registrazione_aperta: !!d.get('registrazione_aperta') }).then(function () { msg('limiti', 'Salvato.', true); return app().aggiornaIo(); },
+        function (e) { msg('limiti', errore(e)); }).then(carica);
+    } else return false;
+    return true;
+  }
 
   /* ---------- registro ---------- */
   function registro() {
@@ -208,6 +374,7 @@
     if (!g) return;
     ev.preventDefault();
     var d = new FormData(f);
+    if (T.server && moduloSito(g, f, d)) return;
     if (g === 'aggiorna') {
       T.api('POST', '/api/admin/dati/aggiorna', { mese: String(d.get('mese') || '').trim() })
         .then(function (r) { msg('aggiorna', 'Aggiornamento di ' + r.mese + ' avviato: segui l\'avanzamento qui sopra.', true); }, function (e) { msg('aggiorna', errore(e)); }).then(carica);
@@ -250,9 +417,9 @@
     var b = ev.target.closest('[data-g]');
     if (!b || b.tagName === 'FORM') return;
     var g = b.getAttribute('data-g'), id = b.getAttribute('data-id'), v = b.getAttribute('data-v');
-    if (g === 'sotto') { st.sotto = v; st.registro = null; disegna(); carica(); }
+    if (g === 'sotto') { st.sotto = v; st.registro = null; st.link = null; disegna(); carica(); }
+    else if (T.server && azioneSito(g, b, id, v)) { /* gestita da azioneSito */ }
     else if (g === 'cambia-chiave') { st.cambiaChiave = true; disegna(); }
-    else if (g === 'guida-gemini') { if (T.guidaGemini) T.guidaGemini(); }
     else if (g === 'controlla-versioni') { b.disabled = true; msg('programma', ''); st.agg = null; disegna(); controllaVersioni(true); }
     else if (g === 'modelli-ia') {
       b.disabled = true; msg('ia', 'Leggo l\'elenco dei modelli…', true); disegna();
@@ -266,7 +433,7 @@
       T.api('POST', '/api/admin/locale/ia/prova').then(function (r) { msg('ia', 'Il servizio risponde (' + r.modello + ', ' + (r.secondi < 1 ? 'in meno di un secondo' : 'in ' + String(r.secondi).replace('.', ',') + ' secondi') + ').', true); },
         function (e) { msg('ia', errore(e)); }).then(disegna);
     } else if (g === 'usa') {
-      if (!window.confirm('Usare i dati del ' + v.split('-').reverse().join('/') + ' al posto di quelli ' + (T.web ? 'in uso? Vale per questo browser.' : 'attuali?'))) return;
+      if (!window.confirm('Usare i dati del ' + v.split('-').reverse().join('/') + ' al posto di quelli attuali?' + (T.server ? ' Vale per tutti.' : ''))) return;
       T.api('POST', '/api/admin/dati/attiva', { versione: v }).then(function () { T.avviso('Versione cambiata: ricarico la pagina.'); setTimeout(function () { location.reload(); }, 900); },
         function (e) { T.avviso(errore(e), 'male'); });
     } else if (g === 'riepilogo') {
