@@ -297,9 +297,9 @@ function cercaOra() {
   state.risChiusi = false; renderRisultati(); renderMsg(); qEl.blur();
   var r = $('#risultati'); if (r && !r.hidden && r.scrollIntoView) r.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-function rigaRisultato(i) {
+function rigaRisultato(i, n) {
   var p = pathOf(i), ctx = p.length > 1 ? p.slice(0, -1).filter(function (j) { return LVL[j] <= 1; }).map(function (j) { return showCode(j) + ' ' + descOf(j); }).join(' › ') : '';
-  return '<div class="trow ris ' + FLAG[i] + '" data-act="usa" data-i="' + i + '">' +
+  return '<div class="trow ris ' + FLAG[i] + '" data-act="usa" data-i="' + i + '" style="--i:' + Math.min(n || 0, 14) + '">' +
     '<span class="cod">' + esc(showCode(i)) + '</span><span class="txt">' + esc(descOf(i)) + tagEN(i) + '</span>' +
     '<button class="btn sm" type="button" data-act="usa" data-i="' + i + '">' + (isLeaf(i) ? 'Usa' : 'Apri') + '</button>' +
     (ctx ? '<span class="ctx">' + esc(ctx) + '</span>' : '') + '</div>';
@@ -310,14 +310,14 @@ function renderRisultati() {
   $('#q-x').hidden = !q;
   $('.domanda').classList.toggle('cercando', state.modo === 'parole' && !!q);
   if (state.modo !== 'parole' || !q) { el.hidden = true; el.innerHTML = ''; return; }
-  var res = cerca(q), testuale = !/^[\d\s.]+$/.test(q), h;
+  var res = cerca(q), testuale = !/^[\d\s.]+$/.test(q), h, nuovi = el.hidden || !el.querySelector('.ris-box');
   el.hidden = false; el.setAttribute('data-q', q);
   if (state.risChiusi) {
     el.innerHTML = res.length ? '<button class="link indietro" type="button" data-act="mostra-ris">' + T.icona('indietro') + 'Torna ai risultati per «' + esc(q) + '»</button>' : '';
     el.hidden = !res.length; return;
   }
   var ponte = (testuale && state.utente && state.utente.ia && state.utente.ia.configurata) ? '<button class="btn sm" type="button" data-act="chiedi">' + T.icona('scintille') + 'Classifica con l\'IA</button>' : '';
-  h = '<div class="box ris-box"><div class="lab">' + T.icona('cerca') + 'Risultati<span class="dx">' + (res.length === 150 ? 'più di 150' : res.length) + '</span></div><div class="albero">';
+  h = '<div class="box ris-box' + (nuovi ? ' arriva' : '') + '"><div class="lab">' + T.icona('cerca') + 'Risultati<span class="dx">' + (res.length === 150 ? 'più di 150' : res.length) + '</span></div><div class="albero">';
   if (!res.length) h += '<div class="trow info"><span class="txt nota">Nessun risultato. ' +
     (testuale ? 'La nomenclatura usa termini suoi (per esempio «foratrici» per i trapani): prova un\'altra parola' + (ponte ? ' oppure fai classificare la merce all\'IA.' : '.') : 'Controlla le cifre del codice.') + '</span>' + ponte + '</div>';
   h += res.slice(0, state.risTutti ? res.length : MOSTRATI).map(rigaRisultato).join('');

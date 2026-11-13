@@ -50,7 +50,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   pronti), `js/comune.js` (chiamate API, tema, logo, finestre `T.finestra`), `js/installa.js` (tasto Installa: finestra
   d'installazione del browser con `beforeinstallprompt`, altrimenti i passi per iPhone/iPad, Safari, Firefox; registra
   `sw.js`, servito come `/sw.js`, che non conserva niente e senza rete mostra solo un avviso), `js/disegni.js` (scena con nave, gru, treno, camion e aereo, inserita
-  negli elementi `data-scena`), `js/app.js` (prima pagina: ricerca per parola o codice con `cerca()`, che ignora le parole vuote e usa i sinonimi di
+  negli elementi `data-scena`: due composizioni, larga e compatta, scelte in `app.css` con una container query sulla
+  larghezza del riquadro, così sul telefono niente viene tagliato; `data-scena="vivo"` la anima piano), `js/app.js` (prima pagina: ricerca per parola o codice con `cerca()`, che ignora le parole vuote e usa i sinonimi di
   `js/sinonimi.js`, e risultati in `#risultati`, oppure con
   l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; albero
   della nomenclatura; misure), `js/profilo.js`, `js/gestione.js`
