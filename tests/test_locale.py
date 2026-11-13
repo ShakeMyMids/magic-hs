@@ -18,7 +18,7 @@ from taric.app import crea_app
 from taric.condivisa import Condivisa, ErroreCondivisa, editori, estrai_dati, versione_pacchetto
 from taric.config import carica
 
-from conftest import CHIAVE, PC, FintoClaude, dati_finti, imposta_editori
+from conftest import CHIAVE, PC, FintoClaude, FintoGitHub, dati_finti, imposta_editori
 
 RADICE = Path(__file__).resolve().parents[1]
 
@@ -229,12 +229,14 @@ def test_prova_del_servizio_e_azure(ambiente):
 
 
 # ------------------------------------------------------------------ nuove versioni del programma
-def pacchetto(cartella: Path, versione: str, avvio: str = "@echo off\r\n") -> Path:
+def pacchetto(cartella: Path, versione: str, avvio: str = "@echo off\r\n", leggimi: str = "", interna: str = "") -> Path:
     f = cartella / f"magic-hs-windows-{versione}.zip"
     with zipfile.ZipFile(f, "w") as z:
         z.writestr("python/pythonw.exe", b"MZ")
-        z.writestr("python/Lib/site-packages/taric/__init__.py", f'"""MAGIC HS"""\n__version__ = "{versione}"\n')
+        z.writestr("python/Lib/site-packages/taric/__init__.py", f'"""MAGIC HS"""\n__version__ = "{interna or versione}"\n')
         z.writestr("Avvia MAGIC HS.cmd", avvio)
+        if leggimi:
+            z.writestr("LEGGIMI.txt", leggimi)
     return f
 
 
@@ -243,13 +245,14 @@ def test_pubblicazione_del_programma(ambiente):
     editore = PC(tmp, cond, "editore", mp, versioni=("2026-11-01",))
     ce = editore.entra()
     for v in ("1.1.0", "1.2.0", "1.3.0"):
-        with open(pacchetto(tmp, v, f"rem {v}\r\n"), "rb") as f:
+        with open(pacchetto(tmp, v, f"rem {v}\r\n", leggimi=f"istruzioni {v}"), "rb") as f:
             r = ce.post("/api/admin/locale/programma", files={"file": (f"magic-hs-windows-{v}.zip", f, "application/zip")})
         assert r.status_code == 200 and r.json()["versione"] == v, r.text
         time.sleep(0.02)
     assert (cond / "programma" / "versione.txt").read_bytes() == b"1.3.0\r\n"
     assert sorted(f.name for f in (cond / "programma").glob("*.zip")) == ["magic-hs-1.2.0.zip", "magic-hs-1.3.0.zip"]
     assert (cond / "Avvia MAGIC HS.cmd").read_bytes() == b"rem 1.3.0\r\n"
+    assert (cond / "LEGGIMI.txt").read_text() == "istruzioni 1.3.0"           # anche le istruzioni arrivano dal pacchetto
     assert ce.get("/api/admin/locale").json()["programma"]["pubblicato"] == "1.3.0"
     r = ce.post("/api/admin/locale/programma", files={"file": ("altro.zip", io.BytesIO(b"non e' uno zip"), "application/zip")})
     assert r.status_code == 422 and r.json()["codice"] == "pacchetto"
@@ -259,6 +262,62 @@ def test_pubblicazione_del_programma(ambiente):
     with pytest.raises(ErroreCondivisa):
         versione_pacchetto(vuoto)
     assert (cond / "programma" / "versione.txt").read_bytes() == b"1.3.0\r\n"
+
+
+def test_aggiornamento_da_github_con_un_clic(ambiente):
+    tmp, cond, mp = ambiente
+    gh = FintoGitHub("9.9.9", pacchetto(tmp, "9.9.9", "rem nuova\r\n", leggimi="istruzioni nuove").read_bytes())
+    editore = PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",), github=gh)
+    collega = PC(tmp, cond, "lbianchi", mp, editore=False, github=gh)
+    cc, ce = collega.entra(), editore.entra()
+    assert cc.get("/api/admin/locale/aggiornamento").status_code == 403
+    assert cc.post("/api/admin/locale/aggiorna-programma").status_code == 403
+    r = ce.get("/api/admin/locale/aggiornamento").json()
+    assert r["disponibile"] and r["versione"] == "9.9.9" and r["errore"] == "" and r["pagina"].endswith("/v9.9.9")
+    n = len(gh.richieste)
+    ce.get("/api/admin/locale/aggiornamento")
+    assert len(gh.richieste) == n                                     # si chiede a GitHub al massimo ogni sei ore
+    r = ce.post("/api/admin/locale/aggiorna-programma")
+    assert r.status_code == 200 and r.json()["versione"] == "9.9.9", r.text
+    assert (cond / "programma" / "versione.txt").read_bytes() == b"9.9.9\r\n"
+    assert (cond / "programma" / "magic-hs-9.9.9.zip").read_bytes() == gh.pacchetto
+    assert (cond / "Avvia MAGIC HS.cmd").read_bytes() == b"rem nuova\r\n" and (cond / "LEGGIMI.txt").read_text() == "istruzioni nuove"
+    assert not ce.get("/api/admin/locale/aggiornamento").json()["disponibile"]
+    r = ce.post("/api/admin/locale/aggiorna-programma")
+    assert r.status_code == 409 and r.json()["codice"] == "aggiornato"
+    eventi = ce.get("/api/admin/eventi").json()["eventi"]
+    assert any(e["tipo"] == "programma_pubblicato" and "GitHub" in e["dettagli"] for e in eventi)
+    assert not list(editore.app.state.dati.lavoro.iterdir())          # niente resti del download
+
+
+def test_aggiornamento_rifiuta_pacchetti_sbagliati(ambiente):
+    tmp, cond, mp = ambiente
+    buono = pacchetto(tmp, "9.9.9").read_bytes()
+    casi = [
+        (FintoGitHub("9.9.9", buono, digest="sha256:" + "0" * 64), "non corrisponde"),          # impronta diversa
+        (FintoGitHub("9.9.9", pacchetto(tmp, "9.9.9", interna="9.9.8").read_bytes()), "versione attesa"),
+        (FintoGitHub("9.9.9", b"non e' uno zip", digest=""), "non va bene"),
+    ]
+    for gh, messaggio in casi:
+        pc = PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",), github=gh)
+        r = pc.entra().post("/api/admin/locale/aggiorna-programma")
+        assert r.status_code in (422, 502) and messaggio in r.json()["errore"], r.text
+        assert not (cond / "programma" / "versione.txt").exists() and not list(pc.app.state.dati.lavoro.iterdir())
+    # GitHub non raggiungibile o senza versioni: si continua a lavorare, con un messaggio
+    for gh in (FintoGitHub(errore=503), FintoGitHub()):
+        r = PC(tmp, cond, "mrossi", mp, github=gh).entra().get("/api/admin/locale/aggiornamento").json()
+        assert not r["disponibile"] and r["errore"]
+    # una versione piu' vecchia di quella pubblicata non viene proposta
+    (cond / "programma").mkdir(exist_ok=True)
+    (cond / "programma" / "versione.txt").write_text("10.0.0\r\n")
+    r = PC(tmp, cond, "mrossi", mp, github=FintoGitHub("9.9.9", buono)).entra().get("/api/admin/locale/aggiornamento").json()
+    assert not r["disponibile"] and r["pubblicata"] == "10.0.0"
+
+
+def test_confronto_delle_versioni():
+    from taric.aggiornamenti import chiave, piu_recente
+    assert piu_recente("1.2.10", "1.2.9") and piu_recente("v2.0", "1.9.9") and not piu_recente("1.2.2", "1.2.2")
+    assert chiave("1.3.0-prova") is None and not piu_recente("1.3.0-prova", "1.2.0") and piu_recente("1.2.3", "sviluppo")
 
 
 # ------------------------------------------------------------------ avvio vero, con il server in ascolto

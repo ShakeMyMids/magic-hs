@@ -39,8 +39,8 @@ Non modificare i file a mano: si gestisce tutto dal programma, scheda Gestione.
   la controlla e la pubblica qui da solo. I colleghi la ricevono da OneDrive.
 - Intelligenza artificiale: Gestione > Intelligenza artificiale. La chiave è leggibile da chi vede
   questa cartella: usane una dedicata, con un tetto di spesa.
-- Nuova versione del programma: scarica magic-hs-windows-<versione>.zip dalla pagina delle versioni
-  su GitHub e caricala in Gestione > Cartella condivisa.
+- Nuova versione del programma: quando esce, la scheda Gestione ha un puntino arancio. In Gestione >
+  Cartella condivisa premi «Aggiorna per tutti»: arrivano anche questo file e l'avvio aggiornati.
 - Colleghi: solo il permesso di LETTURA. Chi può modificare questa cartella può cambiare il programma
   che parte sui PC di tutti: la modifica va data solo a chi pubblica. Per questo la cartella sta in
   una raccolta documenti di SharePoint (o nei file di un canale di Teams), non nel tuo OneDrive:

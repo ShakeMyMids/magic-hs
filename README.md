@@ -45,7 +45,7 @@ Copia l'intera cartella **MAGIC HS** (con `programma\`, `dati\` e `impostazioni.
 ### Aggiornamenti dal PC di chi gestisce MAGIC HS
 
 - *Dati TARIC*: a ogni inizio mese, quando chi gestisce MAGIC HS lo apre, il programma scarica la nuova estrazione, la controlla e la pubblica in `dati\` della cartella; i colleghi la ricevono da OneDrive (il programma controlla la cartella ogni dieci minuti). Da Gestione > Dati TARIC si può anche caricare a mano un'estrazione o tornare alla versione precedente, per tutti.
-- *Programma*: scarica `magic-hs-windows-<versione>.zip` dalla pagina delle versioni e caricalo in Gestione > Cartella condivisa. Ognuno passa alla nuova versione quando riapre MAGIC HS; finché OneDrive non l'ha scaricata si continua con quella già copiata sul PC.
+- *Programma*: quando esce una nuova versione, sulla scheda Gestione compare un puntino arancio e in Gestione > Cartella condivisa la scritta «È disponibile la versione …»: premi **Aggiorna per tutti**. MAGIC HS la scarica dalla pagina delle versioni di GitHub, ne controlla l'impronta e la pubblica nella cartella condivisa insieme al nuovo `LEGGIMI.txt` e al file di avvio. Ognuno passa alla nuova versione quando riapre MAGIC HS; finché OneDrive non l'ha scaricata si continua con quella già copiata sul PC. Se il PC non raggiunge GitHub (proxy aziendale), scarica a mano `magic-hs-windows-<versione>.zip` e caricalo da «Carica un pacchetto a mano». Solo il PC di chi gestisce MAGIC HS interroga GitHub, al massimo ogni sei ore.
 - *Intelligenza artificiale*: vedi [Intelligenza artificiale](#intelligenza-artificiale).
 
 ### Come funziona
@@ -54,7 +54,9 @@ Copia l'intera cartella **MAGIC HS** (con `programma\`, `dati\` e `impostazioni.
 
 ### Costruire i file
 
-Da Linux, macOS o Windows: `python strumenti/pacchetto_windows.py` crea in `dist/` il pacchetto e la cartella da estrarre; con `--dati …/versioni/AAAA-MM-01` la cartella include anche i dati di un mese. Il flusso GitHub *Programma per Windows* li costruisce e li prova su Windows a ogni modifica; li pubblica nella pagina delle versioni per i tag `v*`, oppure quando lo avvii a mano (Actions > Programma per Windows > Run workflow, con «pubblica» spuntato): la versione è quella scritta in `taric/__init__.py`.
+Da Linux, macOS o Windows: `python strumenti/pacchetto_windows.py` crea in `dist/` il pacchetto e la cartella da estrarre; con `--dati …/versioni/AAAA-MM-01` la cartella include anche i dati di un mese. Il flusso GitHub *Programma per Windows* li costruisce e li prova su Windows a ogni modifica.
+
+**Pubblicare una nuova versione**: basta unire a `main` una modifica che cambia `__version__` in `taric/__init__.py`. Il flusso prova i pacchetti su Windows e crea da solo la pagina della versione (tag `v<versione>`) con `magic-hs-windows-<versione>.zip` e `MAGIC-HS-cartella-<versione>.zip`; una versione già pubblicata non viene toccata. Le versioni non solo numeriche (per esempio `1.3.0-prova`) escono come *pre-release* e MAGIC HS non le propone. Per ripubblicare i file di una versione: Actions > Programma per Windows > Run workflow, con «pubblica» spuntato.
 
 ## Intelligenza artificiale
 

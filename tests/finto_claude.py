@@ -1,11 +1,29 @@
-"""Finto servizio IA per le prove dell'interfaccia (nessuna chiamata reale): risponde nei formati di Anthropic
-(/v1/messages), Gemini (/v1beta/models/<modello>:generateContent) e compatibile OpenAI (/v1/chat/completions).
-Accetta solo la chiave «chiave-finta».
-Uso: python tests/finto_claude.py 9100, poi in Gestione > Intelligenza artificiale scegli «compatibile OpenAI»
-con indirizzo http://127.0.0.1:9100/v1 (vedi tests/e2e_locale.js)."""
+"""Finti servizi esterni per le prove dell'interfaccia (nessuna chiamata reale):
+- IA: risponde nei formati di Anthropic (/v1/messages), Gemini (/v1beta/models/<modello>:generateContent) e compatibile
+  OpenAI (/v1/chat/completions); accetta solo la chiave «chiave-finta».
+- GitHub: /github/releases/latest con la versione 9.9.9 e il suo pacchetto per Windows (finto ma valido).
+Uso: python tests/finto_claude.py 9100, poi il programma con TARIC_AGGIORNAMENTI_URL=http://127.0.0.1:9100/github/releases/latest
+e in Gestione > Intelligenza artificiale «compatibile OpenAI» con indirizzo http://127.0.0.1:9100/v1 (vedi tests/e2e_locale.js)."""
+import hashlib
+import io
 import json
 import sys
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+def pacchetto(versione: str) -> bytes:
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr("python/pythonw.exe", b"MZ")
+        z.writestr("python/Lib/site-packages/taric/__init__.py", f'__version__ = "{versione}"\n')
+        z.writestr("Avvia MAGIC HS.cmd", "@echo off\r\n")
+        z.writestr("LEGGIMI.txt", f"MAGIC HS {versione}\r\n")
+    return b.getvalue()
+
+
+NUOVA = "9.9.9"
+PACCHETTO = pacchetto(NUOVA)
 
 
 def rispondi(prompt: str) -> object:
@@ -32,6 +50,24 @@ def rispondi(prompt: str) -> object:
 
 
 class Gestore(BaseHTTPRequestHandler):
+    # ------------------------------------------------------------------ finto GitHub
+    def do_GET(self):  # noqa: N802
+        base = f"http://127.0.0.1:{self.server.server_port}/github"
+        nome = f"magic-hs-windows-{NUOVA}.zip"
+        if self.path == "/github/releases/latest":
+            self._json(200, {"tag_name": "v" + NUOVA, "draft": False, "prerelease": False, "published_at": "2026-11-20T10:00:00Z",
+                             "html_url": base + "/releases/v" + NUOVA,
+                             "assets": [{"name": nome, "size": len(PACCHETTO), "browser_download_url": base + "/" + nome,
+                                         "digest": "sha256:" + hashlib.sha256(PACCHETTO).hexdigest()}]})
+        elif self.path == "/github/" + nome:
+            self.send_response(200)
+            self.send_header("content-type", "application/octet-stream")
+            self.send_header("content-length", str(len(PACCHETTO)))
+            self.end_headers()
+            self.wfile.write(PACCHETTO)
+        else:
+            self._json(404, {"message": "Not Found"})
+
     # ------------------------------------------------------------------ finta IA
     def do_POST(self):  # noqa: N802
         corpo = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))

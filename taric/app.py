@@ -29,8 +29,9 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from . import sicurezza as S
+from .aggiornamenti import Aggiornamenti, ErroreAggiornamento, piu_recente
 from .backup import Backup
-from .condivisa import RE_UTENTE, Condivisa, ErroreCondivisa, editori, ia_da_impostazioni, utente_windows
+from .condivisa import RE_UTENTE, Condivisa, ErroreCondivisa, editori, ia_da_impostazioni, utente_windows, versione_pacchetto
 from .config import Config
 from .dati import GestoreDati
 from .db import Database, iso
@@ -126,13 +127,14 @@ class Editori(BaseModel):
 
 # ------------------------------------------------------------------ applicazione
 def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
-             chiave_ingresso: str = "", istanza: str = "") -> FastAPI:
+             chiave_ingresso: str = "", istanza: str = "", client_aggiornamenti: httpx.Client | None = None) -> FastAPI:
     """Crea l'applicazione del PC (vedi programma.py): un solo utente, che entra con la chiave dell'avvio
     (chiave_ingresso), e versioni, dati e impostazioni dalla cartella condivisa (cfg.condivisa)."""
     db = Database(cfg.dati / "taric.db")
     ia = ServizioIA(cfg, db, client_ia)
     dati = GestoreDati(cfg, db)
     copie = Backup(cfg.dati, cfg.backup_copie)
+    agg = Aggiornamenti(cfg.aggiornamenti_url, client_aggiornamenti)
     condivisa = Condivisa(cfg.condivisa) if cfg.condivisa else None
     utente_pc = utente_windows()
     # pubblica per tutti solo chi e' nell'elenco degli editori e puo' scrivere nella cartella
@@ -628,6 +630,46 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 "upstream_error": "Non riesco a raggiungere il servizio: controlla l'indirizzo e, se in azienda c'è un proxy, chiedi all'IT.",
             }.get(e.codice) or MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
             raise Errore(e.stato_http, messaggio, e.codice)
+
+    def versione_di_riferimento() -> str:
+        """La versione con cui confrontare quella di GitHub: quella pubblicata per i colleghi (o, se manca, quella in uso)."""
+        return (condivisa.versione_programma() if condivisa else "") or __version__
+
+    @app.get("/api/admin/locale/aggiornamento")
+    def admin_aggiornamento(forza: bool = False, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """C'e' una versione del programma piu' recente di quella pubblicata? (GitHub, al massimo ogni sei ore)"""
+        info = agg.ultima(forza)
+        rif = versione_di_riferimento()
+        return {"disponibile": "versione" in info and piu_recente(info["versione"], rif), "versione": info.get("versione", ""),
+                "data": info.get("data", ""), "pagina": info.get("pagina", ""), "errore": info.get("errore", ""),
+                "pubblicata": rif, "in_uso": __version__}
+
+    @app.post("/api/admin/locale/aggiorna-programma")
+    def admin_aggiorna_programma(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Scarica da GitHub l'ultima versione e la pubblica per tutti nella cartella condivisa."""
+        cond = serve_editore()
+        info = agg.ultima(forza=True)
+        if "versione" not in info:
+            raise Errore(502, f"Non riesco a controllare le versioni: {info.get('errore') or 'errore sconosciuto'}.", "aggiornamento")
+        if not piu_recente(info["versione"], versione_di_riferimento()):
+            raise Errore(409, f"Nella cartella condivisa c'è già la versione {versione_di_riferimento()}.", "aggiornato")
+        dest = dati.lavoro / f"programma-{secrets.token_hex(6)}.zip"
+        try:
+            agg.scarica(info, dest)
+            if versione_pacchetto(dest) != info["versione"]:
+                raise ErroreAggiornamento("il pacchetto non contiene la versione attesa")
+            versione = cond.pubblica_programma(dest)
+        except ErroreAggiornamento as e:
+            raise Errore(502, f"Aggiornamento non riuscito: {e}.", "aggiornamento")
+        except ErroreCondivisa as e:
+            raise Errore(422, f"Il pacchetto non va bene: {e}.", "pacchetto")
+        except OSError as e:
+            raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
+        finally:
+            dest.unlink(missing_ok=True)
+        with db.transazione() as c:
+            db.evento(c, "programma_pubblicato", autore_id=a["id"], dettagli=f"{versione} da GitHub")
+        return json_ok(versione=versione)
 
     @app.post("/api/admin/locale/programma")
     async def admin_locale_programma(file: UploadFile = File(...), a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:

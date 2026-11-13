@@ -51,6 +51,7 @@ class Config:
     backup_copie: int = 7                  # backup automatici del database da tenere (0 = nessun backup automatico)
     condivisa: Path | None = None          # cartella condivisa da cui il programma riceve versioni, dati e impostazioni
     scarica_dati: bool = False             # scarica da solo i dati TARIC dalla fonte: solo sul PC di chi pubblica
+    aggiornamenti_url: str = "https://api.github.com/repos/ShakeMyMids/magic-hs/releases/latest"   # "" = niente controllo
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -114,5 +115,6 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         fuso=v.get("TARIC_FUSO", "Europe/Rome"),
         backup_copie=max(0, int(v.get("TARIC_BACKUP_COPIE", "7") or 7)),
         condivisa=Path(v["TARIC_CONDIVISA"]) if v.get("TARIC_CONDIVISA") else None,
+        aggiornamenti_url=v.get("TARIC_AGGIORNAMENTI_URL", Config.aggiornamenti_url).strip(),
         extra=v,
     )

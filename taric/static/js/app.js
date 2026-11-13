@@ -1217,6 +1217,7 @@ T.api('GET', '/api/io').then(function (u) {
   tieniVivo();
   if (u.locale.puo_gestire) proponiGestione();
   $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
+  if (u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Gestione
   T.tema(u.preferenze.tema);
   state.country = u.preferenze.paese || '';
   state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';

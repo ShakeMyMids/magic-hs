@@ -34,7 +34,11 @@ i nomi sono in **italiano**.
   qualsiasi: chi legge controlla.
 - `windows/`: `Avvia MAGIC HS.cmd` (solo ASCII, niente blocchi tra parentesi: i percorsi possono contenere `( ) &`) e
   `LEGGIMI.txt`; `strumenti/pacchetto_windows.py` costruisce i pacchetti (Python di python-build-standalone + librerie
-  Windows), il flusso `.github/workflows/windows.yml` li prova su Windows e li pubblica per i tag `v*`.
+  Windows), il flusso `.github/workflows/windows.yml` li prova su Windows e li pubblica da solo quando su `main` arriva una
+  `__version__` senza pagina (oppure per i tag `v*` o a mano). Per pubblicare una versione basta cambiare `__version__`.
+- `taric/aggiornamenti.py`: sul PC di chi pubblica, ultima versione da GitHub (`releases/latest`, al massimo ogni sei ore)
+  e download del pacchetto con controllo di dimensione e SHA-256; Gestione mostra «Aggiorna per tutti», che pubblica con
+  `condivisa.pubblica_programma` (anche `Avvia MAGIC HS.cmd` e `LEGGIMI.txt`). Nei test `conftest.FintoGitHub`: mai GitHub vero.
 - `taric/nomenclatura_it.json`: testo ufficiale italiano della nomenclatura (estrazione del 1° luglio 2026).
 - `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/`), `locale.html` (aperta senza la chiave
   dell'avvio), `attesa.html` con `js/attesa.js` (dati non ancora pronti), `js/comune.js` (chiamate API, tema, logo),

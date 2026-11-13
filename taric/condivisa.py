@@ -38,6 +38,7 @@ RE_VERSIONE_PROGRAMMA = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.\-]{0,39}$")
 # nome utente di Windows: niente caratteri che Windows non ammette (" / \ [ ] : ; | = , + * ? < >)
 RE_UTENTE = re.compile(r'^[^"/\\\[\]:;|=,+*?<>\x00-\x1f]{1,64}$')
 NOME_AVVIO = "Avvia MAGIC HS.cmd"
+NOME_LEGGIMI = "LEGGIMI.txt"
 VERSIONI_DATI_TENUTE = 3
 VERSIONI_PROGRAMMA_TENUTE = 2
 MAX_DATI = 200 * 1024 * 1024          # dati di un mese una volta estratti (oggi circa 12 MB)
@@ -137,12 +138,13 @@ class Condivisa:
         tmp = self.programma / f".{dest.name}.{secrets.token_hex(4)}.tmp"
         shutil.copyfile(pacchetto, tmp)
         sostituisci(tmp, dest)
-        # il file di avvio può cambiare tra una versione e l'altra: quello nuovo sta nel pacchetto
+        # file di avvio e istruzioni possono cambiare tra una versione e l'altra: quelli nuovi stanno nel pacchetto
         with zipfile.ZipFile(pacchetto) as z:
-            if NOME_AVVIO in z.namelist():
-                tmp_avvio = self.percorso / f".avvio.{secrets.token_hex(4)}.tmp"
-                tmp_avvio.write_bytes(z.read(NOME_AVVIO))
-                sostituisci(tmp_avvio, self.percorso / NOME_AVVIO)
+            for nome in (NOME_AVVIO, NOME_LEGGIMI):
+                if nome in z.namelist() and z.getinfo(nome).file_size <= 1024 * 1024:
+                    tmp_file = self.percorso / f".{nome}.{secrets.token_hex(4)}.tmp"
+                    tmp_file.write_bytes(z.read(nome))
+                    sostituisci(tmp_file, self.percorso / nome)
         scrivi_testo(self.programma / "versione.txt", versione + "\r\n")       # a capo di Windows, per «set /p» dell'avvio
         pacchetti = sorted(self.programma.glob("magic-hs-*.zip"), key=lambda f: f.stat().st_mtime, reverse=True)
         for vecchio in pacchetti[VERSIONI_PROGRAMMA_TENUTE:]:

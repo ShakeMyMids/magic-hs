@@ -1,5 +1,6 @@
-// Prova nel browser del programma sul PC: editore con cartella condivisa, IA finta (tests/finto_claude.py), chiusura.
-// Uso: python -m taric.programma --condivisa C --cartella P --senza-browser &  poi  node tests/e2e_locale.js P/istanza.json cartella-schermate
+// Prova nel browser del programma sul PC: editore con cartella condivisa, IA e GitHub finti (tests/finto_claude.py), chiusura.
+// Uso: TARIC_AGGIORNAMENTI_URL=http://127.0.0.1:9100/github/releases/latest python -m taric.programma --condivisa C --cartella P --senza-browser &
+//      poi  node tests/e2e_locale.js P/istanza.json cartella-schermate
 const { chromium } = require(process.env.PLAYWRIGHT || '/opt/npm-tools/node_modules/playwright');
 const fs = require('fs');
 const istanza = process.argv[2] || '/tmp/loc/istanza.json';
@@ -31,6 +32,13 @@ function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } els
   await p.click('#tab-gestione');
   await p.waitForSelector('text=Aggiungere un collega');
   ok(await p.isVisible('.percorso'), 'percorso della cartella condivisa');
+  await p.waitForSelector('text=È disponibile la versione 9.9.9');
+  ok(await p.$eval('#tab-gestione', e => e.classList.contains('novita')), 'puntino sulla scheda Gestione');
+  await p.screenshot({ path: out + '/2a-nuova-versione.png' });
+  await p.click('button[data-g="aggiorna-programma"]');
+  await p.waitForSelector('text=Versione 9.9.9 pubblicata', { timeout: 20000 });
+  ok(await p.isVisible('text=Versione 9.9.9: è la più recente.'), 'aggiornato per tutti con un clic');
+  ok(!(await p.$eval('#tab-gestione', e => e.classList.contains('novita'))), 'puntino tolto dopo l\'aggiornamento');
   ok(!(await p.isVisible('text=Utenti')), 'niente scheda Utenti');
   await p.fill('form[data-g="editore-aggiungi"] input[name=utente]', 'L.Bianchi');
   await p.click('form[data-g="editore-aggiungi"] button[type=submit]');

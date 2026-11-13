@@ -423,6 +423,11 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 @keyframes viaggio{0%{transform:translateX(var(--da));opacity:0}12%{opacity:1}85%{opacity:1}100%{transform:translateX(var(--a));opacity:0}}
 @keyframes dondola{from{transform:translateY(0)}to{transform:translateY(2.5px)}}
 
+/* nuova versione del programma disponibile: puntino arancio sulla scheda Gestione */
+.schede a.novita{position:relative}
+.schede a.novita::after{content:"";position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--d-cont-1);
+  box-shadow:0 0 0 2px var(--fondo)}
+
 /* ritocchi */
 #msg:empty,.accesso #esito:empty{display:none}
 input[type="search"]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}

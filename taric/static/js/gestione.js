@@ -5,7 +5,8 @@
   var T = window.TARIC, esc = T.esc;
   var el = document.getElementById('view-gestione');
   var vista = T.viste = T.viste || {};
-  var st = { sotto: 'condivisa', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, loc: null, cambiaChiave: false };
+  var st = { sotto: 'condivisa', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, loc: null, cambiaChiave: false,
+             agg: null, aggInCorso: false };
 
   var ESITI = { ok: 'riuscito', errore: 'errore', non_disponibile: 'non ancora disponibile', in_corso: 'in corso', interrotto: 'interrotto' };
   var EVENTI = {
@@ -27,6 +28,7 @@
     if (st.sotto !== 'registro') chiamate.push(T.api('GET', '/api/admin/locale').then(function (r) { st.loc = r; }));
     if (st.sotto === 'dati') chiamate.push(T.api('GET', '/api/admin/dati').then(function (r) { st.dati = r; }));
     if (st.sotto === 'registro') chiamate.push(T.api('GET', '/api/admin/eventi?limite=300').then(function (r) { st.eventi = r.eventi; }));
+    if (st.sotto === 'condivisa' && !st.agg) controllaVersioni(false);     // a parte: GitHub può essere lento
     return Promise.all(chiamate).then(disegna, function (e) { el.innerHTML = '<p class="errore">' + esc(errore(e)) + '</p>'; });
   }
 
@@ -47,6 +49,7 @@
     var a = [];
     if (st.loc && !st.loc.raggiungibile) a.push('Non trovo la cartella condivisa: controlla che OneDrive sia attivo e sincronizzato.');
     else if (st.loc && !st.loc.scrivibile) a.push('Da questo PC non puoi scrivere nella cartella condivisa: serve il permesso di modifica per pubblicare.');
+    if (st.agg && st.agg.disponibile && st.sotto !== 'condivisa') a.push('È disponibile la versione ' + st.agg.versione + ' del programma: aggiornala per tutti nella scheda Cartella condivisa.');
     if (!r.ia && st.sotto !== 'ia') a.push('La classificazione assistita è spenta per tutti: scegli un servizio nella scheda Intelligenza artificiale.');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC: vai su Dati TARIC.');
     return a.length ? '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Da sistemare</div>' + a.map(function (t) { return '<p class="avviso">' + esc(t) + '</p>'; }).join('') + '</div></div>' : '';
@@ -106,6 +109,20 @@
       '<li>Il collega apre la cartella su SharePoint e preme «Sincronizza».</li>' +
       '<li>Poi fa doppio clic su <b>Avvia MAGIC HS</b>.</li></ol>' +
       '<p class="nota">La modifica solo a chi pubblica: chi può modificare la cartella cambia il programma di tutti. In Teams interrompi l\'ereditarietà delle autorizzazioni.</p></div></div>';
+    var A = st.agg;
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Versione del programma</div>';
+    if (!A) h += '<p class="nota">Controllo le versioni…</p>';
+    else if (A.disponibile) h += '<p class="cosa">È disponibile la versione ' + esc(A.versione) + '</p>' +
+      '<p class="nota">Pubblicata su GitHub il ' + esc(T.dataOra(A.data, true)) + (A.pagina ? ' · <a href="' + esc(A.pagina) + '" target="_blank" rel="noopener">novità</a>' : '') + '. Qui ora: ' + esc(A.pubblicata) + '.</p>' +
+      '<div class="fila"><button class="btn pri" type="button" data-g="aggiorna-programma"' + (L.editore && !st.aggInCorso ? '' : ' disabled') + '>' +
+      T.icona('aggiorna') + (st.aggInCorso ? 'Scarico e pubblico…' : 'Aggiorna per tutti') + '</button></div>';
+    else if (A.errore) h += '<p class="avviso">Non riesco a controllare le versioni: ' + esc(A.errore) + '.</p>';
+    else h += '<p class="nota">Versione ' + esc(A.pubblicata) + ': è la più recente.</p>';
+    if (A && !A.disponibile) h += '<div class="fila"><button class="btn sm" type="button" data-g="controlla-versioni">' + T.icona('aggiorna') + 'Controlla adesso</button></div>';
+    h += riga('programma') +
+      '<details class="piu"><summary>Carica un pacchetto a mano</summary>' +
+      '<form class="modulo" data-g="programma"><label>Pacchetto magic-hs-windows-….zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
+      '<div class="fila"><button class="btn" type="submit"' + (L.editore ? '' : ' disabled') + '>' + T.icona('carica') + 'Pubblica per tutti</button></div></form></details></div></div>';
     var ed = L.editori || [];
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scudo') + 'Chi può pubblicare<span class="dx">' + ed.length + '</span></div>' +
       '<p class="nota">Nomi utente di Windows (ognuno vede il suo in Profilo); serve anche il permesso di modifica sulla cartella.</p>' +
@@ -115,12 +132,19 @@
       }).join('') + '</div>' +
       '<form class="fila" data-g="editore-aggiungi"><input class="campo" name="utente" maxlength="64" required placeholder="Nome utente di Windows del collega" aria-label="Nome utente di Windows del collega">' +
       '<button class="btn" type="submit"' + (L.editore ? '' : ' disabled') + '>' + T.icona('piu') + 'Aggiungi</button></form>' + riga('editori') + '</div></div>';
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Nuova versione del programma</div>' +
-      '<p class="nota">Il file <b>magic-hs-windows-….zip</b> dalla pagina delle versioni su GitHub.</p>' +
-      '<form class="modulo" data-g="programma"><label>Pacchetto .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
-      '<div class="fila"><button class="btn pri" type="submit"' + (L.editore ? '' : ' disabled') + '>' + T.icona('carica') + 'Pubblica per tutti</button></div>' + riga('programma') + '</form></div></div>';
     return h;
   }
+
+  /* nuove versioni del programma su GitHub (il server chiede al massimo ogni sei ore, salvo «Controlla adesso») */
+  function controllaVersioni(forza, senzaDisegno) {
+    return T.api('GET', '/api/admin/locale/aggiornamento' + (forza ? '?forza=true' : '')).then(function (r) { st.agg = r; },
+      function (e) { st.agg = { errore: errore(e) }; }).then(function () { segnaNovita(); if (!senzaDisegno && st.sotto === 'condivisa' && !el.hidden) disegna(); });
+  }
+  function segnaNovita() {
+    var t = document.getElementById('tab-gestione');
+    if (t) { t.classList.toggle('novita', !!(st.agg && st.agg.disponibile)); if (st.agg && st.agg.disponibile) t.title = 'È disponibile la versione ' + st.agg.versione; else t.removeAttribute('title'); }
+  }
+  T.controllaVersioni = controllaVersioni;
 
   function salvaEditori(elenco, testo) {
     T.api('PUT', '/api/admin/locale/editori', { editori: elenco }).then(function (r) {
@@ -225,6 +249,13 @@
     var g = b.getAttribute('data-g'), id = b.getAttribute('data-id'), v = b.getAttribute('data-v');
     if (g === 'sotto') { st.sotto = v; st.registro = null; disegna(); carica(); }
     else if (g === 'cambia-chiave') { st.cambiaChiave = true; disegna(); }
+    else if (g === 'controlla-versioni') { b.disabled = true; msg('programma', ''); controllaVersioni(true); }
+    else if (g === 'aggiorna-programma') {
+      st.aggInCorso = true; msg('programma', ''); disegna();
+      T.api('POST', '/api/admin/locale/aggiorna-programma').then(function (r) {
+        msg('programma', 'Versione ' + r.versione + ' pubblicata: i colleghi la useranno dalla prossima apertura. Qui chiudi e riapri MAGIC HS.', true);
+      }, function (e) { msg('programma', errore(e)); }).then(function () { st.aggInCorso = false; return controllaVersioni(false, true); }).then(carica);
+    }
     else if (g === 'editore-togli') {
       if (v === st.loc.utente && !window.confirm('Togliendo te stesso non potrai più pubblicare da questo PC. Continuare?')) return;
       salvaEditori(st.loc.editori.filter(function (n) { return n !== v; }), 'Tolto: ' + v + '.');
