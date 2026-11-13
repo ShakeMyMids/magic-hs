@@ -151,7 +151,8 @@ jobs:
           if ((Get-Content (Join-Path $mia "istanza.json") -Raw | ConvertFrom-Json).pid -ne $info.pid) { throw "avviata una seconda copia" }
 
           # 4. HTTPS con i certificati di Windows (truststore), come per l'IA dietro un proxy aziendale
-          & $py -I -c "import truststore; truststore.inject_into_ssl(); import httpx; r = httpx.get('https://api.github.com/zen', timeout=30); print('HTTPS', r.status_code); assert r.status_code == 200"
+          # (github.com e non api.github.com: dagli indirizzi condivisi delle prove l'API risponde spesso 403 per il limite di richieste)
+          & $py -I -c "import truststore; truststore.inject_into_ssl(); import httpx; r = httpx.get('https://github.com/', timeout=30); print('HTTPS', r.status_code); assert r.status_code == 200"
           if ($LASTEXITCODE -ne 0) { throw "HTTPS con truststore non riuscito" }
           Chiudi $info $s $mia
 
