@@ -15,8 +15,14 @@ i nomi sono in **italiano**.
   dice quali sono già applicate. Le tabelle della vecchia versione sito restano, per i database già creati sui PC.
 - `taric/sicurezza.py`: sessioni del browser (cookie dopo `/entra`).
 - `taric/ia.py`: chiamate al servizio IA (Gemini, Anthropic o compatibile OpenAI, scelto in `config._ia` da
-  `condivisa.ia_da_impostazioni`) con limite mensile per persona. Ogni fornitore ha il suo metodo che restituisce una `Risposta`; gli errori diventano codici comuni
-  (`_errore_http`) con messaggi italiani in `app.MESSAGGI_IA`.
+  `condivisa.ia_da_impostazioni`). Ogni richiesta ha `contesto` (parte fissa, prima: va nella cache del fornitore, per Claude
+  con `cache_control`) e `prompt` (la merce, in fondo); la risposta segue `SCHEMI[...]` (strumento obbligato per Claude,
+  `json_schema` per OpenAI, `responseSchema` per Gemini) con ritorno al modo semplice se il servizio la rifiuta; sovraccarico
+  e 429 si riprovano in `_post`. Il limite mensile conta le classificazioni: le richieste con la stessa `operazione` (la
+  genera `app.js` a ogni Classifica o Riclassifica) contano una volta; le traduzioni (`tipo`) no. Ogni fornitore ha il suo
+  metodo che restituisce una `Risposta` (con `token_cache`); gli errori diventano codici comuni (`_errore_http`) con
+  messaggi italiani in `app.MESSAGGI_IA`. La chiave in `impostazioni.json` è cifrata (`condivisa.cifra_chiave`, sale della
+  cartella): non è una protezione assoluta, serve a non lasciarla in chiaro.
 - `taric/dati.py`: versioni dei dati TARIC, aggiornamento (download, estrazione sicura, `aggiorna.py`, installazione), pianificatore.
 - `taric/aggiorna.py`: genera i file di `data/` dai file Excel dell'estrazione e li controlla. Si esegue come
   sottoprocesso con `python -I`; l'installazione avviene solo con codice di uscita 0 e ultima riga `CONTROLLI OK`.

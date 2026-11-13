@@ -6,7 +6,7 @@
   var el = document.getElementById('view-gestione');
   var vista = T.viste = T.viste || {};
   var st = { sotto: 'condivisa', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, loc: null, cambiaChiave: false,
-             agg: null, aggInCorso: false };
+             agg: null, aggInCorso: false, modelli: [] };
 
   var ESITI = { ok: 'riuscito', errore: 'errore', non_disponibile: 'non ancora disponibile', in_corso: 'in corso', interrotto: 'interrotto' };
   var EVENTI = {
@@ -15,6 +15,10 @@
     programma_pubblicato: 'Nuova versione del programma pubblicata', editori: 'Chi può pubblicare cambiato'
   };
   var FORNITORI = [['', 'Nessuno: solo consultazione'], ['openai', 'Azure OpenAI o altro servizio compatibile OpenAI'], ['gemini', 'Google Gemini'], ['anthropic', 'Anthropic Claude']];
+  /* modelli predefiniti (come in config.FORNITORI): [principale, rapido] */
+  var PREDEFINITI = { gemini: ['gemini-3.7-flash', 'gemini-3.5-flash-lite'], anthropic: ['claude-sonnet-5-5', 'claude-haiku-5-5'] };
+  var CONSOLE = { gemini: ['Google AI Studio', 'https://aistudio.google.com/usage'], anthropic: ['Console di Anthropic', 'https://console.anthropic.com/usage'] };
+  function numero(n) { return Number(n || 0).toLocaleString('it-IT'); }
 
   function app() { return T.app; }
   function riga(dove) { var m = st.msg[dove]; return m ? '<p class="' + (m.ok ? 'esito-ok' : 'errore') + '">' + esc(m.testo) + '</p>' : ''; }
@@ -157,26 +161,46 @@
   function iaLocale() {
     var L = st.loc;
     if (!L) return '<p class="vuoto">Carico…</p>';
-    var ia = L.ia, f = ia.fornitore;
-    var h = '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('scintille') + 'Intelligenza artificiale per tutti' +
-      '<span class="dx"><span class="st ' + (L.attiva ? 'ok' : 'sospeso') + '">' + (L.attiva ? 'attiva' : 'spenta') + '</span></span></div>' +
-      '<form class="modulo" data-g="ia-locale">' +
+    var ia = L.ia, f = ia.fornitore, def = PREDEFINITI[f] || ['', ''];
+    var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scintille') + 'Intelligenza artificiale per tutti' +
+      '<span class="dx"><span class="st ' + (L.attiva ? 'ok' : 'sospeso') + '">' + (L.attiva ? 'attiva' : 'spenta') + '</span></span></div>';
+    if (L.attiva && L.modelli_in_uso) h += '<p class="nota">In uso: ' + esc(L.modelli_in_uso.principale) +
+      (L.modelli_in_uso.rapido && L.modelli_in_uso.rapido !== L.modelli_in_uso.principale ? ', e ' + esc(L.modelli_in_uso.rapido) + ' per la ricerca delle voci' : '') + '.</p>';
+    h += '<form class="modulo" data-g="ia-locale">' +
       '<label>Servizio<select class="campo" name="fornitore" data-g="fornitore">' + FORNITORI.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === f ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>';
     if (f) {
       if (f === 'openai') h += '<label>Indirizzo del servizio<input class="campo" name="url" value="' + esc(ia.url) + '" placeholder="https://nome-risorsa.openai.azure.com/openai/v1" required></label>';
-      h += '<div class="due"><label>Modello' + (f === 'openai' ? ' (per Azure: nome della distribuzione)' : ' (vuoto = predefinito)') + '<input class="campo" name="modello" value="' + esc(ia.modello) + '"' + (f === 'openai' ? ' required' : '') + '></label>' +
-        '<label>Modello rapido (vuoto = lo stesso)<input class="campo" name="modello_rapido" value="' + esc(ia.modello_rapido) + '"></label></div>';
+      var elenco = (st.modelli.length && f === L.fornitore_attivo ? st.modelli : def.filter(Boolean));
+      h += '<datalist id="modelli-ia">' + elenco.map(function (m) { return '<option value="' + esc(m) + '"></option>'; }).join('') + '</datalist>' +
+        '<div class="due"><label>Modello' + (f === 'openai' ? ' (per Azure: nome della distribuzione)' : '') + '<input class="campo" name="modello" list="modelli-ia" autocomplete="off" value="' + esc(ia.modello) + '"' +
+        (def[0] ? ' placeholder="predefinito: ' + esc(def[0]) + '"' : '') + (f === 'openai' ? ' required' : '') + '></label>' +
+        '<label>Modello per la ricerca delle voci (più rapido)<input class="campo" name="modello_rapido" list="modelli-ia" autocomplete="off" value="' + esc(ia.modello_rapido) + '"' +
+        ' placeholder="' + esc(def[1] ? 'predefinito: ' + def[1] : 'vuoto = lo stesso') + '"></label></div>';
       if (ia.chiave && !st.cambiaChiave) h += '<div class="fila"><span class="nota">Chiave salvata: ' + esc(ia.chiave) + '</span><button class="btn sm" type="button" data-g="cambia-chiave">Cambia chiave</button></div>';
       else h += '<label>Chiave del servizio<input class="campo" type="password" name="chiave" autocomplete="off"' + (f === 'openai' ? '' : ' required') + '></label>';
     }
-    h += '<label>Richieste all\'IA al mese per persona (vuoto = senza limite)<input class="campo" type="number" min="0" max="100000" name="quota" value="' + (L.quota === null ? '' : esc(L.quota)) + '"></label>' +
-      '<div class="fila"><button class="btn pri" type="submit">Salva per tutti</button>' + (L.attiva ? '<button class="btn" type="button" data-g="prova-ia">Prova</button>' : '') + '</div>' + riga('ia') +
-      (L.aggiornate ? '<p class="nota">Ultima modifica: ' + esc(T.dataOra(L.aggiornate)) + (L.da ? ', ' + esc(L.da) : '') + '.</p>' : '') + '</form></div>';
-    h += '<div class="box s4"><div class="lab">' + T.icona('info') + 'Da sapere</div>' +
-      '<p class="nota"><b>La chiave è leggibile da chi vede la cartella</b>: usane una dedicata, con un tetto di spesa.</p>' +
+    h += '<label>Classificazioni con l\'IA al mese per persona (vuoto = senza limite)<input class="campo" type="number" min="0" max="100000" name="quota" value="' + (L.quota === null ? '' : esc(L.quota)) + '"></label>' +
+      '<div class="fila"><button class="btn pri" type="submit">Salva per tutti</button>' +
+      (L.attiva ? '<button class="btn" type="button" data-g="prova-ia">Prova</button><button class="btn" type="button" data-g="modelli-ia">Elenco dei modelli</button>' : '') + '</div>' + riga('ia') +
+      (L.aggiornate ? '<p class="nota">Ultima modifica: ' + esc(T.dataOra(L.aggiornate)) + (L.da ? ', ' + esc(L.da) : '') + '.</p>' : '') + '</form></div></div>';
+
+    var u = L.uso || {}, cons = CONSOLE[L.fornitore_attivo];
+    var cache = u.token_in ? Math.round(u.token_cache / u.token_in * 100) : 0;
+    h += '<div class="foglio"><div class="box s6"><div class="lab">' + T.icona('grafico') + 'Uso su questo PC<span class="dx">' + esc(meseIt(u.mese)) + '</span></div>' +
+      '<p class="cosa">' + numero(u.classificazioni) + (u.classificazioni === 1 ? ' classificazione' : ' classificazioni') + '</p>' +
+      '<p class="nota">' + numero(u.richieste) + ' richieste, ' + numero(u.token_in) + ' token in ingresso' + (u.token_in ? ' (' + cache + '% dalla cache, che costano molto meno)' : '') +
+      ' e ' + numero(u.token_out) + ' in uscita. L\'uso dei colleghi resta sui loro PC: il totale e la spesa sono nella console del servizio' +
+      (cons ? ' (<a href="' + esc(cons[1]) + '" target="_blank" rel="noopener">' + esc(cons[0]) + '</a>)' : '') + ', dove conviene impostare un tetto di spesa.</p></div>' +
+      '<div class="box s6"><div class="lab">' + T.icona('info') + 'Da sapere</div>' +
+      '<p class="nota"><b>La chiave è cifrata nella cartella</b>, ma il programma di ogni collega la può usare: scegline una dedicata a MAGIC HS, con un tetto di spesa.</p>' +
       '<p class="nota"><b>Azure OpenAI</b>: indirizzo https://&lt;risorsa&gt;.openai.azure.com/openai/v1 e nome della distribuzione come modello.</p></div></div>';
     return h;
   }
+  function meseIt(m) {
+    var nomi = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+    var x = /^(\d{4})-(\d{2})$/.exec(m || ''); return x ? nomi[+x[2] - 1] + ' ' + x[1] : '';
+  }
+
 
   /* ---------- registro ---------- */
   function registro() {
@@ -259,6 +283,13 @@
     else if (g === 'editore-togli') {
       if (v === st.loc.utente && !window.confirm('Togliendo te stesso non potrai più pubblicare da questo PC. Continuare?')) return;
       salvaEditori(st.loc.editori.filter(function (n) { return n !== v; }), 'Tolto: ' + v + '.');
+    }
+    else if (g === 'modelli-ia') {
+      b.disabled = true; msg('ia', 'Leggo l\'elenco dei modelli…', true); disegna();
+      T.api('POST', '/api/admin/locale/ia/modelli').then(function (r) {
+        st.modelli = r.modelli || [];
+        msg('ia', st.modelli.length ? st.modelli.length + ' modelli disponibili: li trovi tra i suggerimenti dei campi Modello.' : 'Il servizio non ha indicato modelli: scrivi il nome a mano.', true);
+      }, function (e) { msg('ia', errore(e)); }).then(disegna);
     }
     else if (g === 'prova-ia') {
       b.disabled = true; msg('ia', 'Provo il servizio…', true); disegna();

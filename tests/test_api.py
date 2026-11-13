@@ -54,12 +54,27 @@ def test_ia_risponde_json_e_conta_le_richieste(ambiente):
 
 def test_ia_errori_della_api(editore: PC):
     c = editore.entra()
-    editore.claude.risposte = [httpx.Response(429, json={}), httpx.Response(529, json={}), httpx.Response(401, json={}),
+    occupato, sovraccarico = httpx.Response(429, json={}), httpx.Response(529, json={})
+    editore.claude.risposte = [occupato, occupato, occupato, sovraccarico, sovraccarico, sovraccarico, httpx.Response(401, json={}),
                                FintoClaude.testo("non posso", stop="refusal"), FintoClaude.testo("niente json qui"),
                                httpx.Response(400, json={"error": {"message": "Your credit balance is too low"}})]
-    risposte = [c.post("/api/ia", json={"prompt": "x", "livello": "rapido"}).json() for _ in range(6)]
+    risposte = [c.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": f"op{k}"}).json() for k in range(6)]
     assert [r["codice"] for r in risposte] == ["rate_limited", "overloaded", "server_misconfigured", "refused", "invalid_json", "credito_esaurito"]
     assert all("server" not in r["errore"] and "amministratore" not in r["errore"] for r in risposte)
+    assert editore.attese == [2.0, 4.0, 2.0, 4.0]          # due nuovi tentativi, con attesa crescente, prima di arrendersi
+
+
+def test_ia_riprova_da_sola(editore: PC):
+    c = editore.entra()
+    editore.claude.risposte = [httpx.Response(529, json={}), httpx.Response(429, json={}, headers={"retry-after": "7"}),
+                               FintoClaude.testo('{"ok": 1}')]
+    r = c.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": "a"})
+    assert r.status_code == 200 and r.json()["risultato"] == {"ok": 1}
+    assert editore.attese == [2.0, 7.0]                       # rispettata l'attesa indicata dal servizio
+    # un limite con un'attesa troppo lunga si dice subito, senza bloccare la pagina
+    editore.claude.risposte = [httpx.Response(429, json={}, headers={"retry-after": "120"})]
+    assert c.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": "b"}).json()["codice"] == "rate_limited"
+    assert len(editore.attese) == 2
 
 
 def test_ia_non_configurata(ambiente):
@@ -108,3 +123,32 @@ def test_gestione_riservata_a_chi_pubblica(editore: PC, ambiente):
     r = ce.get("/api/admin/riepilogo").json()
     assert r["ia"] is True and r["dati"] == "2026-11-01"
     assert ce.get("/api/admin/dati").json()["attiva"] == "2026-11-01"
+
+
+def test_limite_mensile_in_classificazioni(ambiente):
+    """Il limite conta le classificazioni: le richieste della stessa classificazione (stessa operazione) contano una volta,
+    le traduzioni non contano."""
+    tmp, cond, mp = ambiente
+    imposta_ia(cond, quota=1, fornitore="anthropic", chiave="k")
+    PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",))
+    collega = PC(tmp, cond, "lbianchi", mp, editore=False)
+    cc = collega.entra()
+    chiedi = lambda op, **kw: cc.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": op, **kw})
+    assert chiedi("cl-1").status_code == 200 and chiedi("cl-1", livello="standard").status_code == 200
+    r = chiedi("cl-2")
+    assert r.status_code == 429 and r.json()["codice"] == "quota_esaurita"
+    assert chiedi("tr-1", tipo="traduzione").status_code == 200
+    io_ = cc.get("/api/io").json()["ia"]
+    assert io_["usate"] == 1 and io_["limite"] == 1
+    for _ in range(4):
+        assert chiedi("cl-1").status_code == 200                         # la stessa classificazione puo' continuare...
+    assert chiedi("cl-1").json()["codice"] == "rate_limited"            # ...ma non all'infinito
+
+
+def test_uso_del_mese_in_gestione(editore: PC):
+    c = editore.entra()
+    editore.claude.cache = 100
+    for op in ("a", "a", "b"):
+        c.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": op})
+    uso = c.get("/api/admin/locale").json()["uso"]
+    assert uso["classificazioni"] == 2 and uso["richieste"] == 3 and uso["token_in"] == 360 and uso["token_cache"] == 300

@@ -37,8 +37,8 @@ La cartella contiene:
 Non modificare i file a mano: si gestisce tutto dal programma, scheda Gestione.
 - Dati TARIC: a ogni inizio mese, quando apri MAGIC HS sul tuo PC, scarica la nuova estrazione,
   la controlla e la pubblica qui da solo. I colleghi la ricevono da OneDrive.
-- Intelligenza artificiale: Gestione > Intelligenza artificiale. La chiave è leggibile da chi vede
-  questa cartella: usane una dedicata, con un tetto di spesa.
+- Intelligenza artificiale: Gestione > Intelligenza artificiale. La chiave è cifrata in questa cartella,
+  ma il programma di ogni collega la può usare: usane una dedicata, con un tetto di spesa.
 - Nuova versione del programma: quando esce, la scheda Gestione ha un puntino arancio. In Gestione >
   Cartella condivisa premi «Aggiorna per tutti»: arrivano anche questo file e l'avvio aggiornati.
 - Colleghi: solo il permesso di LETTURA. Chi può modificare questa cartella può cambiare il programma

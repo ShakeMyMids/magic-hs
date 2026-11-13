@@ -55,7 +55,7 @@ def test_gemini_chiamate_e_risposte(ambiente):
     assert a.post("/api/ia", json={"prompt": "scarpe", "livello": "rapido"}).json()["risultato"] == {"voci": [{"voce": "6403"}]}
     r = a.post("/api/ia", json={"prompt": "scegli", "livello": "standard"}).json()
     assert r["risultato"]["migliore"]["codice"] == "6403999610"
-    assert r["uso"] == {"token_in": 120, "token_out": 80}           # i token di ragionamento si contano
+    assert r["uso"] == {"token_in": 120, "token_out": 80, "token_cache": 0}     # i token di ragionamento si contano
     q1, q2 = s.claude.richieste
     assert q1["url"].endswith("/v1beta/models/gemini-3.5-flash-lite:generateContent")
     assert q2["url"].endswith("/v1beta/models/gemini-3.7-flash:generateContent")
@@ -70,15 +70,15 @@ def test_gemini_errori(ambiente):
     errore = lambda stato, msg, st="": httpx.Response(stato, json={"error": {"code": stato, "message": msg, "status": st}})
     s.claude.risposte = [
         errore(429, "Quota exceeded for metric: generate_content_free_tier_requests, limit: 20, quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier", "RESOURCE_EXHAUSTED"),
-        errore(429, "Quota exceeded: GenerateRequestsPerMinutePerProjectPerModel-FreeTier", "RESOURCE_EXHAUSTED"),
+        *[errore(429, "Quota exceeded: GenerateRequestsPerMinutePerProjectPerModel-FreeTier", "RESOURCE_EXHAUSTED")] * 3,   # 3 tentativi
         errore(400, "API key not valid. Please pass a valid API key.", "INVALID_ARGUMENT"),
         errore(400, "User location is not supported for the API use.", "FAILED_PRECONDITION"),
         errore(404, "models/gemini-9 is not found for API version v1beta", "NOT_FOUND"),
-        errore(503, "The model is overloaded. Please try again later.", "UNAVAILABLE"),
+        *[errore(503, "The model is overloaded. Please try again later.", "UNAVAILABLE")] * 3,
         httpx.Response(200, json={"promptFeedback": {"blockReason": "SAFETY"}, "usageMetadata": {"promptTokenCount": 10}}),
         FintoClaude.testo("non posso", stop="SAFETY"),
     ]
-    codici = [a.post("/api/ia", json={"prompt": "x", "livello": "rapido"}).json().get("codice") for _ in range(8)]
+    codici = [a.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": f"op{k}"}).json().get("codice") for k in range(8)]
     assert codici == ["limite_giornaliero", "rate_limited", "server_misconfigured", "regione_non_supportata",
                       "server_misconfigured", "overloaded", "refused", "refused"]
     r = a.post("/api/ia", json={"prompt": "x", "livello": "rapido"})          # dopo gli errori il servizio torna a rispondere
@@ -112,3 +112,81 @@ def test_ollama_senza_chiave(ambiente):
     assert a.post("/api/ia", json={"prompt": "x", "livello": "rapido"}).status_code == 200
     assert "authorization" not in s.claude.richieste[0]["intestazioni"]
     assert json.loads(json.dumps(s.claude.richieste[0]["corpo"]))["model"] == "qwen3:14b"
+
+
+# ------------------------------------------------------------------ cache del fornitore e risposte con schema
+CONTESTO = "ISTRUZIONI E TESTO UFFICIALE DELLE VOCI"
+VOCI = '{"merce": "scarpe", "voci": [{"voce": "6403", "motivo": "cuoio"}], "non_classificabile": null}'
+
+
+def test_claude_contesto_in_cache_e_risposta_con_strumento(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="anthropic", chiave="k")
+    s.claude.cache = 100
+    s.claude.risposte = [FintoClaude.testo(VOCI)]
+    r = a.post("/api/ia", json={"contesto": CONTESTO, "prompt": "MERCE: scarpe", "livello": "standard", "schema": "voci", "operazione": "op1"}).json()
+    assert r["risultato"]["voci"][0]["voce"] == "6403"
+    assert r["uso"] == {"token_in": 120, "token_out": 30, "token_cache": 100}
+    q = s.claude.richieste[-1]["corpo"]
+    blocchi = q["messages"][0]["content"]
+    assert blocchi[0] == {"type": "text", "text": CONTESTO, "cache_control": {"type": "ephemeral"}} and blocchi[1] == {"type": "text", "text": "MERCE: scarpe"}
+    assert q["tool_choice"] == {"type": "tool", "name": "risposta"}
+    assert q["tools"][0]["input_schema"]["required"] == ["merce", "voci", "non_classificabile"]
+    # senza contesto e senza schema la richiesta resta quella semplice
+    a.post("/api/ia", json={"prompt": "ciao", "livello": "rapido", "operazione": "op2"})
+    q = s.claude.richieste[-1]["corpo"]
+    assert q["messages"][0]["content"] == "ciao" and "tools" not in q
+
+
+def test_claude_senza_strumento_se_il_servizio_non_lo_accetta(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="anthropic", chiave="k")
+    s.claude.risposte = [httpx.Response(400, json={"error": {"type": "invalid_request_error", "message": "tools: unsupported"}}), FintoClaude.testo(VOCI)]
+    r = a.post("/api/ia", json={"prompt": "x", "livello": "rapido", "schema": "voci", "operazione": "op1"})
+    assert r.status_code == 200 and r.json()["risultato"]["merce"] == "scarpe"
+    assert "tools" in s.claude.richieste[0]["corpo"] and "tools" not in s.claude.richieste[1]["corpo"]
+
+
+def test_gemini_schema_e_contesto_prima_della_merce(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="g")
+    s.claude.cache = 90
+    s.claude.risposte = [FintoClaude.testo(VOCI)]
+    r = a.post("/api/ia", json={"contesto": CONTESTO, "prompt": "MERCE: scarpe", "livello": "rapido", "schema": "voci", "operazione": "op1"}).json()
+    assert r["uso"]["token_cache"] == 90
+    q = s.claude.richieste[-1]["corpo"]
+    assert q["contents"][0]["parts"] == [{"text": CONTESTO}, {"text": "MERCE: scarpe"}]
+    schema = q["generationConfig"]["responseSchema"]
+    assert schema["type"] == "OBJECT" and schema["properties"]["non_classificabile"] == {"type": "STRING", "nullable": True}
+    assert schema["properties"]["voci"]["items"]["required"] == ["voce", "motivo"]
+    # un modello che non accetta lo schema: si riprova senza
+    s.claude.risposte = [httpx.Response(400, json={"error": {"code": 400, "message": "responseSchema not supported", "status": "INVALID_ARGUMENT"}}),
+                         FintoClaude.testo(VOCI)]
+    assert a.post("/api/ia", json={"prompt": "x", "livello": "rapido", "schema": "voci", "operazione": "op2"}).status_code == 200
+    assert "responseSchema" not in s.claude.richieste[-1]["corpo"]["generationConfig"]
+
+
+def test_openai_schema_poi_json_poi_niente(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="openai", url="https://risorsa.openai.azure.com/openai/v1", modello="gpt-prova", chiave="az")
+    s.claude.cache = 64
+    rifiuto = lambda: httpx.Response(400, json={"error": {"message": "response_format not supported"}})
+    s.claude.risposte = [rifiuto(), rifiuto(), FintoClaude.testo(VOCI)]
+    r = a.post("/api/ia", json={"contesto": CONTESTO, "prompt": "MERCE: scarpe", "livello": "standard", "schema": "voci", "operazione": "op1"}).json()
+    assert r["risultato"]["merce"] == "scarpe" and r["uso"]["token_cache"] == 64
+    formati = [q["corpo"].get("response_format", {}).get("type") for q in s.claude.richieste]
+    assert formati == ["json_schema", "json_object", None]
+    primo = s.claude.richieste[0]["corpo"]
+    assert primo["response_format"]["json_schema"]["strict"] is True
+    assert primo["messages"][1]["content"] == CONTESTO + "\n\nMERCE: scarpe"          # stesso inizio: cache automatica
+    assert s.claude.richieste[0]["intestazioni"]["api-key"] == "az"
+
+
+# ------------------------------------------------------------------ elenco dei modelli per Gestione
+def test_elenco_dei_modelli(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="anthropic", chiave="k")
+    r = a.post("/api/admin/locale/ia/modelli").json()
+    assert r["modelli"] == ["claude-haiku-5-5", "claude-sonnet-5-5"]
+    assert s.claude.richieste[-1]["url"] == "https://api.anthropic.com/v1/models?limit=100"
+    assert s.claude.richieste[-1]["intestazioni"]["x-api-key"] == "k"
+
+
+def test_elenco_dei_modelli_gemini_solo_quelli_che_generano(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="g")
+    assert a.post("/api/admin/locale/ia/modelli").json()["modelli"] == ["gemini-3.7-flash"]

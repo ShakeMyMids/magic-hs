@@ -31,7 +31,8 @@ from . import __version__
 from . import sicurezza as S
 from .aggiornamenti import Aggiornamenti, ErroreAggiornamento, piu_recente
 from .backup import Backup
-from .condivisa import RE_UTENTE, Condivisa, ErroreCondivisa, editori, ia_da_impostazioni, utente_windows, versione_pacchetto
+from .condivisa import (RE_UTENTE, Condivisa, ErroreCondivisa, chiave_ia, con_chiave_cifrata, editori, ia_da_impostazioni, utente_windows,
+                        versione_pacchetto)
 from .config import Config
 from .dati import GestoreDati
 from .db import Database, iso
@@ -95,8 +96,12 @@ class Nota(BaseModel):
 
 
 class RichiestaIA(BaseModel):
-    prompt: str = Field(min_length=1, max_length=400_000)
+    prompt: str = Field(min_length=1, max_length=400_000)          # parte che cambia: merce e risposte dell'utente
+    contesto: str = Field(default="", max_length=400_000)          # parte uguale tra le richieste: va nella cache del fornitore
     livello: Literal["rapido", "standard"] = "standard"
+    schema_risposta: Optional[Literal["voci", "scelta", "traduzione"]] = Field(default=None, alias="schema")
+    operazione: str = Field(default="", max_length=40, pattern=r"^[A-Za-z0-9_-]*$")   # una classificazione = piu' richieste
+    tipo: Literal["classifica", "traduzione"] = "classifica"
 
 
 class Mese(BaseModel):
@@ -155,6 +160,13 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         imp = condivisa.impostazioni() if condivisa else {}
         if not imp:
             return
+        ia_imp = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
+        if editore() and condivisa is not None and ia_imp.get("chiave"):     # cartella di prima: la chiave era in chiaro
+            try:
+                condivisa.salva_impostazioni(con_chiave_cifrata(imp, chiave_ia(imp)))
+                log.info("chiave del servizio IA cifrata in impostazioni.json")
+            except OSError:
+                log.exception("cifratura della chiave del servizio IA")
         cfg.imposta_ia(ia_da_impostazioni(imp))
         quota = imp.get("quota", 50)
         if quota is not None and not (isinstance(quota, int) and quota >= 0):
@@ -478,7 +490,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.post("/api/ia")
     def chiedi_ia(body: RichiestaIA, u: sqlite3.Row = Depends(richiede_utente)) -> Response:
         try:
-            return JSONResponse(ia.chiedi(u, body.prompt, body.livello))
+            return JSONResponse(ia.chiedi(u, body.prompt, body.livello, contesto=body.contesto, schema=body.schema_risposta,
+                                          operazione=body.operazione, tipo=body.tipo))
         except ErroreIA as e:
             return JSONResponse({"errore": MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"]), "codice": e.codice}, status_code=e.stato_http)
 
@@ -561,7 +574,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def admin_locale(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         imp = condivisa.impostazioni() if condivisa else {}
         ia_imp = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
-        chiave = str(ia_imp.get("chiave") or "")
+        chiave = chiave_ia(imp)
         return {"condivisa": str(cfg.condivisa or ""), "raggiungibile": bool(condivisa and condivisa.raggiungibile()),
                 "editore": editore(), "scrivibile": scrivibile(), "utente": utente_pc, "editori": editori(imp),
                 "programma": {"in_uso": __version__, "pubblicato": condivisa.versione_programma() if condivisa else ""},
@@ -569,15 +582,16 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 "ia": {"fornitore": str(ia_imp.get("fornitore") or ""), "url": str(ia_imp.get("url") or ""),
                        "modello": str(ia_imp.get("modello") or ""), "modello_rapido": str(ia_imp.get("modello_rapido") or ""),
                        "chiave": ("…" + chiave[-4:]) if len(chiave) > 8 else ("impostata" if chiave else "")},
-                "attiva": ia.disponibile, "ia_nome": cfg.ia_nome,
+                "attiva": ia.disponibile, "ia_nome": cfg.ia_nome, "fornitore_attivo": cfg.ia_fornitore,
+                "modelli_in_uso": {"rapido": cfg.modello_rapido, "principale": cfg.modello} if ia.disponibile else None,
+                "uso": uso_mese(),
                 "quota": imp.get("quota", 50) if imp else 50, "aggiornate": imp.get("aggiornate", ""), "da": imp.get("da", "")}
 
     @app.put("/api/admin/locale/ia")
     def admin_locale_ia(body: ImpostazioniIA, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         cond = serve_editore()
         imp = cond.impostazioni()
-        vecchia = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
-        chiave = str(vecchia.get("chiave") or "") if body.chiave is None else body.chiave.strip()
+        chiave = chiave_ia(imp) if body.chiave is None else body.chiave.strip()
         url = body.url.strip().rstrip("/")
         if url and not re.match(r"^https?://[^\s/]+(/\S*)?$", url):
             raise Errore(422, "Indirizzo del servizio non valido: deve iniziare con https://.", "url")
@@ -587,10 +601,10 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             raise Errore(422, "Indica il modello (per Azure OpenAI: il nome della distribuzione).", "modello")
         if body.fornitore in ("gemini", "anthropic") and not chiave:
             raise Errore(422, "Inserisci la chiave del servizio.", "chiave")
-        nuove = {**imp, "ia": {"fornitore": body.fornitore, "chiave": chiave if body.fornitore else "",
-                               "url": url if body.fornitore else "", "modello": body.modello.strip() if body.fornitore else "",
-                               "modello_rapido": body.modello_rapido.strip() if body.fornitore else ""},
-                 "quota": body.quota, "aggiornate": iso(), "da": a["nome"]}
+        nuove = con_chiave_cifrata({**imp, "ia": {"fornitore": body.fornitore, "url": url if body.fornitore else "",
+                                                   "modello": body.modello.strip() if body.fornitore else "",
+                                                   "modello_rapido": body.modello_rapido.strip() if body.fornitore else ""},
+                                    "quota": body.quota, "aggiornate": iso(), "da": a["nome"]}, chiave if body.fornitore else "")
         try:
             cond.salva_impostazioni(nuove)
         except OSError as e:
@@ -619,6 +633,14 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             db.evento(c, "editori", autore_id=a["id"], dettagli=", ".join(elenco))
         return json_ok(editori=elenco, editore=editore())
 
+    @app.post("/api/admin/locale/ia/modelli")
+    def admin_locale_modelli(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Modelli offerti dal servizio salvato (suggerimenti per i campi «Modello»)."""
+        try:
+            return json_ok(modelli=ia.modelli())
+        except ErroreIA as e:
+            raise Errore(e.stato_http, "Non riesco a leggere l'elenco dei modelli: controlla chiave e indirizzo, oppure scrivi il nome a mano.", e.codice)
+
     @app.post("/api/admin/locale/ia/prova")
     def admin_locale_prova(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         try:
@@ -630,6 +652,10 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 "upstream_error": "Non riesco a raggiungere il servizio: controlla l'indirizzo e, se in azienda c'è un proxy, chiedi all'IT.",
             }.get(e.codice) or MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
             raise Errore(e.stato_http, messaggio, e.codice)
+
+    def uso_mese() -> dict[str, Any]:
+        with db.connessione() as c:
+            return {**ia.uso_mese(c), "mese": mese_corrente()}
 
     def versione_di_riferimento() -> str:
         """La versione con cui confrontare quella di GitHub: quella pubblicata per i colleghi (o, se manca, quella in uso)."""

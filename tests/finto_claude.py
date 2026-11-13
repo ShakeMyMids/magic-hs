@@ -29,7 +29,7 @@ PACCHETTO = pacchetto(NUOVA)
 def rispondi(prompt: str) -> object:
     if prompt.startswith("Traduci dall"):
         n = prompt.count("\n") and len([r for r in prompt.split("\n") if r[:1].isdigit() and ". " in r[:5]])
-        return [f"Traduzione di prova {i + 1}" for i in range(n)]
+        return {"traduzioni": [f"Traduzione di prova {i + 1}" for i in range(n)]}
     if "Compito: indica le voci" in prompt:
         if "asdf" in prompt:
             return {"merce": "", "voci": [], "non_classificabile": "Il testo non descrive una merce."}
@@ -65,6 +65,11 @@ class Gestore(BaseHTTPRequestHandler):
             self.send_header("content-length", str(len(PACCHETTO)))
             self.end_headers()
             self.wfile.write(PACCHETTO)
+        elif self.path == "/v1/models":
+            if (self.headers.get("authorization") or "") != "Bearer chiave-finta":
+                self._json(401, {"error": {"message": "API key not valid"}})
+            else:
+                self._json(200, {"data": [{"id": "finto-modello"}, {"id": "finto-modello-rapido"}]})
         else:
             self._json(404, {"message": "Not Found"})
 

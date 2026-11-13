@@ -17,33 +17,49 @@ CHIAVE = "chiave-di-ingresso-di-prova"
 
 
 class FintoClaude:
-    """Finto servizio IA: risponde nel formato di chi chiama (Anthropic, Gemini o compatibile OpenAI).
-    Nei test si preparano le risposte: testo(...) per una risposta riuscita, oppure un httpx.Response grezzo."""
+    """Finto servizio IA: risponde nel formato di chi chiama (Anthropic, Gemini o compatibile OpenAI), anche con lo
+    strumento obbligato di Claude, ed elenca i modelli. Nei test si preparano le risposte: testo(...) per una risposta
+    riuscita, oppure un httpx.Response grezzo. cache = token che il finto servizio dichiara letti dalla sua cache."""
 
     def __init__(self) -> None:
         self.richieste: list[dict] = []
         self.risposte: list = []
+        self.cache = 0
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if request.method == "GET":
+            self.richieste.append({"url": url, "corpo": None, "intestazioni": dict(request.headers), "chiave": None})
+            if "generativelanguage" in url or "/v1beta/" in url:
+                return httpx.Response(200, json={"models": [{"name": "models/gemini-3.7-flash", "supportedGenerationMethods": ["generateContent"]},
+                                                            {"name": "models/text-embedding-9", "supportedGenerationMethods": ["embedContent"]}]})
+            return httpx.Response(200, json={"data": [{"id": "claude-sonnet-5-5"}, {"id": "claude-haiku-5-5"}]})
         corpo = json.loads(request.content)
-        self.richieste.append({"url": str(request.url), "corpo": corpo, "intestazioni": dict(request.headers),
+        self.richieste.append({"url": url, "corpo": corpo, "intestazioni": dict(request.headers),
                                "chiave": request.headers.get("x-api-key") or request.headers.get("x-goog-api-key") or request.headers.get("authorization")})
-        r = self.risposte.pop(0) if self.risposte else FintoClaude.testo('{"merce": "prova", "voci": [{"voce": "8467", "motivo": "utensile"}]}')
+        r = self.risposte.pop(0) if self.risposte else FintoClaude.testo('{"merce": "prova", "voci": [{"voce": "8467", "motivo": "utensile"}], "non_classificabile": null}')
         if isinstance(r, httpx.Response):
             return r
         _, testo, stop = r
-        url = str(request.url)
         if ":generateContent" in url:
             motivo = {"refusal": "SAFETY", "end_turn": "STOP"}.get(stop, stop)
             return httpx.Response(200, json={"candidates": [{"content": {"role": "model", "parts": [{"text": "ragiono...", "thought": True}, {"text": testo}]},
                                                              "finishReason": motivo}],
-                                             "usageMetadata": {"promptTokenCount": 120, "candidatesTokenCount": 30, "thoughtsTokenCount": 50}})
+                                             "usageMetadata": {"promptTokenCount": 120, "candidatesTokenCount": 30, "thoughtsTokenCount": 50,
+                                                               "cachedContentTokenCount": self.cache}})
         if url.endswith("/chat/completions"):
             motivo = {"refusal": "content_filter", "end_turn": "stop"}.get(stop, stop)
             return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": testo}, "finish_reason": motivo}],
-                                             "usage": {"prompt_tokens": 120, "completion_tokens": 30}})
-        return httpx.Response(200, json={"content": [{"type": "text", "text": testo}], "stop_reason": stop,
-                                         "usage": {"input_tokens": 120, "output_tokens": 30}})
+                                             "usage": {"prompt_tokens": 120, "completion_tokens": 30, "prompt_tokens_details": {"cached_tokens": self.cache}}})
+        uso = {"input_tokens": 120 - self.cache, "output_tokens": 30, "cache_read_input_tokens": self.cache, "cache_creation_input_tokens": 0}
+        try:
+            valore = json.loads(testo)
+        except ValueError:
+            valore = None
+        if corpo.get("tools") and isinstance(valore, dict) and stop != "refusal":
+            return httpx.Response(200, json={"content": [{"type": "tool_use", "id": "toolu_1", "name": corpo["tools"][0]["name"], "input": valore}],
+                                             "stop_reason": "tool_use", "usage": uso})
+        return httpx.Response(200, json={"content": [{"type": "text", "text": testo}], "stop_reason": stop, "usage": uso})
 
     @staticmethod
     def testo(t: str, stop: str = "end_turn") -> tuple:
@@ -121,6 +137,8 @@ class PC:
             self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False,
                                 chiave_ingresso=CHIAVE, istanza="prova",
                                 client_aggiornamenti=httpx.Client(transport=httpx.MockTransport(self.github), follow_redirects=True))
+        self.attese: list[float] = []
+        self.app.state.ia.attendi = self.attese.append          # i nuovi tentativi non aspettano davvero
         self.fermato = False
 
         def ferma() -> None:

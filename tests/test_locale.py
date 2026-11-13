@@ -15,10 +15,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from taric.app import crea_app
-from taric.condivisa import Condivisa, ErroreCondivisa, editori, estrai_dati, versione_pacchetto
+from taric.condivisa import Condivisa, ErroreCondivisa, chiave_ia, editori, estrai_dati, versione_pacchetto
 from taric.config import carica
 
-from conftest import CHIAVE, PC, FintoClaude, FintoGitHub, dati_finti, imposta_editori
+from conftest import CHIAVE, PC, FintoClaude, FintoGitHub, dati_finti, imposta_editori, imposta_ia
 
 RADICE = Path(__file__).resolve().parents[1]
 
@@ -179,19 +179,23 @@ def test_impostazioni_ia_per_tutti(ambiente):
     r = ce.put("/api/admin/locale/ia", json={"fornitore": "openai", "url": "https://risorsa.openai.azure.com/openai/v1/",
                                            "modello": "gpt-classifica", "chiave": "chiave-segreta-1234", "quota": 5})
     assert r.status_code == 200 and r.json()["attiva"], r.text
-    imp = json.loads((cond / "impostazioni.json").read_text())
+    testo = (cond / "impostazioni.json").read_text()
+    imp = json.loads(testo)
     assert imp["ia"]["url"] == "https://risorsa.openai.azure.com/openai/v1" and imp["quota"] == 5
+    assert "chiave-segreta" not in testo and "chiave" not in imp["ia"] and imp["ia"]["chiave_cifrata"].startswith("mhs1:")
     loc = ce.get("/api/admin/locale").json()
     assert loc["ia"]["chiave"] == "…1234" and "chiave-segreta" not in json.dumps(loc)
     # salvare senza chiave tiene quella di prima
     assert ce.put("/api/admin/locale/ia", json={"fornitore": "openai", "url": "https://risorsa.openai.azure.com/openai/v1",
                                               "modello": "gpt-classifica", "quota": 5}).status_code == 200
-    assert json.loads((cond / "impostazioni.json").read_text())["ia"]["chiave"] == "chiave-segreta-1234"
+    imp = json.loads((cond / "impostazioni.json").read_text())
+    assert chiave_ia(imp) == "chiave-segreta-1234"
 
     collega = PC(tmp, cond, "collega", mp, editore=False)
     io_ = collega.entra().get("/api/io").json()["ia"]
     assert io_["configurata"] and io_["limite"] == 5
     assert collega.cfg.ia_fornitore == "openai" and collega.cfg.modello == collega.cfg.modello_rapido == "gpt-classifica"
+    assert collega.cfg.ia_chiave == "chiave-segreta-1234"                 # il collega la decifra e la usa
     assert collega.entra().put("/api/admin/locale/ia", json={"fornitore": ""}).status_code == 403
 
     # senza limite mensile, poi IA spenta per tutti (e la chiave sparisce dalla cartella)
@@ -200,9 +204,29 @@ def test_impostazioni_ia_per_tutti(ambiente):
     cc = collega.entra()
     assert cc.post("/api/locale/sincronizza").status_code == 200 and cc.get("/api/io").json()["ia"]["limite"] is None
     assert ce.put("/api/admin/locale/ia", json={"fornitore": "", "quota": 50}).status_code == 200
-    assert json.loads((cond / "impostazioni.json").read_text())["ia"]["chiave"] == ""
+    imp = json.loads((cond / "impostazioni.json").read_text())
+    assert "chiave_cifrata" not in imp["ia"] and chiave_ia(imp) == ""
     cc.post("/api/locale/sincronizza")
     assert cc.get("/api/io").json()["ia"]["configurata"] is False
+
+
+def test_chiave_in_chiaro_di_prima_viene_cifrata(ambiente):
+    """Una cartella creata prima: la chiave era in chiaro. I colleghi la leggono ancora; il PC di chi pubblica la cifra."""
+    tmp, cond, mp = ambiente
+    imposta_editori(cond, "mrossi")
+    imposta_ia(cond, fornitore="anthropic", chiave="sk-in-chiaro")
+    collega = PC(tmp, cond, "lbianchi", mp, editore=False)
+    assert collega.cfg.ia_chiave == "sk-in-chiaro" and "sk-in-chiaro" in (cond / "impostazioni.json").read_text()   # il collega non scrive
+    PC(tmp, cond, "mrossi", mp)
+    testo = (cond / "impostazioni.json").read_text()
+    assert "sk-in-chiaro" not in testo and chiave_ia(json.loads(testo)) == "sk-in-chiaro"
+    collega.entra().post("/api/locale/sincronizza")
+    assert collega.cfg.ia_chiave == "sk-in-chiaro"
+    # un file manomesso o copiato senza il suo sale: la chiave non si ricava, l'IA risulta spenta invece di usare dati sbagliati
+    imp = json.loads(testo)
+    imp["sale"] = "altro"
+    (cond / "impostazioni.json").write_text(json.dumps(imp))
+    assert PC(tmp, cond, "ccolombo", mp, editore=False).cfg.ia_disponibile is False
 
 
 def test_prova_del_servizio_e_azure(ambiente):

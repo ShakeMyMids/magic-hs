@@ -134,14 +134,19 @@ function infoBlock() {
   if (!state.answers.length) return '';
   return '\nINFORMAZIONI GIÀ FORNITE DALL\'UTENTE:\n' + state.answers.map(function (a) { return '- ' + a.q + ' → ' + a.a; }).join('\n') + '\n';
 }
+/* ogni richiesta ha una parte fissa (contesto: istruzioni e testo ufficiale, riusata dalla cache del fornitore)
+   e una parte che cambia (prompt: la merce e le risposte dell'utente), messa in fondo */
+function merceBlock() { return 'MERCE DA CLASSIFICARE:\n«' + state.q + '»\n' + infoBlock(); }
 function promptVoci() {
-  return 'Sei un esperto di classificazione doganale dell\'Unione europea (Sistema Armonizzato, Nomenclatura Combinata, TARIC).\n\n' +
-    'MERCE DA CLASSIFICARE:\n«' + state.q + '»\n' + infoBlock() + '\n' +
-    'Compito: indica le voci del Sistema Armonizzato a 4 cifre in cui questa merce potrebbe rientrare, dalla più probabile alla meno probabile. ' +
-    'Includi anche le voci concorrenti realistiche (altro materiale, altra funzione, parti e accessori, assortimenti), perché la scelta finale verrà fatta in un secondo passaggio sul testo ufficiale. Da 1 a 5 voci, senza doppioni.\n\n' +
-    'Rispondi solo con un oggetto JSON in questa forma:\n' +
-    '{"merce":"riformulazione breve e precisa della merce, in italiano","voci":[{"voce":"8467","motivo":"massimo 10 parole"}],"non_classificabile":null}\n\n' +
-    'Se il testo non descrive una merce, restituisci "voci":[] e scrivi in "non_classificabile" una frase che dice all\'utente che cosa manca.';
+  return {
+    contesto: 'Sei un esperto di classificazione doganale dell\'Unione europea (Sistema Armonizzato, Nomenclatura Combinata, TARIC).\n\n' +
+      'Compito: indica le voci del Sistema Armonizzato a 4 cifre in cui la merce descritta alla fine potrebbe rientrare, dalla più probabile alla meno probabile. ' +
+      'Includi anche le voci concorrenti realistiche (altro materiale, altra funzione, parti e accessori, assortimenti), perché la scelta finale verrà fatta in un secondo passaggio sul testo ufficiale. Da 1 a 5 voci, senza doppioni.\n\n' +
+      'Rispondi solo con un oggetto JSON in questa forma:\n' +
+      '{"merce":"riformulazione breve e precisa della merce, in italiano","voci":[{"voce":"8467","motivo":"massimo 10 parole"}],"non_classificabile":null}\n\n' +
+      'Se il testo non descrive una merce, restituisci "voci":[] e scrivi in "non_classificabile" una frase che dice all\'utente che cosa manca.',
+    prompt: merceBlock()
+  };
 }
 function headingBlock(hi) {
   var base = LVL[hi], out = [];
@@ -162,9 +167,8 @@ function promptScelta(heads) {
     if (used + b.length > 150000 && blocks.length) { skipped.push(h); return; }
     used += b.length; blocks.push(b);
   });
-  return 'Sei un esperto di classificazione doganale dell\'Unione europea. Classifichi secondo le Regole generali per l\'interpretazione della Nomenclatura Combinata (da 1 a 6), ' +
-    'le note di sezione e di capitolo e la prassi consolidata (note esplicative, informazioni tariffarie vincolanti).\n\n' +
-    'MERCE DA CLASSIFICARE:\n«' + state.q + '»\n' + infoBlock() + '\n' +
+  var contesto = 'Sei un esperto di classificazione doganale dell\'Unione europea. Classifichi secondo le Regole generali per l\'interpretazione della Nomenclatura Combinata (da 1 a 6), ' +
+    'le note di sezione e di capitolo e la prassi consolidata (note esplicative, informazioni tariffarie vincolanti). La merce da classificare è descritta alla fine.\n\n' +
     'NOMENCLATURA UFFICIALE (TARIC dell\'UE, situazione al ' + DATA_IT + '; testo ufficiale in italiano' + (N_EN ? ', tranne alcune righe recenti rimaste in inglese' : '') + ').\n' +
     'Ogni riga: codice a 10 cifre, trattini che indicano il livello, descrizione. L\'asterisco dopo il codice indica un codice dichiarabile. ' +
     'Le righe che iniziano con puntini sono titoli intermedi senza codice proprio.\n\n' +
@@ -183,6 +187,7 @@ function promptScelta(heads) {
     '"alternative":[{"codice":"0000000000","descrizione_it":"...","quando":"scegli questa se ...","confidenza":0}],' +
     '"domande":[{"domanda":"...","opzioni":["...","..."],"perche":"quale distinzione risolve"}],"altre_voci":[]}\n' +
     '"confidenza" è un intero da 0 a 100.';
+  return { contesto: contesto, prompt: merceBlock() };
 }
 function normResult(r) {
   r = (r && typeof r === 'object') ? r : {};
@@ -220,12 +225,19 @@ var ERR = {
 function errMsg(e) { return (e && e.message) || ERR[e && e.code] || ERR.upstream_error; }
 
 /* l'IA risponde tramite il server, che custodisce la chiave e applica il limite mensile */
+function nuovaOperazione() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function creaIA() {
   return {
-    json: function (prompt, opts) {
+    /* p = { contesto, prompt } oppure solo il testo; opts: modelTier, schema, operazione, tipo, signal */
+    json: function (p, opts) {
       opts = opts || {};
-      return T.api('POST', '/api/ia', { prompt: prompt, livello: opts.modelTier === 'quick' ? 'rapido' : 'standard' }, { signal: opts.signal })
-        .then(function (r) { if (state.utente) state.utente.ia.usate++; return r.risultato; }, function (e) {
+      var corpo = typeof p === 'string' ? { prompt: p } : { prompt: p.prompt, contesto: p.contesto || '' };
+      corpo.livello = opts.modelTier === 'quick' ? 'rapido' : 'standard';
+      if (opts.schema) corpo.schema = opts.schema;
+      corpo.operazione = opts.operazione || '';
+      corpo.tipo = opts.tipo || 'classifica';
+      return T.api('POST', '/api/ia', corpo, { signal: opts.signal })
+        .then(function (r) { return r.risultato; }, function (e) {
           if (e && e.name === 'AbortError') throw { code: 'cancelled' };
           throw { code: (e && e.codice) || 'upstream_error', message: e && e.errore };
         });
@@ -239,7 +251,7 @@ function impostaIA() {
     (loc && loc.editore ? 'scegli un servizio di intelligenza artificiale in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio di intelligenza artificiale.') +
     ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
   else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata: chiedi a chi gestisce MAGIC HS. Puoi comunque aprire un codice scrivendone le cifre.';
-  else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' richieste all\'IA di questo mese. ' +
+  else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' classificazioni con l\'IA di questo mese. ' +
     'Per averne altre chiedi a chi gestisce MAGIC HS. Nomenclatura e misure restano consultabili.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
 }
@@ -290,10 +302,10 @@ function classifica(soloScelta) {
   renderMsg();
   if (soloScelta) { var top = $('#q'); if (top.scrollIntoView) top.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 
-  var p = Promise.resolve();
+  var p = Promise.resolve(), op = nuovaOperazione();       // una classificazione: più richieste, conta una volta sola
   if (!heads.length) {
     setBusy(1, 'Individuo le voci candidate');
-    p = sampleFn.json(promptVoci(), { modelTier: 'quick', signal: signal }).then(function (r1) {
+    p = sampleFn.json(promptVoci(), { modelTier: 'quick', schema: 'voci', operazione: op, signal: signal }).then(function (r1) {
       r1 = (r1 && typeof r1 === 'object') ? r1 : {};
       (Array.isArray(r1.voci) ? r1.voci : []).forEach(function (v) {
         var h = digits(v && typeof v === 'object' ? v.voce : v).slice(0, 4);
@@ -305,26 +317,26 @@ function classifica(soloScelta) {
   }
   p.then(function () {
     setBusy(2, 'Confronto con il testo ufficiale delle voci ' + heads.join(', '));
-    return sampleFn.json(promptScelta(heads), { signal: signal });
+    return sampleFn.json(promptScelta(heads), { schema: 'scelta', operazione: op, signal: signal });
   }).then(function (r2) {
     var res = normResult(r2);
     var nuove = res.altre.filter(function (h) { return heads.indexOf(h) < 0; }).slice(0, 3);
     if (!nuove.length) return res;
     heads = heads.concat(nuove); state.heads = heads;
     setBusy(3, 'Aggiungo le voci ' + nuove.join(', ') + ' e ricontrollo');
-    return sampleFn.json(promptScelta(heads), { signal: signal }).then(normResult);
+    return sampleFn.json(promptScelta(heads), { schema: 'scelta', operazione: op, signal: signal }).then(normResult);
   }).then(function (res) {
     if (!res.best) throw { code: 'invalid_json' };
     state.result = res; state.picks = {}; state.extra = '';
     state.sel = { code: res.best.code, idx: byCode.has(res.best.code) ? byCode.get(res.best.code) : -1 };
     state.anima = true;
     salvaStorico();
-    clearBusy(); renderAll();
+    clearBusy(); renderAll(); aggiornaIo();
     var e = $('#esito'); if (e && e.scrollIntoView) e.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }).catch(function (e) {
     clearBusy();
     if (e && e.code === 'cancelled') { renderAll(); return; }
-    if (e && (e.code === 'quota_esaurita' || e.code === 'not_configured')) aggiornaIo();
+    aggiornaIo();          // classificazioni usate e motivo per cui l'IA non è disponibile
     state.error = (e && e.code === 'no_heads') ? e.message : errMsg(e);
     renderAll();
   });
@@ -341,9 +353,11 @@ function traduci() {
   var contesto = perc.filter(function (j) { return !INGL[j]; }).map(function (j) { return descOf(j).replace(/\n/g, ' '); }).join(' > ');
   var testo = rows.map(function (j, k) { return (k + 1) + '. ' + DESC[j].replace(/\n/g, ' '); }).join('\n');
   sampleFn.json('Traduci dall\'inglese all\'italiano, con la terminologia della Nomenclatura Combinata dell\'UE, queste ' + rows.length + ' descrizioni doganali. ' +
-    'Restituisci solo un array JSON di ' + rows.length + ' stringhe, nello stesso ordine, senza numerazione.\n\n' +
-    (contesto ? 'Contesto (voci superiori, già in italiano): ' + contesto + '\n\n' : '') + testo, { modelTier: 'quick', signal: c2.signal })
+    'Restituisci solo un oggetto JSON {"traduzioni": [...]} con ' + rows.length + ' stringhe, nello stesso ordine, senza numerazione.\n\n' +
+    (contesto ? 'Contesto (voci superiori, già in italiano): ' + contesto + '\n\n' : '') + testo,
+    { modelTier: 'quick', schema: 'traduzione', tipo: 'traduzione', operazione: nuovaOperazione(), signal: c2.signal })
     .then(function (a) {
+      if (a && !Array.isArray(a)) a = a.traduzioni;
       if (Array.isArray(a) && a.length === rows.length) rows.forEach(function (j, k) { state.trad[j] = str(a[k], 1500); });
       else state.warn = 'Traduzione non riuscita. Riprova.';
     })
@@ -817,7 +831,7 @@ function renderMsg() {
   if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>';
   var ia = state.utente && state.utente.ia;
   if (state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
-  if (state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Richieste all\'IA usate questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
+  if (state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Classificazioni con l\'IA questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
   $('#msg').innerHTML = h;
 }
 function renderFornite() {

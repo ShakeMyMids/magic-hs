@@ -77,10 +77,10 @@
   function usoIA(io) {
     var ia = io.ia, h = '<div class="foglio"><div class="box piano"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita</div>';
     if (!ia.configurata) h += '<p class="nota">Non è attiva: ' + (io.locale.editore ? 'scegli un servizio in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio.') + '</p>';
-    else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + ' richieste a ' + esc(meseIt(ia.mese)) + '</p><p class="nota">Senza limite mensile.</p>';
+    else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + (ia.usate === 1 ? ' classificazione' : ' classificazioni') + ' a ' + esc(meseIt(ia.mese)) + '</p><p class="nota">Senza limite mensile.</p>';
     else {
       var perc = ia.limite ? Math.min(100, Math.round(ia.usate / ia.limite * 100)) : 100;
-      h += '<p class="cosa">' + ia.usate + ' di ' + ia.limite + ' richieste all\'IA usate a ' + esc(meseIt(ia.mese)) + '</p>' +
+      h += '<p class="cosa">' + ia.usate + ' di ' + ia.limite + ' classificazioni con l\'IA a ' + esc(meseIt(ia.mese)) + '</p>' +
         '<div class="metro' + (perc >= 100 ? ' pieno' : '') + '"><i style="width:' + perc + '%"></i></div>' +
         '<p class="nota">Il conteggio riparte il primo del mese.</p>';
     }

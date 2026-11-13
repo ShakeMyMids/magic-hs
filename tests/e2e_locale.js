@@ -68,6 +68,10 @@ function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } els
   ok(await p.isVisible('text=Chiave salvata: …inta'), 'chiave mascherata');
   await p.click('button[data-g="prova-ia"]');
   await p.waitForSelector('text=Il servizio risponde', { timeout: 15000 });
+  await p.click('button[data-g="modelli-ia"]');
+  await p.waitForSelector('text=2 modelli disponibili');
+  ok(await p.$$eval('#modelli-ia option', o => o.map(x => x.value).join(',')) === 'finto-modello,finto-modello-rapido', 'elenco dei modelli dal servizio');
+  ok(await p.isVisible('text=Uso su questo PC'), 'uso del mese in Gestione');
   ok(true, 'prova del servizio IA');
   await p.screenshot({ path: out + '/3-ia.png', fullPage: true });
   await p.click('button[data-v="dati"]');
@@ -83,7 +87,8 @@ function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } els
   await p.waitForSelector('text=Il tuo nome');
   ok(!(await p.isVisible('text=Cambia password')), 'niente password nel profilo');
   ok(await p.isVisible('text=Senza limite mensile'), 'uso dell\'IA senza limite');
-  ok(await p.isVisible('text=trapano a percussione elettrico'), 'la classificazione è nello storico');
+  await p.waitForSelector('.voce >> text=trapano a percussione elettrico', { timeout: 8000 });
+  ok(await p.isVisible('text=1 classificazione a'), 'la classificazione è nello storico e conta una volta sola');
   await p.screenshot({ path: out + '/5-profilo.png', fullPage: true });
   // riaperto dopo una classificazione: ancora nessun campo compilato né ricerche recenti proposte
   await p.goto(B + '/'); await p.waitForSelector('#vai');

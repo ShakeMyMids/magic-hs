@@ -69,7 +69,18 @@ Si sceglie in *Gestione → Intelligenza artificiale* e vale per tutti i collegh
 | **Claude** (Anthropic) | Chiave dalla [Console di Anthropic](https://console.anthropic.com), solo a consumo e separata dall'abbonamento a Claude. |
 | **Altri compatibili OpenAI**: Groq, Mistral, OpenRouter, OpenAI, Ollama… | Indirizzo, modello ed eventuale chiave. Con Ollama il modello gira su un computer dell'azienda, senza inviare dati fuori, ma serve un computer potente. |
 
-Ogni persona ha un limite mensile di richieste, uguale per tutti (vuoto = nessun limite); chi pubblica non ha limite. Una classificazione usa di solito 2 o 3 richieste. Il pulsante *Prova* controlla subito chiave, indirizzo e modello. **La chiave è leggibile da chi vede la cartella condivisa**: usa una chiave dedicata a MAGIC HS e imposta un tetto di spesa nella console del servizio. **Copilot di Microsoft 365** non si può usare da un programma senza la licenza Microsoft 365 Copilot per ogni persona e una registrazione fatta dall'IT; il Copilot Chat gratuito non ha un collegamento per i programmi.
+**Limite mensile**: ogni persona ha un numero di classificazioni con l'IA al mese, uguale per tutti (vuoto = nessun limite); chi pubblica non ha limite. Una classificazione conta una volta sola anche se fa 2 o 3 richieste al servizio; le traduzioni delle righe in inglese non contano.
+
+**Modelli**: i campi «Modello» suggeriscono quelli predefiniti; con *Elenco dei modelli* MAGIC HS chiede al servizio quelli disponibili per la chiave salvata. *Prova* controlla subito chiave, indirizzo e modello.
+
+**Costi e affidabilità**:
+- ogni richiesta mette prima la parte che non cambia (istruzioni e testo ufficiale delle voci, spesso decine di migliaia di token) e in fondo la merce: i servizi la riusano dalla loro cache, a una frazione del prezzo, nel ricontrollo e in *Riclassifica* (Claude con la cache esplicita, OpenAI, Azure OpenAI e Gemini da soli);
+- la risposta segue uno schema JSON imposto al modello (strumento obbligato per Claude, `json_schema` per i compatibili OpenAI, `responseSchema` per Gemini), così la «risposta non leggibile» diventa rara; se un servizio non accetta lo schema, MAGIC HS riprova senza;
+- quando il servizio è sovraccarico o limita le richieste al minuto, MAGIC HS riprova da solo fino a due volte, aspettando quanto indica il servizio (al massimo 20 secondi).
+
+*Gestione → Intelligenza artificiale → Uso su questo PC* mostra classificazioni, richieste e token del mese, con la parte letta dalla cache. L'uso dei colleghi resta sui loro PC: il totale e la spesa sono nella console del servizio, dove conviene impostare un tetto di spesa.
+
+**La chiave** non sta in chiaro in `impostazioni.json`: è cifrata, così non si copia aprendo il file e non finisce nella ricerca di SharePoint o di Copilot (una cartella di prima si sistema da sola la prima volta che chi pubblica apre MAGIC HS). Non è una protezione assoluta, perché il programma di ogni collega deve poterla usare: scegli una chiave dedicata a MAGIC HS, con un tetto di spesa. **Copilot di Microsoft 365** non si può usare da un programma senza la licenza Microsoft 365 Copilot per ogni persona e una registrazione fatta dall'IT; il Copilot Chat gratuito non ha un collegamento per i programmi.
 
 ## Dati TARIC
 

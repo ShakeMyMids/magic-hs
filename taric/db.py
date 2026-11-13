@@ -135,10 +135,17 @@ SCHEMA = [
     );
     CREATE INDEX pagamenti_riferimento ON pagamenti(riferimento);
     """,
+    # versione 3: il limite mensile conta le classificazioni (piu' richieste con la stessa operazione) e i token dalla cache
+    """
+    ALTER TABLE uso_ia ADD COLUMN operazione TEXT NOT NULL DEFAULT '';
+    ALTER TABLE uso_ia ADD COLUMN tipo TEXT NOT NULL DEFAULT '';
+    ALTER TABLE uso_ia ADD COLUMN token_cache INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX uso_ia_operazione ON uso_ia(utente_id, operazione);
+    """,
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
-    # richieste IA al mese per persona, scelte da chi gestisce MAGIC HS (impostazioni.json): 0 = IA spenta, None = senza limite
+    # classificazioni con l'IA al mese per persona, scelte da chi gestisce MAGIC HS (impostazioni.json): 0 = IA spenta, None = senza limite
     "quota_predefinita": 50,
 }
 

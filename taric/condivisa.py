@@ -19,7 +19,10 @@ e ritenta la sostituzione.
 """
 from __future__ import annotations
 
+import base64
 import getpass
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -246,13 +249,86 @@ def editori(imp: dict[str, Any]) -> list[str]:
     return out
 
 
+# ------------------------------------------------------------------ chiave del servizio IA
+# La chiave non sta in chiaro in impostazioni.json: così non si copia aprendo il file e non finisce nella ricerca di
+# SharePoint o di Copilot. Non e' una protezione assoluta: il programma di ogni collega deve poterla usare, quindi chi
+# ha MAGIC HS e sa come e' fatto la puo' ricavare. Per questo va usata una chiave dedicata, con un tetto di spesa.
+# Cifratura con la sola libreria standard: flusso SHA-256 in modalita' contatore e HMAC-SHA256 (cifra, poi firma),
+# con una chiave ricavata da un segreto del programma e dal «sale» casuale della cartella.
+_SEGRETO = b"MAGIC HS / chiave del servizio IA / v1"
+PREFISSO_CIFRATA = "mhs1:"
+
+
+def _chiave_cifratura(sale: str) -> bytes:
+    return hashlib.sha256(_SEGRETO + sale.encode()).digest()
+
+
+def _flusso(k: bytes, nonce: bytes, n: int) -> bytes:
+    out, i = b"", 0
+    while len(out) < n:
+        out += hashlib.sha256(k + nonce + i.to_bytes(4, "big")).digest()
+        i += 1
+    return out[:n]
+
+
+def cifra_chiave(chiave: str, sale: str) -> str:
+    k, nonce, dati = _chiave_cifratura(sale), secrets.token_bytes(16), chiave.encode()
+    cifrato = bytes(a ^ b for a, b in zip(dati, _flusso(k, nonce, len(dati))))
+    firma = hmac.new(k, nonce + cifrato, hashlib.sha256).digest()[:16]
+    return PREFISSO_CIFRATA + base64.urlsafe_b64encode(nonce + cifrato + firma).decode()
+
+
+def decifra_chiave(testo: str, sale: str) -> str:
+    """La chiave in chiaro; "" se il testo non e' valido (cartella copiata senza il suo sale, file modificato a mano)."""
+    if not testo.startswith(PREFISSO_CIFRATA):
+        return ""
+    try:
+        b = base64.urlsafe_b64decode(testo[len(PREFISSO_CIFRATA):].encode())
+    except ValueError:
+        return ""
+    if len(b) < 32:
+        return ""
+    k, nonce, cifrato, firma = _chiave_cifratura(sale), b[:16], b[16:-16], b[-16:]
+    if not hmac.compare_digest(firma, hmac.new(k, nonce + cifrato, hashlib.sha256).digest()[:16]):
+        return ""
+    try:
+        return bytes(a ^ b for a, b in zip(cifrato, _flusso(k, nonce, len(cifrato)))).decode()
+    except UnicodeDecodeError:
+        return ""
+
+
+def chiave_ia(imp: dict[str, Any]) -> str:
+    """La chiave del servizio IA salvata nelle impostazioni (cifrata, oppure in chiaro nelle cartelle di prima)."""
+    ia = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
+    cifrata = str(ia.get("chiave_cifrata") or "")
+    if cifrata:
+        return decifra_chiave(cifrata, str(imp.get("sale") or ""))
+    return str(ia.get("chiave") or "").strip()
+
+
+def con_chiave_cifrata(imp: dict[str, Any], chiave: str) -> dict[str, Any]:
+    """Le impostazioni con la chiave cifrata (e un sale per la cartella, se manca) e senza la chiave in chiaro."""
+    out = dict(imp)
+    if not out.get("sale"):
+        out["sale"] = secrets.token_hex(16)
+    ia = dict(out.get("ia") if isinstance(out.get("ia"), dict) else {})
+    ia.pop("chiave", None)
+    if chiave:
+        ia["chiave_cifrata"] = cifra_chiave(chiave, out["sale"])
+    else:
+        ia.pop("chiave_cifrata", None)
+    out["ia"] = ia
+    return out
+
+
 def ia_da_impostazioni(imp: dict[str, Any]) -> dict[str, str]:
     """Valori della configurazione (come in taric.env) per il servizio IA scelto dall'editore."""
     ia = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
     v = {k: str(ia.get(k) or "").strip() for k in CAMPI_IA}
+    v["chiave"] = chiave_ia(imp)
     return {"TARIC_IA_FORNITORE": v["fornitore"] or "nessuno", "TARIC_IA_CHIAVE": v["chiave"], "TARIC_IA_URL": v["url"],
             "TARIC_IA_MODELLO": v["modello"], "TARIC_IA_MODELLO_RAPIDO": v["modello_rapido"]}
 
 
-__all__ = ["Condivisa", "ErroreCondivisa", "editori", "estrai_dati", "ia_da_impostazioni", "utente_windows", "versione_pacchetto",
+__all__ = ["Condivisa", "ErroreCondivisa", "chiave_ia", "cifra_chiave", "con_chiave_cifrata", "decifra_chiave", "editori", "estrai_dati", "ia_da_impostazioni", "utente_windows", "versione_pacchetto",
            "NOME_AVVIO", "RE_UTENTE"]
