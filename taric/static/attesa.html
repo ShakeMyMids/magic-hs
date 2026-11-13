@@ -23,9 +23,9 @@
       <h2>Preparazione dei dati TARIC</h2>
       <p class="cosa">Preparazione dei dati in corso</p>
       <div class="avanza"><i></i></div>
-      <p class="nota" id="fase">Al primo avvio il server scarica l'estrazione TARIC del mese e la controlla: ci vuole circa un minuto. La pagina si apre da sola quando i dati sono pronti.</p>
+      <p class="nota" id="fase">Al primo avvio MAGIC HS prepara i dati TARIC del mese: ci vuole circa un minuto. La pagina si apre da sola quando i dati sono pronti.</p>
       <div id="admin" hidden>
-        <p class="nota">Sei amministratore: se il download automatico non funziona puoi avviarlo di nuovo o caricare a mano l'archivio .zip con i file Excel dell'estrazione (gruppo CIRCABC «TARIC and Quota data and information»).</p>
+        <p class="nota">Gestisci tu MAGIC HS: se il download automatico non funziona puoi avviarlo di nuovo o caricare a mano l'archivio .zip con i file Excel dell'estrazione (gruppo CIRCABC «TARIC and Quota data and information»).</p>
         <div class="fila"><button class="btn" type="button" id="scarica">Scarica di nuovo</button></div>
         <form class="modulo" id="modulo" novalidate>
           <div class="due"><label>Archivio .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>
@@ -34,13 +34,12 @@
         </form>
       </div>
       <div id="esito" role="status"></div>
-      <div class="sotto-link"><button class="link" type="button" id="esci">Esci</button></div>
     </div></div>
   </main>
   <footer class="piede"><p>Strumento non ufficiale, senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.</p></footer>
 </div>
 <script src="/static/js/icone.js"></script>
 <script src="/static/js/comune.js"></script>
-<script src="/static/js/accesso.js"></script>
+<script src="/static/js/attesa.js"></script>
 </body>
 </html>

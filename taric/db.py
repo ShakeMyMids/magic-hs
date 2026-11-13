@@ -1,4 +1,7 @@
-"""Database SQLite: schema, connessioni, impostazioni e registro degli eventi."""
+"""Database SQLite del PC: schema, connessioni, impostazioni e registro degli eventi.
+
+Lo schema conserva le tabelle della vecchia versione sito (utenti, gettoni, abbonamenti...): i database gia' creati sui
+PC restano validi e le migrazioni si aggiungono sempre in coda a SCHEMA. Sul PC c'e' un solo utente."""
 from __future__ import annotations
 
 import json
@@ -135,15 +138,8 @@ SCHEMA = [
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
-    "registrazione_aperta": True,        # il modulo di registrazione e' disponibile
-    "approva_tutti": False,              # True: ogni email confermata diventa subito un account attivo
-    "domini_approvati": [],              # email di questi domini (confermate) diventano attive subito
-    "domini_bloccati": [],               # registrazioni da questi domini rifiutate
-    "quota_predefinita": 50,             # piano gratuito: richieste IA al mese per chi non ha un limite personale (0 = IA spenta)
-    "massimo_in_attesa": 200,            # oltre questo numero di richieste in attesa le nuove vengono respinte
-    # piano Pro: prezzi in centesimi di euro (IVA inclusa) e tetto di sicurezza delle richieste nelle 24 ore (0 = nessun tetto)
-    "prezzi": {"giorno": 299, "settimana": 799, "mese": 1499, "anno": 14900},
-    "pro_tetto_giorno": 150,
+    # richieste IA al mese per persona, scelte da chi gestisce MAGIC HS (impostazioni.json): 0 = IA spenta, None = senza limite
+    "quota_predefinita": 50,
 }
 
 
@@ -212,6 +208,12 @@ class Database:
             if k in IMPOSTAZIONI_PREDEFINITE:
                 c.execute("INSERT INTO impostazioni(chiave, valore) VALUES (?, ?) "
                           "ON CONFLICT(chiave) DO UPDATE SET valore = excluded.valore", (k, json.dumps(val)))
+
+    def pulizia(self) -> None:
+        """Sessioni scadute e registro degli eventi piu' vecchio di due anni."""
+        with self.transazione() as c:
+            c.execute("DELETE FROM sessioni WHERE scade < ?", (iso(),))
+            c.execute("DELETE FROM eventi WHERE quando < ?", (tra(days=-730),))
 
     # ------------------------------------------------------------ registro eventi
     @staticmethod

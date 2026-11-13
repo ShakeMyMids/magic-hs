@@ -18,77 +18,9 @@ from taric.app import crea_app
 from taric.condivisa import Condivisa, ErroreCondivisa, editori, estrai_dati, versione_pacchetto
 from taric.config import carica
 
-from conftest import FintoClaude
+from conftest import CHIAVE, PC, FintoClaude, dati_finti, imposta_editori
 
 RADICE = Path(__file__).resolve().parents[1]
-CHIAVE = "chiave-di-ingresso-di-prova"
-
-
-def dati_finti(cartella: Path, versione: str, testo: str = "") -> Path:
-    d = cartella / versione
-    (d / "m").mkdir(parents=True, exist_ok=True)
-    (d / "nomenclatura.js").write_text(f'window.TARIC_DATA={{"meta":{{}}}};/*{testo or versione}*/\n')
-    (d / "m" / "84.js").write_text("window.TARIC_M=window.TARIC_M||{};\n")
-    (d / "versione.json").write_text(json.dumps({"data": versione}))
-    (d / "riepilogo.txt").write_text("riepilogo\n")
-    return d
-
-
-def imposta_editori(condivisa: Path, *nomi: str) -> None:
-    c = Condivisa(condivisa)
-    c.salva_impostazioni({**c.impostazioni(), "editori": list(nomi)})
-
-
-class PC:
-    """Un PC con MAGIC HS. Il nome e' anche il nome utente di Windows. editore=True lo mette nell'elenco di chi
-    pubblica; il PC puo' scrivere nella cartella, tranne con sola_lettura=True (il caso dei colleghi: raccolta di
-    SharePoint sincronizzata con il solo permesso di lettura)."""
-
-    def __init__(self, tmp: Path, condivisa: Path, nome: str, mp: pytest.MonkeyPatch, editore: bool = True,
-                 versioni: tuple[str, ...] = (), sola_lettura: bool = False):
-        self.cartella = tmp / nome
-        if editore:
-            imposta_editori(condivisa, *dict.fromkeys(editori(Condivisa(condivisa).impostazioni()) + [nome]))
-        for v in versioni:                                    # dati gia' installati su questo PC prima dell'avvio
-            dati_finti(self.cartella / "dati" / "taric" / "versioni", v)
-            (self.cartella / "dati" / "taric" / "attiva.txt").write_text(v)
-        self.cfg = carica({"TARIC_DATI": str(self.cartella / "dati"), "TARIC_LOCALE": "1", "TARIC_CONDIVISA": str(condivisa),
-                           "TARIC_HOST": "127.0.0.1", "TARIC_PORTA": "8765"})
-        self.claude = FintoClaude()
-        with mp.context() as m:
-            m.setenv("USERNAME", nome)
-            if sola_lettura:
-                m.setattr(Condivisa, "scrivibile", lambda self: False)
-            self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False,
-                                chiave_ingresso=CHIAVE, istanza="prova")
-        self.fermato = False
-
-        def ferma() -> None:
-            self.fermato = True
-        self.app.state.ferma = ferma
-
-    def client(self, base: str = "http://127.0.0.1:8765") -> TestClient:
-        return TestClient(self.app, base_url=base, headers={"X-Taric": "1"})
-
-    def entra(self) -> TestClient:
-        c = self.client()
-        r = c.get(f"/entra?k={CHIAVE}", follow_redirects=False)
-        assert r.status_code == 303 and "magic_hs_locale" in r.cookies
-        return c
-
-    def attiva(self) -> str | None:
-        return self.app.state.dati.attiva()
-
-
-@pytest.fixture
-def ambiente(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, pytest.MonkeyPatch]:
-    monkeypatch.setenv("TARIC_CONFIG", str(tmp_path / "nessuno.env"))
-    for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "TARIC_IA_FORNITORE", "TARIC_IA_URL", "TARIC_IA_CHIAVE",
-              "TARIC_IA_MODELLO", "TARIC_IA_MODELLO_RAPIDO", "TARIC_SMTP_HOST", "TARIC_DATI"):
-        monkeypatch.delenv(k, raising=False)
-    condivisa = tmp_path / "OneDrive - Azienda" / "MAGIC HS"
-    condivisa.mkdir(parents=True)
-    return tmp_path, condivisa, monkeypatch
 
 
 # ------------------------------------------------------------------ ingresso e protezioni
@@ -104,7 +36,7 @@ def test_ingresso_solo_con_la_chiave_dell_avvio(ambiente):
     c = pc.entra()
     io_ = c.get("/api/io").json()
     assert io_["locale"]["editore"] and io_["locale"]["utente"] == "editore" and io_["ruolo"] == "amministratore"
-    assert io_["email"] == "utente@magic-hs.locale"
+    assert "email" not in io_ and "piano" not in io_
     assert "/data/2026-11-01/" in c.get("/").text
     # aprire di nuovo il programma non crea un'altra sessione
     c.get(f"/entra?k={CHIAVE}", follow_redirects=False)
@@ -120,16 +52,16 @@ def test_solo_dal_pc_con_il_suo_indirizzo(ambiente):
         assert pc.client(base).get("/api/locale/ping").status_code == 403
 
 
-def test_funzioni_del_sito_spente(ambiente):
+def test_niente_funzioni_del_vecchio_sito(ambiente):
+    """Accesso con password, registrazione, pagamenti, utenti e posta non esistono piu'."""
     tmp, cond, mp = ambiente
     c = PC(tmp, cond, "editore", mp).entra()
-    for pagina in ("/accedi", "/registrati", "/configura", "/condizioni"):
-        r = c.get(pagina, follow_redirects=False)
-        assert r.status_code == 303 and r.headers["location"] == "/"
+    for pagina in ("/accedi", "/registrati", "/configura", "/condizioni", "/static/js/accesso.js"):
+        assert c.get(pagina, follow_redirects=False).status_code == 404, pagina
     for metodo, url in (("POST", "/api/accedi"), ("POST", "/api/registrazione"), ("GET", "/api/admin/utenti"),
-                        ("POST", "/api/pagamento/inizia"), ("POST", "/api/io/password"), ("GET", "/api/admin/backup/x.zip")):
-        r = c.request(metodo, url, json={})
-        assert r.status_code == 404 and r.json()["codice"] == "non_disponibile", url
+                        ("POST", "/api/pagamento/inizia"), ("POST", "/api/io/password"), ("GET", "/api/admin/backup/x.zip"),
+                        ("GET", "/api/piani"), ("GET", "/api/admin/posta"), ("POST", "/api/stripe/webhook")):
+        assert c.request(metodo, url, json={}).status_code in (404, 405), url
 
 
 def test_chiusura_dal_browser_e_da_una_nuova_versione(ambiente):
@@ -215,7 +147,7 @@ def test_collega_senza_dati_vede_la_pagina_d_attesa(ambiente):
     c = collega.entra()
     assert "Preparazione dei dati" in c.get("/").text
     stato = c.get("/api/stato").json()
-    assert stato["locale"] and not stato["editore"] and not stato["dati_pronti"]
+    assert not stato["editore"] and not stato["dati_pronti"]
     assert collega.app.state.dati.da_fare() is None          # i colleghi non scaricano dalla fonte
 
 
@@ -479,20 +411,20 @@ def test_messaggi_ia_nel_programma_sul_pc(ambiente):
     assert r.status_code == 429 and "chi gestisce MAGIC HS" in r.json()["errore"] and "amministratore" not in r.json()["errore"]
 
 
-def test_non_riscarica_un_mese_gia_installato(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Se l'amministratore torna alla versione precedente, il pianificatore non reinstalla da solo quella nuova."""
+def test_non_riscarica_un_mese_gia_installato(ambiente):
+    """Se chi gestisce MAGIC HS torna alla versione precedente, il pianificatore non reinstalla da solo quella nuova."""
     from datetime import datetime
 
-    from conftest import Sito
-    monkeypatch.setenv("TARIC_CONFIG", str(tmp_path / "nessuno.env"))
-    sito = Sito(tmp_path, {"TARIC_AGGIORNAMENTO_AUTOMATICO": "si"})
-    dati = sito.app.state.dati
-    monkeypatch.setattr(dati, "_ora_locale", lambda: datetime(2026, 12, 5, 9, 0))
-    sito.versione_finta("2026-11-01")
+    tmp, cond, mp = ambiente
+    pc = PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",))
+    dati = pc.app.state.dati
+    mp.setattr(dati, "_ora_locale", lambda: datetime(2026, 12, 5, 9, 0))
     assert dati.da_fare() == "2026-12"
-    sito.versione_finta("2026-12-01")
-    sito.app.state.dati.imposta_attiva("2026-11-01")
+    dati_finti(dati.versioni, "2026-12-01")
     assert dati.da_fare() is None
+    collega = PC(tmp, cond, "lbianchi", mp, editore=False)
+    mp.setattr(collega.app.state.dati, "_ora_locale", lambda: datetime(2026, 12, 5, 9, 0))
+    assert collega.app.state.dati.da_fare() is None           # i colleghi non scaricano mai dalla fonte
 
 
 def test_file_dei_dati_con_a_capo_uguali_su_windows():

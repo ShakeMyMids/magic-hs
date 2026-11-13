@@ -1,5 +1,6 @@
 """Test dei fornitori IA: scelta da configurazione, formato delle chiamate a Gemini e ai servizi compatibili OpenAI,
-traduzione degli errori (limite giornaliero del piano gratuito, chiave non valida, paese non supportato...)."""
+traduzione degli errori (limite giornaliero del piano gratuito, chiave non valida, paese non supportato...).
+Il servizio lo sceglie chi gestisce MAGIC HS e arriva dalla cartella condivisa (impostazioni.json)."""
 from __future__ import annotations
 
 import json
@@ -7,7 +8,7 @@ import json
 import httpx
 import pytest
 
-from conftest import FintoClaude, Sito
+from conftest import PC, FintoClaude, imposta_ia
 from taric.config import carica
 
 
@@ -22,6 +23,14 @@ def pulito(tmp_path, monkeypatch):
 
 def cfg(tmp, **v):
     return carica({"TARIC_DATI": str(tmp / "dati"), **v})
+
+
+def pc_con_ia(ambiente, **ia: str):
+    """Chi gestisce MAGIC HS con il servizio IA indicato; restituisce (PC, client già entrato)."""
+    tmp, cond, mp = ambiente
+    imposta_ia(cond, **ia)
+    pc = PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",))
+    return pc, pc.entra()
 
 
 def test_scelta_del_fornitore(pulito):
@@ -39,9 +48,8 @@ def test_scelta_del_fornitore(pulito):
     assert c.ia_disponibile and c.ia_url == "http://localhost:11434/v1" and c.modello_rapido == "qwen3:14b"
 
 
-def test_gemini_chiamate_e_risposte(pulito):
-    s = Sito(pulito, {"GEMINI_API_KEY": "chiave-gemini"})
-    a = s.admin()
+def test_gemini_chiamate_e_risposte(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="chiave-gemini")
     assert a.get("/api/io").json()["ia"]["nome"] == "Gemini (Google)"
     s.claude.risposte = [FintoClaude.testo('{"voci": [{"voce": "6403"}]}'), FintoClaude.testo('{"migliore": {"codice": "6403999610"}}')]
     assert a.post("/api/ia", json={"prompt": "scarpe", "livello": "rapido"}).json()["risultato"] == {"voci": [{"voce": "6403"}]}
@@ -57,9 +65,8 @@ def test_gemini_chiamate_e_risposte(pulito):
     assert q1["corpo"]["contents"][0]["parts"][0]["text"] == "scarpe"
 
 
-def test_gemini_errori(pulito):
-    s = Sito(pulito, {"GEMINI_API_KEY": "chiave-gemini"})
-    a = s.admin()
+def test_gemini_errori(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="chiave-gemini")
     errore = lambda stato, msg, st="": httpx.Response(stato, json={"error": {"code": stato, "message": msg, "status": st}})
     s.claude.risposte = [
         errore(429, "Quota exceeded for metric: generate_content_free_tier_requests, limit: 20, quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier", "RESOURCE_EXHAUSTED"),
@@ -78,18 +85,15 @@ def test_gemini_errori(pulito):
     assert r.status_code == 200
 
 
-def test_messaggio_limite_giornaliero(pulito):
-    s = Sito(pulito, {"GEMINI_API_KEY": "k"})
-    a = s.admin()
+def test_messaggio_limite_giornaliero(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="k")
     s.claude.risposte = [httpx.Response(429, json={"error": {"message": "quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier"}})]
     r = a.post("/api/ia", json={"prompt": "x", "livello": "rapido"})
     assert r.status_code == 429 and "limite di oggi" in r.json()["errore"]
 
 
-def test_compatibile_openai_groq_o_ollama(pulito):
-    s = Sito(pulito, {"TARIC_IA_FORNITORE": "openai", "TARIC_IA_URL": "https://api.groq.com/openai/v1",
-                      "TARIC_IA_MODELLO": "openai/gpt-oss-120b", "TARIC_IA_CHIAVE": "chiave-groq"})
-    a = s.admin()
+def test_compatibile_openai_groq_o_ollama(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="openai", url="https://api.groq.com/openai/v1", modello="openai/gpt-oss-120b", chiave="chiave-groq")
     s.claude.risposte = [FintoClaude.testo('{"ok": 1}'),
                          httpx.Response(400, json={"error": {"message": "response_format is not supported"}}), FintoClaude.testo('{"ok": 2}')]
     assert a.post("/api/ia", json={"prompt": "x", "livello": "rapido"}).json()["risultato"] == {"ok": 1}
@@ -103,9 +107,8 @@ def test_compatibile_openai_groq_o_ollama(pulito):
     assert "response_format" not in s.claude.richieste[-1]["corpo"]
 
 
-def test_ollama_senza_chiave(pulito):
-    s = Sito(pulito, {"TARIC_IA_FORNITORE": "openai", "TARIC_IA_URL": "http://localhost:11434/v1", "TARIC_IA_MODELLO": "qwen3:14b"})
-    a = s.admin()
+def test_ollama_senza_chiave(ambiente):
+    s, a = pc_con_ia(ambiente, fornitore="openai", url="http://localhost:11434/v1", modello="qwen3:14b")
     assert a.post("/api/ia", json={"prompt": "x", "livello": "rapido"}).status_code == 200
     assert "authorization" not in s.claude.richieste[0]["intestazioni"]
     assert json.loads(json.dumps(s.claude.richieste[0]["corpo"]))["model"] == "qwen3:14b"

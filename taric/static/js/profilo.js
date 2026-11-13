@@ -1,9 +1,9 @@
-/* MAGIC HS - vista Profilo: account, preferenze, uso dell'IA, storico, preferiti, sicurezza. */
+/* MAGIC HS - vista Profilo: nome, preferenze, uso dell'IA, storico, preferiti (tutto resta su questo PC). */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
   var el = document.getElementById('view-profilo');
-  var st = { storico: [], totale: 0, finito: false, preferiti: [], filtro: '', caricato: false, msg: {}, piani: null, scelta: 'mese', invio: false };
+  var st = { storico: [], totale: 0, finito: false, preferiti: [], filtro: '', caricato: false, msg: {} };
   var vista = T.viste = T.viste || {};
 
   function $(s) { return el.querySelector(s); }
@@ -17,7 +17,6 @@
     return Promise.all([
       T.api('GET', '/api/storico?limite=50').then(function (r) { st.storico = r.voci; st.totale = r.totale; st.finito = r.voci.length >= r.totale; }),
       T.api('GET', '/api/preferiti').then(function (r) { st.preferiti = r.voci; }),
-      T.api('GET', '/api/piani').then(function (r) { st.piani = r; }, function () { st.piani = null; }),
       app().aggiornaIo()
     ]).then(disegna, function (e) { el.innerHTML = '<p class="errore">' + esc(e.errore || 'Profilo non disponibile.') + '</p>'; });
   }
@@ -34,17 +33,16 @@
   /* ------------------------------------------------------------------ disegno */
   function disegna() {
     var io = u(); if (!io) return;
-    var p = io.preferenze, ia = io.ia, h = '';
+    var p = io.preferenze, h = '';
 
-    h += io.locale ? usoLocale(io) : piano(io);
+    h += usoIA(io);
 
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utente') + (io.locale ? 'Il tuo nome' : 'Il tuo account') +
-      '<span class="dx">' + esc(io.locale ? (io.locale.editore ? 'gestisci MAGIC HS' : '') : io.ruolo === 'amministratore' ? 'amministratore' : 'utente') + '</span></div>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utente') + 'Il tuo nome' +
+      '<span class="dx">' + (io.locale.editore ? 'gestisci MAGIC HS' : '') + '</span></div>' +
       '<form class="modulo" data-p="salva-account"><div class="due">' +
       '<label>Nome e cognome<input class="campo" name="nome" required minlength="2" maxlength="100" value="' + esc(io.nome) + '"></label>' +
       '<label>Azienda<input class="campo" name="azienda" maxlength="150" value="' + esc(io.azienda) + '"></label></div>' +
-      (io.locale ? '<p class="nota">Storico, preferiti e preferenze restano su questo computer, nella tua cartella di Windows. Il tuo nome utente di Windows è <b>' + esc(io.locale.utente || '?') + '</b>: serve a chi gestisce MAGIC HS se deve darti il permesso di pubblicare.</p>'
-        : '<label>Email (per cambiarla chiedi all\'amministratore)<input class="campo" value="' + esc(io.email) + '" disabled></label>') +
+      '<p class="nota">Storico, preferiti e preferenze restano su questo computer, nella tua cartella di Windows. Il tuo nome utente di Windows è <b>' + esc(io.locale.utente || '?') + '</b>: serve a chi gestisce MAGIC HS se deve darti il permesso di pubblicare.</p>' +
       '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div></div>';
 
 
@@ -72,19 +70,11 @@
     else h += '<div class="elenco">' + st.preferiti.map(rigaPreferito).join('') + '</div>';
     h += '</div></div>';
 
-    if (!io.locale) h += '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('chiave') + 'Cambia password</div>' +
-      '<form class="modulo" data-p="password"><div class="due">' +
-      '<label>Password attuale<input class="campo" type="password" name="attuale" autocomplete="current-password" required></label>' +
-      '<label>Nuova password (almeno 10 caratteri)<input class="campo" type="password" name="nuova" autocomplete="new-password" required minlength="10"></label></div>' +
-      '<div class="fila"><button class="btn pri" type="submit">Cambia password</button></div>' + riga('password') + '</form></div>' +
-      '<div class="box s4"><div class="lab">' + T.icona('lucchetto') + 'Dispositivi</div><p class="nota">Se hai usato MAGIC HS su un computer non tuo, chiudi le altre sessioni: resterai collegato solo qui.</p>' +
-      '<div class="fila"><button class="btn" type="button" data-p="esci-ovunque">Esci dagli altri dispositivi</button></div>' + riga('dispositivi') + '</div></div>';
-
     el.innerHTML = h;
   }
 
-  /* ------------------------------------------------------------------ programma sul PC: solo l'uso dell'IA */
-  function usoLocale(io) {
+  /* ------------------------------------------------------------------ uso dell'IA */
+  function usoIA(io) {
     var ia = io.ia, h = '<div class="foglio"><div class="box piano"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita</div>';
     if (!ia.configurata) h += '<p class="nota">Non è attiva: ' + (io.locale.editore ? 'scegli un servizio in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio di intelligenza artificiale.') +
       ' Nomenclatura e misure sono consultabili senza limiti.</p>';
@@ -96,67 +86,6 @@
         '<p class="nota">Una classificazione usa di solito 2 o 3 richieste e il conteggio riparte il primo del mese. Per averne di più chiedi a chi gestisce MAGIC HS.</p>';
     }
     return h + '</div></div>';
-  }
-
-  /* ------------------------------------------------------------------ piano Gratis / Pro */
-  var NOMI = { giorno: '1 giorno', settimana: '1 settimana', mese: 'Mensile', anno: 'Annuale' };
-  var NOTE = { giorno: 'pagamento singolo, nessun rinnovo', settimana: 'pagamento singolo, nessun rinnovo', mese: 'si rinnova ogni mese, disdici quando vuoi', anno: 'si rinnova ogni anno' };
-  function euro(c) { return (c / 100).toFixed(c % 100 ? 2 : 0).replace('.', ',') + ' €'; }
-  function giorno(iso, meno) { var d = new Date(iso); if (meno) d = new Date(d.getTime() - meno * 86400000); return T.dataOra(d.toISOString(), true); }
-
-  function piano(io) {
-    var pi = io.piano || {}, ia = io.ia, ab = pi.abbonamento, offerte = st.piani && st.piani.attivi, h = '';
-    var admin = io.ruolo === 'amministratore' && ia.limite === null && !pi.pro;
-    h += '<div class="foglio"><div class="box piano' + (pi.pro ? ' e-pro' : '') + '"><div class="lab">' + T.icona(pi.pro ? 'timbro' : 'scintille') + 'Il tuo piano' +
-      '<span class="dx"><span class="marca ' + (pi.pro ? 'pro' : 'gratis') + '">' + (pi.pro ? 'Pro' : admin ? 'Amministratore' : 'Gratis') + '</span></span></div>';
-    if (!ia.configurata) h += '<p class="nota">La classificazione assistita non è attiva su questo server; nomenclatura e misure sono consultabili senza limiti.</p>';
-    else if (pi.pro) {
-      if (pi.origine === 'abbonamento' && ab) {
-        h += '<p class="cosa">Pro ' + (ab.piano === 'anno' ? 'annuale' : 'mensile') + ': ' + (ab.rinnovo_annullato ? 'disdetto, resta attivo fino al ' + giorno(pi.fino) : 'si rinnova il ' + giorno(pi.fino, 1)) + '</p>';
-        if (ab.stato === 'past_due') h += '<p class="avviso">L\'ultimo addebito non è riuscito: aggiorna la carta da «Gestisci abbonamento», altrimenti il Pro si ferma tra pochi giorni.</p>';
-      } else if (pi.origine === 'manuale') h += '<p class="cosa">Pro concesso dall\'amministratore fino al ' + giorno(pi.fino) + '</p>';
-      else h += '<p class="cosa">Pro attivo fino al ' + esc(T.dataOra(pi.fino)) + '</p>';
-      h += '<p class="nota">Richieste all\'IA senza limite mensile (' + ia.usate + ' a ' + esc(meseIt(ia.mese)) + ')' +
-        (ia.tetto_giorno ? ', con un tetto di sicurezza di ' + ia.tetto_giorno + ' nelle 24 ore' : '') + '. Nomenclatura e misure sono sempre illimitate.</p>';
-      if (pi.gestibile && ab) h += '<div class="fila"><button class="btn" type="button" data-p="gestisci">' + T.icona('gestione') + 'Gestisci abbonamento e fatture</button>' +
-        '<span class="nota">Carta, ricevute e disdetta, sulla pagina sicura di Stripe.</span></div>' + riga('gestisci');
-    } else if (admin) {
-      h += '<p class="cosa">' + ia.usate + ' richieste a ' + esc(meseIt(ia.mese)) + '</p><p class="nota">Come amministratore usi l\'IA senza limiti.</p>';
-    } else {
-      var perc = ia.limite ? Math.min(100, Math.round(ia.usate / ia.limite * 100)) : 100;
-      h += '<p class="cosa">' + ia.usate + ' di ' + ia.limite + ' richieste all\'IA usate a ' + esc(meseIt(ia.mese)) + '</p>' +
-        '<div class="metro' + (perc >= 100 ? ' pieno' : '') + '"><i style="width:' + perc + '%"></i></div>' +
-        '<p class="nota">Una classificazione usa di solito 2 o 3 richieste e il conteggio riparte il primo del mese. Nomenclatura, misure e documenti sono sempre illimitati.</p>';
-      if (!offerte) h += '<p class="nota">Per avere richieste illimitate chiedi all\'amministratore.</p>';
-    }
-    var conAbbonamento = ab && ab.attivo;
-    if (offerte && ia.configurata && !conAbbonamento && !admin) h += offerta(pi);
-    return h + '</div></div>';
-  }
-
-  function offerta(pi) {
-    var P = st.piani, vendibili = P.piani.filter(function (x) { return x.prezzo > 0; });
-    if (!vendibili.length) return '';
-    if (!vendibili.some(function (x) { return x.id === st.scelta; })) st.scelta = vendibili[vendibili.length > 2 ? 2 : 0].id;
-    var mese = P.piani.filter(function (x) { return x.id === 'mese'; })[0];
-    var h = '<form class="offerta" data-p="paga"><p class="titolo-offerta">' + (pi.pro ? 'Prolunga il Pro' : 'Passa a Pro: richieste all\'IA senza limite mensile') + '</p>' +
-      '<div class="tagli" role="radiogroup" aria-label="Durata del piano Pro">';
-    vendibili.forEach(function (x) {
-      var extra = '';
-      if (x.id === 'anno' && mese && mese.prezzo) {
-        var risparmio = Math.round(100 - x.prezzo / (mese.prezzo * 12) * 100);
-        extra = risparmio >= 5 ? '<span class="t-badge">−' + risparmio + '%</span>' : '';
-      }
-      h += '<label class="taglio' + (st.scelta === x.id ? ' scelto' : '') + '"><input type="radio" name="piano" value="' + x.id + '"' + (st.scelta === x.id ? ' checked' : '') + '>' +
-        '<span class="t-nome">' + NOMI[x.id] + extra + '</span><span class="t-prezzo">' + euro(x.prezzo) + (x.abbonamento ? '<small>' + (x.id === 'anno' ? '/anno' : '/mese') + '</small>' : '') + '</span>' +
-        '<span class="t-nota">' + (x.id === 'anno' ? euro(Math.round(x.prezzo / 12)) + ' al mese, ' : '') + NOTE[x.id] + '</span></label>';
-    });
-    h += '</div><label class="spunta"><input type="checkbox" name="recesso"> Chiedo che il Pro si attivi subito, prima della fine dei 14 giorni previsti per il recesso, e prendo atto che, una volta che il servizio è stato interamente fornito, perdo il diritto di recesso.</label>' +
-      '<div class="fila"><button class="btn pri" type="submit"' + (st.invio ? ' disabled' : '') + '>' + T.icona('lucchetto') + (st.invio ? 'Apro la pagina di pagamento…' : 'Vai al pagamento') + '</button>' +
-      '<span class="nota">Paghi con carta sulla pagina sicura di Stripe: i dati della carta non passano da MAGIC HS. <a href="/condizioni" target="_blank" rel="noopener">Condizioni di vendita</a></span></div>' +
-      (P.prova ? '<p class="avviso">Pagamenti in modalità di prova: nessun addebito vero. Per provare usa la carta 4242 4242 4242 4242, una scadenza futura e un CVC qualsiasi.</p>' : '') +
-      riga('paga') + '</form>';
-    return h;
   }
 
   function meseIt(m) {
@@ -196,16 +125,6 @@
         messaggio('account', 'Dati salvati.', true); document.getElementById('chi-nome').textContent = dati.get('nome');
         return app().aggiornaIo();
       }, function (e) { messaggio('account', e.errore); }).then(disegna);
-    } else if (azione === 'password') {
-      T.api('POST', '/api/io/password', { attuale: dati.get('attuale'), nuova: dati.get('nuova') }).then(function () {
-        messaggio('password', 'Password cambiata. Le altre sessioni sono state chiuse.', true);
-      }, function (e) { messaggio('password', e.errore); }).then(disegna);
-    } else if (azione === 'paga') {
-      if (!dati.get('recesso')) { messaggio('paga', 'Per continuare conferma la richiesta di attivazione immediata.'); disegna(); return; }
-      st.invio = true; messaggio('paga', ''); disegna();
-      T.api('POST', '/api/pagamento/inizia', { piano: String(dati.get('piano') || st.scelta), rinuncia_recesso: true }).then(function (r) {
-        window.location.href = r.url;
-      }, function (e) { st.invio = false; messaggio('paga', e.errore); disegna(); });
     } else if (azione === 'nota') {
       var c = f.getAttribute('data-c'), nota = String(dati.get('nota') || '');
       T.api('PUT', '/api/preferiti/' + c, { nota: nota }).then(function () {
@@ -217,11 +136,6 @@
   });
 
   el.addEventListener('change', function (ev) {
-    if (ev.target.name === 'piano' && ev.target.type === 'radio') {
-      st.scelta = ev.target.value;
-      Array.prototype.forEach.call(el.querySelectorAll('.taglio'), function (t) { t.classList.toggle('scelto', t.querySelector('input').checked); });
-      return;
-    }
     if (ev.target.getAttribute('data-p') !== 'pref') return;
     var io = u(), p = { paese: io.preferenze.paese, flusso: io.preferenze.flusso, tema: io.preferenze.tema };
     p[ev.target.name] = ev.target.value;
@@ -261,13 +175,6 @@
       T.api('DELETE', '/api/preferiti/' + c).then(function () {
         st.preferiti = st.preferiti.filter(function (v) { return v.codice !== c; }); delete app().preferiti[c]; disegna();
       }, function (e) { T.avviso(e.errore, 'male'); });
-    } else if (azione === 'gestisci') {
-      b.disabled = true;
-      T.api('POST', '/api/pagamento/gestisci').then(function (r) { window.location.href = r.url; },
-        function (e) { b.disabled = false; messaggio('gestisci', e.errore); disegna(); });
-    } else if (azione === 'esci-ovunque') {
-      T.api('POST', '/api/io/esci-ovunque').then(function () { messaggio('dispositivi', 'Fatto: le altre sessioni sono chiuse.', true); disegna(); },
-        function (e) { messaggio('dispositivi', e.errore); disegna(); });
     }
   });
 })();

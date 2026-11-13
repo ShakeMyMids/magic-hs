@@ -256,40 +256,17 @@ function creaIA() {
 }
 function impostaIA() {
   var ia = state.utente && state.utente.ia, loc = state.utente && state.utente.locale;
-  var chi = loc ? 'a chi gestisce MAGIC HS' : 'all\'amministratore';
   sampleFn = null; state.ai = 'no';
-  if (!ia || !ia.configurata) state.aiMotivo = loc
-    ? 'La classificazione assistita non è attiva: ' + (loc.editore ? 'scegli un servizio di intelligenza artificiale in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio di intelligenza artificiale.') + ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.'
-    : 'La classificazione assistita non è attiva su questo server (manca la chiave del servizio di intelligenza artificiale). Puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
-  else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi ' + chi + '. Puoi comunque aprire un codice scrivendone le cifre.';
+  if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva: ' +
+    (loc && loc.editore ? 'scegli un servizio di intelligenza artificiale in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio di intelligenza artificiale.') +
+    ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
+  else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata: chiedi a chi gestisce MAGIC HS. Puoi comunque aprire un codice scrivendone le cifre.';
   else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' richieste all\'IA di questo mese. ' +
-    (state.utente.piano && state.utente.piano.pagamenti ? 'Con il piano Pro sono illimitate: lo attivi da Profilo. ' : 'Per averne altre chiedi ' + chi + '. ') +
-    'Nomenclatura e misure restano consultabili.';
+    'Per averne altre chiedi a chi gestisce MAGIC HS. Nomenclatura e misure restano consultabili.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
 }
 function aggiornaIo() {
-  return T.api('GET', '/api/io').then(function (u) { state.utente = u; impostaIA(); renderMsg(); segnaPro(); return u; }, function () { return state.utente; });
-}
-/* segno «Pro» accanto al nome */
-function segnaPro() {
-  var b = document.getElementById('chi-pro'), u = state.utente;
-  if (b) b.hidden = !(u && u.piano && u.piano.pro);
-}
-/* ritorno dalla pagina di pagamento di Stripe: ?pagamento=cs_... oppure ?pagamento=annullato */
-function ritornoPagamento() {
-  var m = /[?&]pagamento=([^&#]+)/.exec(location.search);
-  if (!m) return;
-  var v = decodeURIComponent(m[1]);
-  history.replaceState(null, '', location.pathname + location.hash);
-  if (v === 'annullato') { T.avviso('Pagamento annullato: non ti è stato addebitato nulla.'); return; }
-  T.avviso('Controllo il pagamento…');
-  T.api('POST', '/api/pagamento/conferma', { sessione: v }).then(function (r) {
-    return aggiornaIo().then(function () {
-      if (r.piano && r.piano.pro) T.avviso('Grazie! Il piano Pro è attivo fino al ' + T.dataOra(r.piano.fino) + '.');
-      else T.avviso('Pagamento ricevuto: il piano Pro si attiva appena Stripe lo conferma, di solito in pochi secondi.');
-      if (T.viste && T.viste.profilo) { T.viste.profilo.daRicaricare = true; if (!$('#view-profilo').hidden) T.viste.profilo.mostra(); }
-    });
-  }, function (e) { T.avviso(e.errore || 'Non riesco a controllare il pagamento: ricarica la pagina tra poco.', 'male'); });
+  return T.api('GET', '/api/io').then(function (u) { state.utente = u; impostaIA(); renderMsg(); return u; }, function () { return state.utente; });
 }
 function salvaStorico() {
   var r = state.result;
@@ -865,8 +842,6 @@ function renderMsg() {
   if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>';
   var ia = state.utente && state.utente.ia;
   if (state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
-  if (ia && ia.limite !== null && ia.limite > 0 && ia.usate >= ia.limite && state.utente.piano && state.utente.piano.pagamenti)
-    h += '<div class="fila"><a class="btn pri" href="#profilo">' + T.icona('timbro') + 'Passa a Pro</a></div>';
   if (state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Richieste all\'IA usate questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
   $('#msg').innerHTML = h;
 }
@@ -1207,9 +1182,7 @@ function start() {
   renderEsempi();
   vista(location.hash.replace('#', '') || 'classifica');
   renderAll();
-  segnaPro();
   state.avviato = true;
-  ritornoPagamento();
 }
 window.TARIC_DEBUG = { misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
 
@@ -1247,15 +1220,10 @@ document.addEventListener('taric:tema', function (ev) {
 });
 
 $('#esci').addEventListener('click', function () {
-  if (state.utente && state.utente.locale) {
-    T.api('POST', '/api/locale/chiudi', null, { resta: true }).then(function () { chiuso(false); }, function () { chiuso(true); });
-    return;
-  }
-  function via() { location.href = '/accedi'; }
-  T.api('POST', '/api/esci', null, { resta: true }).then(via, via);
+  T.api('POST', '/api/locale/chiudi', null, { resta: true }).then(function () { chiuso(false); }, function () { chiuso(true); });
 });
 
-/* programma sul PC: il server si chiude da solo quando non si usa; la pagina lo tiene vivo e avvisa se non c'è più */
+/* il programma si chiude da solo quando non si usa; la pagina lo tiene vivo e avvisa se non c'è più */
 function chiuso(daSolo) {
   if (state.chiuso) return;
   state.chiuso = true;
@@ -1275,7 +1243,7 @@ function tieniVivo() {
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') controllaVivo(); });
   T.alOffline = controllaVivo;
 }
-/* programma sul PC: nessuno ha ancora detto di gestire MAGIC HS per i colleghi */
+/* nessuno ha ancora detto di gestire MAGIC HS per i colleghi */
 function proponiGestione() {
   var v = $('#view-classifica');
   if (!v || $('#gestisco-io')) return;
@@ -1296,13 +1264,9 @@ T.api('GET', '/api/io').then(function (u) {
   state.utente = u;
   $('#chi-nome').textContent = u.nome;
   $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
-  $('#chi-iniziali').parentNode.title = u.locale ? u.nome : u.nome + ' (' + u.email + ')';
-  if (u.locale) {
-    var e = $('#esci');
-    e.title = 'Chiudi MAGIC HS'; e.setAttribute('aria-label', 'Chiudi MAGIC HS'); e.innerHTML = T.icona('spegni');
-    tieniVivo();
-    if (u.locale.puo_gestire) proponiGestione();
-  }
+  $('#chi-iniziali').parentNode.title = u.nome;
+  tieniVivo();
+  if (u.locale.puo_gestire) proponiGestione();
   if (u.ia && u.ia.nome) $('#ia-nome').textContent = ' (' + u.ia.nome.replace(/ \((.+)\)$/, ' di $1') + ')';
   $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
   T.tema(u.preferenze.tema);
@@ -1316,5 +1280,5 @@ T.api('GET', '/api/io').then(function (u) {
     }, function () { /* niente recenti */ }),
     T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ })
   ]);
-}).then(function () { start(); }, function () { /* sessione scaduta: comune.js porta all'accesso */ });
+}).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
 })();

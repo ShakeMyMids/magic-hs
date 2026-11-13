@@ -1,5 +1,5 @@
-"""Chiamate all'intelligenza artificiale per conto degli utenti, con limite mensile per utente.
-La chiave resta sul server; il browser manda solo il testo della richiesta.
+"""Chiamate all'intelligenza artificiale, con limite mensile per persona scelto da chi gestisce MAGIC HS.
+La chiave resta nel programma; il browser manda solo il testo della richiesta.
 
 Fornitori supportati (TARIC_IA_FORNITORE):
   gemini     API di Google Gemini (generateContent)
@@ -14,8 +14,7 @@ import logging
 import sqlite3
 import threading
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -110,8 +109,6 @@ class ServizioIA:
         self.client = client or httpx.Client(timeout=httpx.Timeout(180, connect=15))
         self._in_corso: dict[int, int] = {}
         self._lock = threading.Lock()
-        # piano Pro dell'utente (lo imposta l'applicazione con i pagamenti): richieste illimitate entro il tetto delle 24 ore
-        self.pro: Callable[[sqlite3.Connection, int], bool] = lambda c, uid: False
 
     @property
     def disponibile(self) -> bool:
@@ -119,29 +116,14 @@ class ServizioIA:
 
     # ------------------------------------------------------------------ quota
     def limite(self, c: sqlite3.Connection, utente: sqlite3.Row) -> int | None:
-        """Richieste al mese consentite; None = senza limite mensile (amministratori e piano Pro).
-        Un limite personale 0 spegne l'IA per quell'utente anche se ha il Pro."""
-        if utente["quota_ia"] == 0:
-            return 0
-        if utente["ruolo"] == "amministratore" and utente["quota_ia"] is None:
-            return None
-        if self.pro(c, int(utente["id"])):
-            return None
+        """Richieste al mese consentite; None = senza limite mensile. Chi pubblica (amministratore) non ha limite;
+        per gli altri vale il limite scelto da chi gestisce MAGIC HS (0 = IA spenta)."""
         if utente["quota_ia"] is not None:
             return int(utente["quota_ia"])
-        q = self.db.impostazioni(c)["quota_predefinita"]
-        return None if q is None else int(q)            # None: senza limite (programma locale, se lo sceglie l'editore)
-
-    def tetto(self, c: sqlite3.Connection, utente: sqlite3.Row) -> int | None:
-        """Tetto di sicurezza delle richieste nelle ultime 24 ore per il piano Pro (contro l'uso automatico)."""
-        if utente["ruolo"] == "amministratore" or not self.pro(c, int(utente["id"])):
+        if utente["ruolo"] == "amministratore":
             return None
-        return int(self.db.impostazioni(c)["pro_tetto_giorno"]) or None
-
-    @staticmethod
-    def usate_24h(c: sqlite3.Connection, utente_id: int) -> int:
-        return c.execute("SELECT COUNT(*) FROM uso_ia WHERE utente_id = ? AND quando >= ? AND (esito = 'ok' OR token_in > 0)",
-                         (utente_id, iso(datetime.now(timezone.utc) - timedelta(hours=24)))).fetchone()[0]
+        q = self.db.impostazioni(c)["quota_predefinita"]
+        return None if q is None else int(q)
 
     @staticmethod
     def usate(c: sqlite3.Connection, utente_id: int, mese: str | None = None) -> int:
@@ -151,7 +133,7 @@ class ServizioIA:
 
     # ------------------------------------------------------------------ chiamata
     def prova(self) -> dict[str, Any]:
-        """Breve richiesta di prova al servizio configurato (pannello del programma locale); non consuma la quota."""
+        """Breve richiesta di prova al servizio configurato (pannello Gestione); non consuma la quota."""
         if not self.disponibile:
             raise ErroreIA("not_configured", 503)
         chiama = {"gemini": self._gemini, "anthropic": self._anthropic, "openai": self._openai}[self.cfg.ia_fornitore]
@@ -177,9 +159,6 @@ class ServizioIA:
             lim = self.limite(c, utente)
             if lim is not None and self.usate(c, uid) >= lim:
                 raise ErroreIA("quota_esaurita", 429)
-            tetto = self.tetto(c, utente)
-            if tetto is not None and self.usate_24h(c, uid) >= tetto:
-                raise ErroreIA("tetto_giornaliero", 429)
         with self._lock:
             if self._in_corso.get(uid, 0) >= 2:
                 raise ErroreIA("rate_limited", 429)

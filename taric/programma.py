@@ -189,7 +189,7 @@ def pulisci_versioni(cartella: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m taric.programma", description="MAGIC HS sul PC")
-    ap.add_argument("--condivisa", required=True, help="cartella condivisa (OneDrive) con programma, dati e impostazioni")
+    ap.add_argument("--condivisa", required=True, help="cartella condivisa (SharePoint sincronizzato con OneDrive) con programma, dati e impostazioni")
     ap.add_argument("--cartella", default="", help="cartella dei dati di questo utente (predefinita: %%LOCALAPPDATA%%\\MAGIC HS)")
     ap.add_argument("--porta", type=int, default=0, help="porta preferita (predefinita: l'ultima usata o 8765)")
     ap.add_argument("--inattivita", type=int, default=INATTIVITA, help="secondi senza richieste prima di chiudersi")
@@ -262,11 +262,7 @@ def _servi(a: argparse.Namespace, cartella: Path, condivisa: Path, istanza_file:
     porta = sock.getsockname()[1]
     chiave, istanza = secrets.token_urlsafe(32), secrets.token_hex(8)
     os.environ["TARIC_CONFIG"] = str(cartella / "taric.env")       # facoltativo, per configurazioni particolari
-    cfg = carica({
-        "TARIC_DATI": str(cartella / "dati"), "TARIC_LOCALE": "1", "TARIC_CONDIVISA": str(condivisa),
-        "TARIC_HOST": "127.0.0.1", "TARIC_PORTA": str(porta), "TARIC_COOKIE_SICURO": "no", "TARIC_URL_PUBBLICO": "",
-        "TARIC_STRIPE_CHIAVE": "", "TARIC_BACKUP_COPIE": "7", "TARIC_SMTP_HOST": "",
-    })
+    cfg = carica({"TARIC_DATI": str(cartella / "dati"), "TARIC_CONDIVISA": str(condivisa), "TARIC_PORTA": str(porta)})
     app = crea_app(cfg, chiave_ingresso=chiave, istanza=istanza)
     # connessioni tenute aperte a lungo: con un solo utente costano poco ed evitano che il browser riusi una
     # connessione proprio mentre il server la chiude

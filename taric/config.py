@@ -1,13 +1,13 @@
-"""Configurazione di MAGIC HS.
+"""Configurazione di MAGIC HS sul PC.
 
-I valori arrivano dalle variabili d'ambiente e, se esiste, dal file indicato da TARIC_CONFIG
-(predefinito: ``taric.env`` nella cartella da cui si avvia il server). Le variabili d'ambiente
-hanno la precedenza sul file. Vedi ``taric.env.esempio`` per l'elenco commentato.
+La imposta programma.py (cartella dei dati, porta, cartella condivisa). Per casi particolari si possono aggiungere
+variabili d'ambiente TARIC_* o un file indicato da TARIC_CONFIG (programma.py usa ``taric.env`` nella cartella
+dell'utente, se esiste): per esempio TARIC_FONTE_URL o TARIC_FUSO. Le variabili d'ambiente hanno la precedenza sul file.
+Il servizio IA lo sceglie chi gestisce MAGIC HS e arriva dalla cartella condivisa (condivisa.ia_da_impostazioni).
 """
 from __future__ import annotations
 
 import os
-import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -39,38 +39,18 @@ def _bool(v: str | None, predefinito: bool) -> bool:
 @dataclass
 class Config:
     dati: Path
-    host: str = "127.0.0.1"
-    porta: int = 8000
-    url_pubblico: str = ""                 # es. https://taric.miaazienda.it (per i link nelle email)
-    proxy_fidati: str = "127.0.0.1"        # indirizzi dei reverse proxy da cui accettare X-Forwarded-*
-    cookie_sicuro: str = "auto"            # auto | si | no
-    segreto: bytes = b""
+    porta: int = 8765
     ia_fornitore: str = ""                 # gemini | anthropic | openai ("" = IA spenta)
     ia_chiave: str = ""
     ia_url: str = ""
     modello_rapido: str = ""
     modello: str = ""
-    smtp_host: str = ""
-    smtp_porta: int = 587
-    smtp_utente: str = ""
-    smtp_password: str = ""
-    smtp_mittente: str = ""
-    smtp_sicurezza: str = "starttls"       # starttls | ssl | nessuna
     fonte_url: str = "https://github.com/rousseauxy/taric-opendata/releases/download/eu-{mese}/eu-taric-{mese}.zip"
     aggiornamento_automatico: bool = True
     fuso: str = "Europe/Rome"
-    backup_copie: int = 14                 # backup automatici del database da tenere (0 = nessun backup automatico)
-    stripe_chiave: str = ""                # chiave segreta Stripe (sk_live_... o sk_test_...): senza, i piani a pagamento sono spenti
-    stripe_firma: str = ""                 # segreto di firma del webhook (whsec_...)
-    stripe_tasse: bool = False             # calcolo automatico dell'IVA con Stripe Tax (va attivato anche su Stripe)
-    stripe_url: str = "https://api.stripe.com/v1"   # da cambiare solo per le prove
-    venditore: str = ""                    # chi vende il piano Pro (nome o ragione sociale): compare nelle condizioni di vendita
-    venditore_piva: str = ""
-    venditore_indirizzo: str = ""
-    venditore_email: str = ""
-    locale: bool = False                   # programma per Windows sul PC: un solo utente, senza accesso (vedi programma.py)
-    condivisa: Path | None = None          # cartella condivisa (OneDrive) da cui il programma riceve versioni, dati e impostazioni
-    scarica_dati: bool = True              # scarica da solo i dati TARIC dalla fonte (spento sui PC che li ricevono dalla cartella)
+    backup_copie: int = 7                  # backup automatici del database da tenere (0 = nessun backup automatico)
+    condivisa: Path | None = None          # cartella condivisa da cui il programma riceve versioni, dati e impostazioni
+    scarica_dati: bool = False             # scarica da solo i dati TARIC dalla fonte: solo sul PC di chi pubblica
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -82,10 +62,6 @@ class Config:
     @property
     def ia_nome(self) -> str:
         return {"gemini": "Gemini (Google)", "anthropic": "Claude (Anthropic)"}.get(self.ia_fornitore, self.modello or "")
-
-    @property
-    def posta_configurata(self) -> bool:
-        return bool(self.smtp_host and self.smtp_mittente)
 
     def imposta_ia(self, valori: dict[str, str]) -> None:
         """Cambia il servizio IA mentre il programma è in funzione (impostazioni della cartella condivisa)."""
@@ -128,49 +104,15 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
 
     dati = Path(v.get("TARIC_DATI", "dati")).resolve()
     dati.mkdir(parents=True, exist_ok=True)
-
-    # chiave segreta per firmare i moduli: dalla configurazione o generata una volta nella cartella dati
-    segreto = v.get("TARIC_SEGRETO", "").encode()
-    if not segreto:
-        f = dati / "segreto.key"
-        if not f.exists():
-            f.write_text(secrets.token_urlsafe(48), encoding="utf-8")
-            try:
-                f.chmod(0o600)
-            except OSError:
-                pass
-        segreto = f.read_text(encoding="utf-8").strip().encode()
-
     ia = _ia(v)
     return Config(
         dati=dati,
-        host=v.get("TARIC_HOST", "127.0.0.1"),
-        porta=int(v.get("TARIC_PORTA", "8000")),
-        url_pubblico=v.get("TARIC_URL_PUBBLICO", "").rstrip("/"),
-        proxy_fidati=v.get("TARIC_PROXY_FIDATI", "127.0.0.1"),
-        cookie_sicuro=v.get("TARIC_COOKIE_SICURO", "auto").lower(),
-        segreto=segreto,
+        porta=int(v.get("TARIC_PORTA", "8765")),
         ia_fornitore=ia[0], ia_chiave=ia[1], ia_url=ia[2], modello_rapido=ia[3], modello=ia[4],
-        smtp_host=v.get("TARIC_SMTP_HOST", ""),
-        smtp_porta=int(v.get("TARIC_SMTP_PORTA", "587")),
-        smtp_utente=v.get("TARIC_SMTP_UTENTE", ""),
-        smtp_password=v.get("TARIC_SMTP_PASSWORD", ""),
-        smtp_mittente=v.get("TARIC_SMTP_MITTENTE", ""),
-        smtp_sicurezza=v.get("TARIC_SMTP_SICUREZZA", "starttls").lower(),
         fonte_url=v.get("TARIC_FONTE_URL", Config.fonte_url),
         aggiornamento_automatico=_bool(v.get("TARIC_AGGIORNAMENTO_AUTOMATICO"), True),
         fuso=v.get("TARIC_FUSO", "Europe/Rome"),
-        backup_copie=max(0, int(v.get("TARIC_BACKUP_COPIE", "14") or 14)),
-        stripe_chiave=v.get("TARIC_STRIPE_CHIAVE", "").strip(),
-        stripe_firma=v.get("TARIC_STRIPE_FIRMA_WEBHOOK", "").strip(),
-        stripe_tasse=_bool(v.get("TARIC_STRIPE_TASSE"), False),
-        stripe_url=v.get("TARIC_STRIPE_URL", "https://api.stripe.com/v1").rstrip("/"),
-        venditore=v.get("TARIC_VENDITORE", "").strip(),
-        venditore_piva=v.get("TARIC_VENDITORE_PIVA", "").strip(),
-        venditore_indirizzo=v.get("TARIC_VENDITORE_INDIRIZZO", "").strip(),
-        venditore_email=v.get("TARIC_VENDITORE_EMAIL", "").strip(),
-        locale=_bool(v.get("TARIC_LOCALE"), False),
+        backup_copie=max(0, int(v.get("TARIC_BACKUP_COPIE", "7") or 7)),
         condivisa=Path(v["TARIC_CONDIVISA"]) if v.get("TARIC_CONDIVISA") else None,
-        scarica_dati=_bool(v.get("TARIC_SCARICA_DATI"), True),
         extra=v,
     )

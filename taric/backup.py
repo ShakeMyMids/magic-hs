@@ -1,8 +1,8 @@
-"""Backup e ripristino del database (utenti, storico, preferiti, impostazioni, registro).
+"""Backup e ripristino del database del PC (storico, preferiti, preferenze, uso dell'IA, registro).
 
 Un backup e' un archivio .zip con dentro solo "taric.db", copiato con l'API di backup di SQLite:
-la copia e' coerente anche se il sito sta scrivendo. I dati TARIC non servono (si riscaricano),
-la chiave segreta nemmeno (se manca se ne crea una nuova).
+la copia e' coerente anche se MAGIC HS sta scrivendo. I dati TARIC non servono (arrivano dalla cartella condivisa).
+Il programma ne fa uno al giorno in %LOCALAPPDATA%\\MAGIC HS\\dati\\backup; si rimette con «python -m taric ripristina».
 """
 from __future__ import annotations
 
@@ -56,17 +56,17 @@ def controlla_db(percorso: Path) -> str:
             if not {"utenti", "impostazioni", "storico"} <= tabelle:
                 raise ErroreBackup("il file non e' un database di MAGIC HS")
             if versione > len(SCHEMA):
-                raise ErroreBackup("il backup viene da una versione piu' recente di MAGIC HS: aggiorna prima il sito")
-            n = c.execute("SELECT COUNT(*) FROM utenti").fetchone()[0]
+                raise ErroreBackup("il backup viene da una versione piu' recente di MAGIC HS: aggiorna prima il programma")
+            n = c.execute("SELECT COUNT(*) FROM storico").fetchone()[0]
         finally:
             c.close()
     except sqlite3.DatabaseError as e:
         raise ErroreBackup(f"il file non e' un database valido ({e})") from None
-    return f"{n} utenti"
+    return f"{n} classificazioni nello storico"
 
 
 class Backup:
-    def __init__(self, dati: Path, copie: int = 14):
+    def __init__(self, dati: Path, copie: int = 7):
         self.dati = dati
         self.db = dati / NOME_DB
         self.cartella = dati / "backup"
@@ -130,9 +130,9 @@ class Backup:
         p = self.cartella / ultimi[0]["nome"]
         return time.time() - p.stat().st_mtime > ore * 3600
 
-    # ------------------------------------------------------------ ripristino (a sito fermo)
+    # ------------------------------------------------------------ ripristino (a MAGIC HS chiuso)
     def ripristina(self, archivio: Path) -> str:
-        """Sostituisce il database con quello del backup. Va eseguito con il sito spento.
+        """Sostituisce il database con quello del backup. Va eseguito con MAGIC HS chiuso.
         Il database attuale viene prima salvato in un nuovo backup."""
         if not archivio.is_file():
             raise ErroreBackup(f"file non trovato: {archivio}")
