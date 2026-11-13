@@ -1,4 +1,5 @@
-/* MAGIC HS - vista Profilo: nome, preferenze, uso dell'IA, storico, preferiti (tutto resta su questo PC). */
+/* MAGIC HS - vista Profilo: nome (e nel sito account e password), preferenze, uso dell'IA, storico, preferiti,
+   esportazione e importazione degli stessi dati (dal programma per Windows al sito e viceversa). */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
@@ -37,11 +38,18 @@
 
     h += usoIA(io);
 
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utente') + 'Il tuo nome</div>' +
-      '<form class="modulo" data-p="salva-account"><div class="due">' +
+    h += '<div class="foglio"><div class="box' + (io.server ? ' s6' : '') + '"><div class="lab">' + T.icona('utente') + (io.server ? 'Il tuo account' : 'Il tuo nome') + '</div>' +
+      '<form class="modulo" data-p="salva-account">' + (io.server ? '<p class="nota">Accedi con <b>' + esc(io.email) + '</b></p>' : '') + '<div class="due">' +
       '<label>Nome e cognome<input class="campo" name="nome" required minlength="2" maxlength="100" value="' + esc(io.nome) + '"></label>' +
       '<label>Azienda<input class="campo" name="azienda" maxlength="150" value="' + esc(io.azienda) + '"></label></div>' +
-      '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div></div>';
+      '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div>';
+    if (io.server) h += '<div class="box s6"><div class="lab">' + T.icona('lucchetto') + 'Password</div>' +
+      '<form class="modulo" data-p="password"><input class="trappola" name="username" autocomplete="username" value="' + esc(io.email) + '" tabindex="-1" aria-hidden="true">' +
+      '<div class="due"><label>Password attuale<input class="campo" type="password" name="attuale" autocomplete="current-password" required></label>' +
+      '<label>Nuova (almeno 10 caratteri)<input class="campo" type="password" name="nuova" autocomplete="new-password" required minlength="10"></label></div>' +
+      '<div class="fila"><button class="btn" type="submit">Cambia password</button><button class="btn sm" type="button" data-p="esci-ovunque">Esci dagli altri dispositivi</button></div>' +
+      riga('password') + '</form></div>';
+    h += '</div>';
 
 
     var paesi = app().paesi();
@@ -68,13 +76,21 @@
     else h += '<div class="elenco">' + st.preferiti.map(rigaPreferito).join('') + '</div>';
     h += '</div></div>';
 
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'I tuoi dati</div>' +
+      '<p class="nota">' + (io.server ? 'Storico, preferiti e preferenze sono nel tuo account: li ritrovi da qualsiasi PC. Con «Importa» porti qui quelli esportati dal programma per Windows.'
+        : 'Storico, preferiti e preferenze restano su questo PC. Per portarli nel sito di MAGIC HS esportali qui e importali nel Profilo del sito.') + '</p>' +
+      '<div class="fila"><button class="btn sm" type="button" data-p="esporta">' + T.icona('scarica') + 'Esporta</button>' +
+      '<button class="btn sm" type="button" data-p="scegli-file">' + T.icona('carica') + 'Importa</button>' +
+      '<input type="file" accept=".json,application/json" data-p="importa" hidden aria-label="File esportato da MAGIC HS"></div>' + riga('dati') + '</div></div>';
+
     el.innerHTML = h;
   }
 
   /* ------------------------------------------------------------------ uso dell'IA */
   function usoIA(io) {
     var ia = io.ia, h = '<div class="foglio"><div class="box piano"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita</div>';
-    if (!ia.configurata) h += '<p class="nota">Non è attiva: scegli un servizio in Impostazioni, «Intelligenza artificiale».</p>';
+    if (!ia.configurata) h += '<p class="nota">Non è attiva: ' + (io.server ? 'la attiva l\'amministratore di MAGIC HS.' : 'scegli un servizio in Impostazioni, «Intelligenza artificiale».') + '</p>';
+    else if (ia.tetto) h += '<p class="nota">Questo mese le classificazioni con l\'IA sono finite per tutti: chiedi all\'amministratore.</p>';
     else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + (ia.usate === 1 ? ' classificazione' : ' classificazioni') + ' a ' + esc(meseIt(ia.mese)) + '</p>';
     else {
       var perc = ia.limite ? Math.min(100, Math.round(ia.usate / ia.limite * 100)) : 100;
@@ -119,9 +135,16 @@
     var dati = new FormData(f);
     if (azione === 'salva-account') {
       T.api('PUT', '/api/io', { nome: dati.get('nome'), azienda: dati.get('azienda') }).then(function () {
-        messaggio('account', 'Dati salvati.', true); document.getElementById('chi-nome').textContent = dati.get('nome');
+        var nome = String(dati.get('nome') || '').trim();
+        messaggio('account', 'Dati salvati.', true); document.getElementById('chi-nome').textContent = nome;
+        document.getElementById('chi-iniziali').textContent = nome.split(/\s+/).slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase();
+        document.getElementById('chi-iniziali').parentNode.title = nome;
         return app().aggiornaIo();
       }, function (e) { messaggio('account', e.errore); }).then(disegna);
+    } else if (azione === 'password') {
+      T.api('POST', '/api/io/password', { attuale: String(dati.get('attuale') || ''), nuova: String(dati.get('nuova') || '') }).then(function () {
+        f.reset(); messaggio('password', 'Password cambiata: gli altri dispositivi dovranno accedere di nuovo.', true);
+      }, function (e) { messaggio('password', e.errore); }).then(disegna);
     } else if (azione === 'nota') {
       var c = f.getAttribute('data-c'), nota = String(dati.get('nota') || '');
       T.api('PUT', '/api/preferiti/' + c, { nota: nota }).then(function () {
@@ -133,6 +156,7 @@
   });
 
   el.addEventListener('change', function (ev) {
+    if (ev.target.getAttribute('data-p') === 'importa') { importa(ev.target); return; }
     if (ev.target.getAttribute('data-p') !== 'pref') return;
     var io = u(), p = { paese: io.preferenze.paese, flusso: io.preferenze.flusso, tema: io.preferenze.tema };
     p[ev.target.name] = ev.target.value;
@@ -140,6 +164,31 @@
       io.preferenze = p; app().preferenze(p); T.avviso('Preferenza salvata.');
     }, function (e) { T.avviso(e.errore, 'male'); });
   });
+
+  /* ------------------------------------------------------------------ esporta e importa */
+  function esporta() {
+    T.api('GET', '/api/io/esporta').then(function (d) {
+      var oggi = new Date(), nome = 'magic-hs-' + oggi.getFullYear() + '-' + ('0' + (oggi.getMonth() + 1)).slice(-2) + '-' + ('0' + oggi.getDate()).slice(-2) + '.json';
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' }));
+      a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+      messaggio('dati', 'Esportate ' + d.storico.length + ' classificazioni e ' + d.preferiti.length + ' preferiti nel file ' + nome + '.', true); disegna();
+    }, function (e) { messaggio('dati', e.errore); disegna(); });
+  }
+  function importa(campo) {
+    var f = campo.files && campo.files[0];
+    if (!f) return;
+    if (f.size > 100 * 1024 * 1024) { messaggio('dati', 'File troppo grande.'); disegna(); return; }
+    messaggio('dati', 'Importo…', true); disegna();
+    f.text().then(function (testo) {
+      var d; try { d = JSON.parse(testo); } catch (x) { throw { errore: 'Il file non è un\'esportazione di MAGIC HS.' }; }
+      return T.api('POST', '/api/io/importa', d);
+    }).then(function (r) {
+      messaggio('dati', 'Importate ' + r.storico + (r.storico === 1 ? ' classificazione' : ' classificazioni') + ' e ' + r.preferiti + (r.preferiti === 1 ? ' preferito' : ' preferiti') + '.', true);
+      return T.api('GET', '/api/preferiti').then(function (p) { p.voci.forEach(function (v) { app().preferiti[v.codice] = { nota: v.nota }; }); }).then(carica);
+    }, function (e) { messaggio('dati', (e && e.errore) || 'Importazione non riuscita.'); disegna(); });
+  }
 
   el.addEventListener('input', function (ev) {
     if (ev.target.getAttribute('data-p') !== 'filtro') return;
@@ -166,6 +215,13 @@
       T.api('GET', '/api/storico?limite=50&prima=' + ultimo).then(function (r) {
         st.storico = st.storico.concat(r.voci); st.finito = st.storico.length >= r.totale || !r.voci.length; disegna();
       });
+    } else if (azione === 'esporta') {
+      esporta();
+    } else if (azione === 'esci-ovunque') {
+      T.api('POST', '/api/io/esci-ovunque').then(function () { messaggio('password', 'Sei uscito da tutti gli altri dispositivi.', true); disegna(); },
+        function (e) { T.avviso(e.errore, 'male'); });
+    } else if (azione === 'scegli-file') {
+      $('input[data-p="importa"]').click();
     } else if (azione === 'apri-codice') {
       app().apriCodice(c);
     } else if (azione === 'togli-preferito') {

@@ -1,7 +1,8 @@
 /* MAGIC HS - illustrazioni a tema: le merci in viaggio per nave, aereo, treno e camion.
    T.scena(classe) restituisce l'SVG della scena (porto, gru, treno merci, camion e aereo); i colori vengono dal
    tema (variabili --d-* in app.css). comune.js la inserisce negli elementi con l'attributo data-scena; con
-   data-scena="in-viaggio" i mezzi si muovono (pagina d'attesa), salvo «movimento ridotto» nel sistema. */
+   data-scena="in-viaggio" i mezzi si muovono (pagina d'attesa), salvo «movimento ridotto» nel sistema. T.festa() è la scena
+   dell'intelligenza artificiale appena collegata. */
 (function () {
   'use strict';
   var T = window.TARIC = window.TARIC || {};
@@ -74,6 +75,43 @@
     '<rect class="d-c1" x="1028" y="120" width="44" height="3"/>' +
     ruota(918, 133, 7) + ruota(936, 133, 7) + ruota(1004, 133, 7) + ruota(1040, 133, 7) + ruota(1060, 133, 7) +
     '</g></g>';
+
+  /* festa per l'intelligenza artificiale collegata (js/attiva-ia.js): la gru cala sulla nave un container con le
+     scintille, che si illumina; la nave suona la sirena e salpa. Le animazioni sono in app.css (.festa) */
+  function stella(x, y, r, classe, stile) {
+    return '<path class="' + classe + '"' + (stile ? ' style="' + stile + '"' : '') + ' d="M' + x + ' ' + (y - r) + 'Q' + x + ' ' + y + ' ' + (x + r) + ' ' + y +
+      'Q' + x + ' ' + y + ' ' + x + ' ' + (y + r) + 'Q' + x + ' ' + y + ' ' + (x - r) + ' ' + y + 'Q' + x + ' ' + y + ' ' + x + ' ' + (y - r) + 'z"/>';
+  }
+  T.festa = function () {
+    var stiva = '', k = 0, col = [2, 3, 1, 2, 3, 2, 1, 3, 2, 1, 3, 2, 3, 1, 2];
+    for (var i = 0; i < 6; i++) {
+      for (var r = 0; r < 3; r++) {
+        if (r === 2 && (i === 2 || i === 4)) continue;          // la casella 4 in alto è per il container dell'IA
+        stiva += cont(152 + i * 46, 138 - r * 20, 44, 18, col[k++ % col.length]);
+      }
+    }
+    var scintille = '';
+    [[0, -46], [33, -33], [48, 0], [33, 33], [0, 40], [-33, 33], [-48, 0], [-33, -33]].forEach(function (d, n) {
+      scintille += stella(358, 107, n % 2 ? 4 : 6, 'f-scintilla ' + (n % 2 ? 'd-c2' : 'd-c1'), '--dx:' + d[0] + 'px;--dy:' + d[1] + 'px');
+    });
+    var onde = '';
+    for (var x = 20; x < 470; x += 64) onde += 'M' + x + ' ' + (190 + (x % 3) * 6) + 'q10-5 20 0t20 0';
+    return '<svg class="festa-svg" viewBox="0 0 640 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">' +
+      '<path class="d-nuvola" d="M70 40a12 12 0 0 1 22-6 16 16 0 0 1 29 4 10 10 0 0 1 2 19H73a9 9 0 0 1-3-17z"/>' +
+      '<path class="d-nuvola" d="M560 70a10 10 0 0 1 19-5 13 13 0 0 1 24 3 8 8 0 0 1 2 16h-42a8 8 0 0 1-3-14z"/>' +
+      '<rect class="d-mare" x="0" y="176" width="480" height="44"/><path class="d-onda" d="' + onde + '"/>' +
+      '<rect class="d-banchina" x="470" y="176" width="170" height="44"/><path class="d-suolo" d="M470 176H640"/>' +
+      '<g class="d-gru"><path d="M500 176V36M548 176V36M500 80h48M500 120h48M500 80l48 40M500 120l48-40M296 36h330M548 36l-24-20-24 20"/></g>' +
+      '<rect class="d-t" x="346" y="33" width="24" height="8" rx="2"/>' +
+      '<path class="f-cavo" d="M358 41V98"/>' +
+      '<g class="f-nave">' + stiva +
+      '<g class="f-ia">' + cont(336, 98, 44, 18, 1) + stella(358, 107, 6, 'f-stella') + '</g>' +
+      '<rect class="d-t" x="110" y="112" width="36" height="44" rx="2"/><rect class="d-oblo" x="115" y="118" width="26" height="5" rx="1.5"/>' +
+      '<rect class="d-c1" x="119" y="94" width="13" height="19" rx="1.5"/>' +
+      '<g class="f-sirena"><path d="M138 88q7-6 0-13"/><path d="M145 92q11-10 0-21"/><path d="M152 96q15-14 0-29"/></g>' +
+      '<path class="d-t" d="M96 156h356l-16 30H116z"/><path class="d-c1" d="M106 172h336l-6 14H116z"/>' +
+      '</g>' + scintille + '</svg>';
+  };
 
   T.scena = function (classe) {
     return '<svg class="scena-svg' + (classe ? ' ' + classe : '') + '" viewBox="0 0 1200 170" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">' +

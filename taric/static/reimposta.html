@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Nuova password · MAGIC HS</title>
+<link rel="stylesheet" href="/static/css/app.css">
+<link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
+<meta name="theme-color" content="#e1e6eb">
+</head>
+<body class="accesso" data-pagina="reimposta">
+<div class="page">
+  <header class="barra">
+    <a class="logo" href="/" data-marchio><span>MAGIC <b>HS</b></span></a>
+    <div class="lato"><button class="tasto-ico" type="button" id="tema" aria-label="Cambia tema"></button></div>
+  </header>
+  <main>
+    <div class="foglio"><div class="box">
+      <h2>Scegli una nuova password</h2>
+      <form class="modulo" id="reimposta" novalidate>
+        <label>Nuova password (almeno 10 caratteri)<input class="campo" type="password" name="password" autocomplete="new-password" required minlength="10"></label>
+        <label>Ripetila<input class="campo" type="password" name="ripeti" autocomplete="new-password" required minlength="10"></label>
+        <div class="fila"><button class="btn pri" type="submit">Salva e accedi</button></div>
+      </form>
+      <div id="esito" role="alert"></div>
+    </div></div>
+  </main>
+  <footer class="piede"><p>Strumento non ufficiale, senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.</p></footer>
+</div>
+<script src="/static/js/icone.js"></script>
+<script src="/static/js/comune.js"></script>
+<script src="/static/js/accesso.js"></script>
+</body>
+</html>

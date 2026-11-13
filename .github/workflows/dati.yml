@@ -1,10 +1,11 @@
 name: Dati TARIC
 # Prepara i dati TARIC del mese con gli stessi controlli del programma (strumenti/dati_mese.py) e li pubblica nella
 # pagina «dati» della pagina delle versioni (una pre-release: non è una versione del programma), come dati-AAAA-MM-01.zip.
-# Ogni PC li scarica da lì; se non ci sono ancora, li prepara da sé dalla fonte. Gira ogni giorno dall'1 al 12 del mese
-# finché il mese non è pubblicato, oppure a mano (Actions > Dati TARIC > Run workflow, con il mese).
-# Nota: GitHub sospende i flussi pianificati dei progetti pubblici dopo 60 giorni senza modifiche; in quel caso i PC
-# preparano i dati da soli finché il flusso non viene riattivato (Actions > Dati TARIC > Enable workflow).
+# Il sito su Render e i PC con il programma per Windows li scaricano da lì (se non ci sono ancora, li preparano da sé dalla
+# fonte). Gira ogni giorno dall'1 al 12 del mese finché il mese non è pubblicato, oppure a mano (Actions > Dati TARIC >
+# Run workflow, con il mese).
+# Nota: GitHub sospende i flussi pianificati dei progetti pubblici dopo 60 giorni senza attività; a ogni giro il flusso
+# si riattiva da solo per evitarlo. Se fosse sospeso: Actions > Dati TARIC > Enable workflow.
 on:
   schedule:
     - cron: "23 5 1-12 * *"
@@ -22,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -40,6 +42,8 @@ jobs:
             gh release create dati --repo "$GITHUB_REPOSITORY" --prerelease --title "Dati TARIC" \
               --notes "Dati TARIC del mese pronti per MAGIC HS (scaricati da soli dal programma). Fonte: Commissione europea, DG TAXUD."
           fi
+          # tiene attivo il flusso pianificato (GitHub lo sospende dopo 60 giorni senza attività nel progetto)
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/dati.yml/enable" > /dev/null || true
           if gh release view dati --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx "$nome"; then
             echo "I dati di $mese sono già pubblicati."
             exit 0

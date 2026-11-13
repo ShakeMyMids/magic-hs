@@ -8,6 +8,7 @@ Il servizio IA lo sceglie ognuno in Impostazioni: e' salvato nel database del PC
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -54,6 +55,10 @@ class Config:
     scarica_dati: bool = True              # prende da solo i dati TARIC del mese
     aggiornamenti_url: str = "https://api.github.com/repos/ShakeMyMids/magic-hs/releases/latest"   # "" = niente controllo
     dati_url: str = "https://api.github.com/repos/ShakeMyMids/magic-hs/releases/tags/dati"        # dati pronti; "" = sempre in locale
+    # modalita' server (sito su Render, python -m taric server): account con approvazione, IA unica dell'amministratore
+    server: bool = False
+    indirizzo: str = ""                    # indirizzo pubblico, per esempio https://magic-hs.onrender.com (Render: RENDER_EXTERNAL_URL)
+    amministratori: frozenset[str] = frozenset()   # email che entrano subito come amministratori (MAGIC_HS_AMMINISTRATORI)
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -101,7 +106,8 @@ def _ia(v: dict[str, str]) -> tuple[str, str, str, str, str]:
 def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
     file_conf = Path(os.environ.get("TARIC_CONFIG", "taric.env"))
     v = _leggi_file(file_conf)
-    v.update({k: val for k, val in os.environ.items() if k.startswith(("TARIC_", "ANTHROPIC_", "GEMINI_", "GOOGLE_API_KEY"))})
+    v.update({k: val for k, val in os.environ.items()
+              if k.startswith(("TARIC_", "ANTHROPIC_", "GEMINI_", "GOOGLE_API_KEY", "MAGIC_HS_")) or k == "RENDER_EXTERNAL_URL"})
     if sovrascrivi:
         v.update(sovrascrivi)
 
@@ -121,5 +127,8 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         programmi=Path(v["TARIC_PROGRAMMI"]) if v.get("TARIC_PROGRAMMI") else None,
         aggiornamenti_url=v.get("TARIC_AGGIORNAMENTI_URL", Config.aggiornamenti_url).strip(),
         dati_url=v.get("TARIC_DATI_URL", Config.dati_url).strip(),
+        server=_bool(v.get("TARIC_SERVER"), False),
+        indirizzo=(v.get("MAGIC_HS_INDIRIZZO") or v.get("RENDER_EXTERNAL_URL") or "").strip().rstrip("/"),
+        amministratori=frozenset(e.strip().lower() for e in re.split(r"[\s,;]+", v.get("MAGIC_HS_AMMINISTRATORI", "")) if "@" in e),
         extra=v,
     )

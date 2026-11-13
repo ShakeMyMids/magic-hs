@@ -1,0 +1,23 @@
+# MAGIC HS su Render (Blueprint): in Render scegli New > Blueprint e collega questo repository.
+# Al primo avvio Render chiede i valori segnati sync: false (la chiave di Gemini e la tua email da amministratore).
+# Il servizio si aggiorna da solo a ogni modifica su main. Vedi README, «Sito su Render».
+services:
+  - type: web
+    name: magic-hs
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/salute
+    disk:
+      name: dati
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: GEMINI_API_KEY             # chiave di Google Gemini (progetto con fatturazione attiva)
+        sync: false
+      - key: MAGIC_HS_AMMINISTRATORI    # email degli amministratori, separate da virgole
+        sync: false
+      - key: TARIC_FUSO
+        value: Europe/Rome

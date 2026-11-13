@@ -34,6 +34,7 @@ function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } els
   await p.waitForSelector('text=scegli un servizio di intelligenza artificiale in Impostazioni');
   ok(true, 'senza IA: dove sceglierla');
   await p.screenshot({ path: out + '/1-classifica-senza-ia.png' });
+  ok(await p.isVisible('.trasloco >> text=MAGIC HS diventa un sito'), 'avviso del passaggio al sito');
   await p.fill('#q', '');
   // la nuova versione si scarica da sola: puntino sulla scheda Impostazioni
   await p.waitForFunction(() => document.getElementById('tab-gestione').classList.contains('novita'), null, { timeout: 30000 });
@@ -47,16 +48,17 @@ function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } els
   ok(!(await p.$('input[name=quota]')), 'niente limite mensile');
   await p.fill('input[name=url]', 'http://127.0.0.1:9100/v1');
   await p.fill('input[name=modello]', 'finto-modello');
-  await p.fill('input[name=chiave]', 'chiave-finta-1234');
+  await p.fill('input[name=chiave]', 'chiave-sbagliata-1234');
   await p.click('form[data-g="ia-locale"] button[type=submit]');
-  await p.waitForSelector('text=Salvato: ');
-  await p.click('button[data-g="prova-ia"]');
-  await p.waitForSelector('text=Il servizio rifiuta la chiave', { timeout: 15000 });
-  ok(true, 'chiave sbagliata: messaggio chiaro');
+  await p.waitForSelector('text=la prova non è riuscita', { timeout: 20000 });
+  ok(await p.isVisible('text=Il servizio rifiuta la chiave'), 'chiave sbagliata: prova automatica, messaggio chiaro');
   await p.click('button[data-g="cambia-chiave"]');
   await p.fill('input[name=chiave]', 'chiave-finta');
   await p.click('form[data-g="ia-locale"] button[type=submit]');
-  await p.waitForSelector('text=Salvato: ');
+  await p.waitForSelector('.finestra.festa >> text=Intelligenza artificiale collegata', { timeout: 20000 });
+  await p.screenshot({ path: out + '/2a-festa.png' });
+  await p.click('.festa [data-f="chiudi"]');
+  ok(true, 'chiave giusta: festa per l\'IA collegata');
   ok(await p.isVisible('text=Chiave salvata: …inta'), 'chiave mascherata');
   ok(await p.isVisible('text=La chiave resta su questo PC'), 'nota sulla chiave protetta');
   await p.click('button[data-g="prova-ia"]');

@@ -198,6 +198,11 @@ class ServizioIA:
         q = self.db.impostazioni(c)["quota_predefinita"]
         return None if q is None else int(q)
 
+    def tetto_raggiunto(self, c: sqlite3.Connection) -> bool:
+        """Sito: le classificazioni del mese di tutti insieme hanno raggiunto il tetto scelto dall'amministratore."""
+        tetto = self.db.impostazioni(c)["tetto_mese"]
+        return tetto is not None and self.uso_mese(c)["classificazioni"] >= int(tetto)
+
     @staticmethod
     def usate(c: sqlite3.Connection, utente_id: int, mese: str | None = None) -> int:
         """Classificazioni del mese che hanno raggiunto il servizio (anche se la risposta non era utilizzabile).
@@ -222,19 +227,21 @@ class ServizioIA:
         f = {"gemini": self._gemini, "anthropic": self._anthropic, "openai": self._openai}[self.cfg.ia_fornitore]
         return f(modello, contesto, prompt, token_massimi, schema)
 
-    def prova(self) -> dict[str, Any]:
-        """Breve richiesta di prova al servizio configurato (pagina Impostazioni); non conta come classificazione."""
+    def prova(self, livello: str = "rapido") -> dict[str, Any]:
+        """Breve richiesta di prova al servizio configurato (pagina Impostazioni), con il modello rapido o con quello
+        principale; non conta come classificazione."""
         if not self.disponibile:
             raise ErroreIA("not_configured", 503)
+        modello = self.cfg.modello if livello == "standard" else self.cfg.modello_rapido
         inizio = adesso()
-        r = self._chiama(self.cfg.modello_rapido, "", 'Rispondi con questo oggetto JSON: {"ok": true}', 1024, "prova")
+        r = self._chiama(modello, "", 'Rispondi con questo oggetto JSON: {"ok": true}', 1024, "prova")
         if r.rifiutata:
             raise ErroreIA("refused", 422)
         valore = estrai_json(r.testo) if r.testo.strip() else None
         if valore is None:
             raise ErroreIA("empty_completion", 502)
         return {"risposta": valore, "secondi": round((adesso() - inizio).total_seconds(), 1),
-                "modello": self.cfg.modello_rapido, "token_in": r.token_in, "token_out": r.token_out}
+                "modello": modello, "token_in": r.token_in, "token_out": r.token_out}
 
     def chiedi(self, utente: sqlite3.Row, prompt: str, livello: str, contesto: str = "", schema: str | None = None,
                operazione: str = "", tipo: str = "classifica") -> dict[str, Any]:
@@ -257,6 +264,8 @@ class ServizioIA:
                     raise ErroreIA("rate_limited", 429)
                 if not gia and lim is not None and self.usate(c, uid) >= lim:
                     raise ErroreIA("quota_esaurita", 429)
+                if not gia and self.tetto_raggiunto(c):
+                    raise ErroreIA("tetto_raggiunto", 429)
         with self._lock:
             if self._in_corso.get(uid, 0) >= 2:
                 raise ErroreIA("rate_limited", 429)

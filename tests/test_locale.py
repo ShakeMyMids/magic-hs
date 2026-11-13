@@ -60,11 +60,12 @@ def test_niente_funzioni_del_vecchio_sito_ne_della_cartella_condivisa(ambiente):
     nella cartella condivisa (sincronizzazione, chi pubblica, programma per tutti)."""
     tmp, mp = ambiente
     c = PC(tmp, mp).entra()
-    for pagina in ("/accedi", "/registrati", "/configura", "/condizioni", "/static/js/accesso.js"):
+    for pagina in ("/accedi", "/registrati", "/configura", "/condizioni", "/reimposta-password"):     # pagine del sito, non del PC
         assert c.get(pagina, follow_redirects=False).status_code == 404, pagina
     for metodo, url in (("POST", "/api/accedi"), ("POST", "/api/registrazione"), ("GET", "/api/admin/utenti"),
                         ("POST", "/api/pagamento/inizia"), ("POST", "/api/io/password"), ("GET", "/api/admin/backup/x.zip"),
                         ("GET", "/api/piani"), ("GET", "/api/admin/posta"), ("POST", "/api/stripe/webhook"),
+                        ("POST", "/api/registrazione"), ("POST", "/api/esci"), ("GET", "/api/admin/utenti"), ("GET", "/api/admin/ia"),
                         ("POST", "/api/locale/sincronizza"), ("POST", "/api/locale/gestisco-io"), ("PUT", "/api/admin/locale/editori"),
                         ("POST", "/api/admin/locale/programma"), ("POST", "/api/admin/locale/aggiorna-programma")):
         assert c.request(metodo, url, json={}).status_code in (404, 405), url
@@ -348,6 +349,14 @@ def test_prova_del_servizio_e_azure(ambiente):
     pc.claude.risposte = [httpx.Response(401, json={"error": {"message": "Access denied due to invalid subscription key"}})]
     r = c.post("/api/admin/locale/ia/prova")
     assert r.status_code == 503 and "rifiuta la chiave" in r.json()["errore"]
+    # anche il modello principale (la guida a Gemini li prova tutti e due)
+    c.put("/api/admin/locale/ia", json={"fornitore": "openai", "url": "https://risorsa.openai.azure.com/openai/v1",
+                                        "modello": "gpt-classifica", "modello_rapido": "gpt-mini"})
+    pc.claude.risposte = [FintoClaude.testo('{"ok": true}'), FintoClaude.testo('{"ok": true}')]
+    assert c.post("/api/admin/locale/ia/prova").json()["modello"] == "gpt-mini"
+    assert c.post("/api/admin/locale/ia/prova?livello=standard").json()["modello"] == "gpt-classifica"
+    assert [x["corpo"]["model"] for x in pc.claude.richieste[-2:]] == ["gpt-mini", "gpt-classifica"]
+    assert c.post("/api/admin/locale/ia/prova?livello=altro").status_code == 422
 
 
 # ------------------------------------------------------------------ nuove versioni del programma, da GitHub

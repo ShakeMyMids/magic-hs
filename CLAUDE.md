@@ -1,24 +1,33 @@
 # Istruzioni per lavorare su MAGIC HS con Claude Code
 
-Programma per Windows per la classificazione doganale (TARIC UE), ad uso interno di un'azienda: server Python locale
-(FastAPI + SQLite) su 127.0.0.1, aperto nel browser, interfaccia in JavaScript senza framework. Ognuno lo usa in
-autonomia e senza costi: programma e dati TARIC del mese arrivano dalla pagina delle versioni di GitHub (progetto
-pubblico), il servizio IA lo sceglie ognuno sul suo PC. Non c'è più una versione sito con account, registrazione, posta
-e pagamenti (storia di git fino al tag `v1.2.1`), né la cartella condivisa con chi pubblica per i colleghi (fino alla
-1.2.2: il programma ne importa una volta sola il servizio IA). Tutti i testi per l'utente, i commenti e i nomi sono in
-**italiano**.
+Classificazione doganale (TARIC UE) ad uso interno di un'azienda: server Python (FastAPI + SQLite) e interfaccia in
+JavaScript senza framework (`taric/static/`), in due modalità dello stesso `app.py`:
+- **sito** (la forma principale, `cfg.server`, `python -m taric server`) su **Render** (`render.yaml`, `Dockerfile`, disco
+  in `/var/data`): account con email e password, approvati dall'amministratore (gli indirizzi di `MAGIC_HS_AMMINISTRATORI`
+  entrano subito come amministratori); un solo servizio IA a pagamento dalle variabili del server (`GEMINI_API_KEY`), con
+  limite mensile di classificazioni per persona (`quota_predefinita`, `utenti.quota_ia`) e tetto per tutti (`tetto_mese`);
+- **programma per Windows** (in ritiro, ultima versione 1.4.0): server locale su 127.0.0.1, un solo utente, IA scelta da
+  ognuno con la chiave protetta da Windows. Resta finché i colleghi non passano al sito (Profilo › Esporta / Importa).
+Dati TARIC del mese dalla pre-release `dati` di GitHub. Le versioni precedenti sono nella storia di git: sito con posta e
+pagamenti fino a `v1.2.1`, cartella condivisa fino a `v1.2.2`, sito statico su GitHub Pages mai unito (PR #6). Tutti i
+testi per l'utente, i commenti e i nomi sono in **italiano**.
 
 ## Struttura
 
-- `taric/app.py`: rotte e API (ingresso con la chiave dell'avvio, profilo, storico, preferiti, IA, Impostazioni del PC
-  sotto `/api/admin/`). Un solo utente (`EMAIL_LOCALE`), sempre amministratore e senza limite mensile. Servizio IA
-  salvato nelle impostazioni del database (`salva_ia`/`applica_ia`); nuove versioni installate da `aggiorna_programma`
-  (pianificatore e pagina Programma). Gli errori si restituiscono come `{"errore": "<messaggio italiano>", "codice": "<codice>"}`.
+- `taric/app.py`: rotte e API comuni (profilo, storico, preferiti, IA, esporta/importa, dati TARIC e registro sotto
+  `/api/admin/`) e, a blocchi `if server:` / `if not server:`, quelle di una sola modalità. Sito: `/accedi`,
+  `/api/registrazione` (modulo firmato, trappola `sito_web`), `/api/accedi`, `/api/esci`, `/api/io/password`,
+  `/api/reimposta-password` (link dell'amministratore), `/api/admin/utenti`, `/api/admin/ia`, `/api/admin/impostazioni`,
+  `/api/admin/backup`, `/api/salute` per Render. Programma: `/entra`, `/api/locale/*`, `/api/admin/locale*` (IA del PC,
+  aggiornamenti). `descrivi_utente` dice `server` all'interfaccia. Gli errori si restituiscono come
+  `{"errore": "<messaggio italiano>", "codice": "<codice>"}`.
 - `taric/db.py`: schema SQLite. Le migrazioni vanno aggiunte in coda alla lista `SCHEMA`; `PRAGMA user_version`
   dice quali sono già applicate. Le tabelle della vecchia versione sito restano, per i database già creati sui PC.
-- `taric/sicurezza.py`: sessioni del browser (cookie dopo `/entra`).
+- `taric/sicurezza.py`: sessioni (cookie `magic_hs` nel sito, `magic_hs_locale` nel programma), password argon2 (solo
+  sito), tentativi limitati (tabella `tentativi`), gettoni monouso (link per la password), modulo firmato.
 - `taric/ia.py`: chiamate al servizio IA (Gemini, Anthropic o compatibile OpenAI, scelto in Impostazioni e applicato con
-  `config.imposta_ia`). Ogni richiesta ha `contesto` (parte fissa, prima: va nella cache del fornitore, per Claude
+  `config.imposta_ia`; nel sito dalle variabili d'ambiente). Limiti: `limite()` per persona (amministratori senza
+  limite), `tetto_raggiunto()` per tutti. Ogni richiesta ha `contesto` (parte fissa, prima: va nella cache del fornitore, per Claude
   con `cache_control`) e `prompt` (la merce, in fondo); la risposta segue `SCHEMI[...]` (strumento obbligato per Claude,
   `json_schema` per OpenAI, `responseSchema` per Gemini) con ritorno al modo semplice se il servizio la rifiuta; sovraccarico
   e 429 si riprovano in `_post`. L'uso del mese conta le classificazioni: le richieste con la stessa `operazione` (la
@@ -52,10 +61,18 @@ e pagamenti (storia di git fino al tag `v1.2.1`), né la cartella condivisa con 
   controllo di dimensione e SHA-256, estrazione della sola cartella `python/` in `programma/<versione>` e scrittura di
   `attuale.txt` (CRLF, per `set /p`): si usa dal prossimo avvio. Nei test `conftest.FintoGitHub`: mai GitHub vero.
 - `taric/nomenclatura_it.json`: testo ufficiale italiano della nomenclatura (estrazione del 1° luglio 2026).
-- `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/`), `locale.html` (aperta senza la chiave
+- Sito su Render: `render.yaml` (Blueprint: servizio Docker, disco, `GEMINI_API_KEY` e `MAGIC_HS_AMMINISTRATORI` da
+  inserire su Render, controllo `/api/salute`), `Dockerfile` (`TARIC_DATI=/var/data/magic-hs/dati`), `taric/__main__.py`
+  (`server`: porta da `$PORT`, intestazioni del proxy HTTPS). `config.indirizzo` da `RENDER_EXTERNAL_URL`.
+- `js/attiva-ia.js` (sito e programma): festa dell'IA collegata (`T.festaIA`, scena `T.festa()` di `disegni.js`,
+  animazioni `.festa` in `app.css` con lo stato finale uguale a quello senza animazioni): nel sito alla prima «Prova»
+  riuscita dell'amministratore, nel programma quando una chiave nuova risponde.
+- `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/`), `accedi.html`, `reimposta.html` e
+  `js/accesso.js` (sito: accesso, richiesta di account, nuova password), `locale.html` (programma: aperta senza la chiave
   dell'avvio), `attesa.html` con `js/attesa.js` (dati non ancora pronti), `js/comune.js` (chiamate API, tema, logo),
   `js/disegni.js` (scena con nave, gru, treno, camion e aereo, inserita negli elementi `data-scena`), `js/app.js`
-  (classificazione, nomenclatura, misure), `js/profilo.js`, `js/gestione.js` (vista Impostazioni: IA, dati, programma, registro). Tema «porto»: blu marina e arancio dei
+  (classificazione, nomenclatura, misure; `T.server` dopo `/api/io`), `js/profilo.js`, `js/gestione.js` (sito: Gestione con
+  Utenti, IA unica, Dati TARIC, Registro; programma: Impostazioni con IA, dati, programma, registro). Tema «porto»: blu marina e arancio dei
   container, colori solo nelle variabili di `css/app.css` (anche quelle `--d-*` delle illustrazioni). Testi brevi: niente
   spiegazioni ovvie nelle pagine. Le icone PNG si rigenerano dal logo di `icons/icona.svg`.
 
@@ -77,8 +94,9 @@ pip install -r requirements-dev.txt
 python -m pytest -q tests
 ```
 
-I test usano `conftest.PC` (un PC con la sua cartella, finti servizio IA e GitHub: `FintoClaude`, `FintoGitHub` con
-programma, dati pronti e fonte). Prova nel browser (Playwright, finto servizio IA): vedi la sezione «Sviluppo» del README. Il programma per Windows si prova
+I test usano `conftest.Sito` (il sito con l'amministratore `CAPO`, `registra`/`accedi`/`collega`) e `conftest.PC` (un PC con
+la sua cartella), con i finti servizio IA e GitHub (`FintoClaude`, `FintoGitHub` con programma, dati pronti e fonte). Nel
+browser: `tests/e2e_sito.js` per il sito e `tests/e2e_locale.js` per il programma (vedi README, «Sviluppo»). Prova nel browser (Playwright, finto servizio IA): vedi la sezione «Sviluppo» del README. Il programma per Windows si prova
 anche con Wine: estrai `dist/MAGIC-HS-*.zip`, copia il pacchetto estratto in `%LOCALAPPDATA%\MAGIC HS\programma\<versione>`
 e lancia l'avvio con `MAGIC_HS_SENZA_BROWSER=1 wine cmd /c "…\Avvia MAGIC HS.cmd"`. Dopo modifiche all'interfaccia
 controlla anche il telefono (larghezza 390 px) e il tema scuro.

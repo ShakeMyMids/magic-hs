@@ -245,10 +245,15 @@ function creaIA() {
   };
 }
 function impostaIA() {
-  var ia = state.utente && state.utente.ia;
+  var u = state.utente, ia = u && u.ia, intanto = ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
   sampleFn = null; state.ai = 'no';
-  if (!ia || !ia.disponibile) state.aiMotivo = 'La classificazione assistita non è attiva: scegli un servizio di intelligenza artificiale in Impostazioni.' +
-    ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
+  if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva: ' +
+    (u && u.server ? (u.ruolo === 'amministratore' ? 'inserisci la chiave di Gemini nel servizio su Render (Gestione, «Intelligenza artificiale»).'
+      : 'la deve attivare l\'amministratore di MAGIC HS.') : 'scegli un servizio di intelligenza artificiale in Impostazioni.') + intanto;
+  else if (ia.tetto) state.aiMotivo = 'Questo mese le classificazioni con l\'IA sono finite per tutti: chiedi all\'amministratore.' + intanto;
+  else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi all\'amministratore.' + intanto;
+  else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' classificazioni con l\'IA di questo mese: ' +
+    'per averne altre chiedi all\'amministratore. Nomenclatura e misure restano consultabili.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
 }
 function aggiornaIo() {
@@ -1177,9 +1182,12 @@ document.addEventListener('taric:tema', function (ev) {
   T.api('PUT', '/api/io/preferenze', { paese: u.preferenze.paese || '', flusso: u.preferenze.flusso || 'import', tema: ev.detail }).catch(function () { /* resta solo su questo dispositivo */ });
 });
 
+/* sito: esce dall'account; programma per Windows: chiude il programma */
 $('#esci').addEventListener('click', function () {
+  if (T.server) { T.api('POST', '/api/esci', null, { resta: true }).then(vaiAllAccesso, vaiAllAccesso); return; }
   T.api('POST', '/api/locale/chiudi', null, { resta: true }).then(function () { chiuso(false); }, function () { chiuso(true); });
 });
+function vaiAllAccesso() { location.href = '/accedi'; }
 
 /* il programma si chiude da solo quando non si usa; la pagina lo tiene vivo e avvisa se non c'è più */
 function chiuso(daSolo) {
@@ -1202,18 +1210,35 @@ function tieniVivo() {
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') controllaVivo(); });
   T.alOffline = controllaVivo;
 }
-T.api('GET', '/api/io').then(function (u) {
-  state.utente = u;
-  $('#chi-nome').textContent = u.nome;
-  $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
-  $('#chi-iniziali').parentNode.title = u.nome;
-  tieniVivo();
-  $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
-  if (u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Impostazioni se c'è una versione nuova
-  T.tema(u.preferenze.tema);
-  state.country = u.preferenze.paese || '';
-  state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
-  impostaIA();
-  return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
-}).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
+/* si parte quando tutta la pagina è caricata (anche profilo.js e gestione.js): nella versione sito le risposte
+   arrivano subito dal browser */
+function avvia() {
+  T.api('GET', '/api/io').then(function (u) {
+    state.utente = u;
+    T.server = !!u.server;
+    $('#chi-nome').textContent = u.nome;
+    $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
+    $('#chi-iniziali').parentNode.title = u.nome + (u.email ? ' · ' + u.email : '');
+    $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
+    if (T.server) {
+      $('#esci').title = 'Esci'; $('#esci').setAttribute('aria-label', 'Esci da MAGIC HS'); $('#esci').innerHTML = T.icona('esci');
+      $('#tab-gestione').lastChild.textContent = 'Gestione';
+      if (u.ruolo === 'amministratore' && T.segnaRichieste) T.segnaRichieste();      // puntino sulla scheda Gestione per le richieste da approvare
+    } else {
+      // ultima versione del programma per Windows: MAGIC HS diventa un sito
+      var nota = document.createElement('p');
+      nota.className = 'nota trasloco';
+      nota.innerHTML = T.icona('info') + '<span><b>MAGIC HS diventa un sito</b>: chiedi l\'indirizzo a chi gestisce MAGIC HS. Storico e preferiti si portano lì con Profilo › I tuoi dati › Esporta.</span>';
+      $('#view-classifica .domanda').appendChild(nota);
+      tieniVivo();
+      if (u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Impostazioni se c'è una versione nuova
+    }
+    T.tema(u.preferenze.tema);
+    state.country = u.preferenze.paese || '';
+    state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
+    impostaIA();
+    return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
+  }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', avvia); else avvia();
 })();

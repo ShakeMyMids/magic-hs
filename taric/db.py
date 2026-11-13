@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -149,6 +150,9 @@ IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
     "ia": {},
     # limite mensile di classificazioni per chi non e' amministratore (sul PC l'utente lo e' sempre: nessun limite)
     "quota_predefinita": 50,
+    # sito: tetto di classificazioni al mese per tutti insieme (None = nessuno) e registrazioni aperte
+    "tetto_mese": None,
+    "registrazione_aperta": True,
 }
 
 
@@ -219,10 +223,12 @@ class Database:
                           "ON CONFLICT(chiave) DO UPDATE SET valore = excluded.valore", (k, json.dumps(val)))
 
     def pulizia(self) -> None:
-        """Sessioni scadute e registro degli eventi piu' vecchio di due anni."""
+        """Sessioni e link scaduti, tentativi di accesso vecchi, registro degli eventi piu' vecchio di due anni."""
         with self.transazione() as c:
             c.execute("DELETE FROM sessioni WHERE scade < ?", (iso(),))
             c.execute("DELETE FROM eventi WHERE quando < ?", (tra(days=-730),))
+            c.execute("DELETE FROM gettoni WHERE scade < ?", (iso(),))
+            c.execute("DELETE FROM tentativi WHERE quando < ?", (time.time() - 86400,))
 
     # ------------------------------------------------------------ registro eventi
     @staticmethod

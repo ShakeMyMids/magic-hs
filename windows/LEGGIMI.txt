@@ -17,6 +17,12 @@ INTELLIGENZA ARTIFICIALE
 resta su questo computer, protetta da Windows. Senza costi puoi usare Ollama, che fa girare il modello
 sul tuo PC. Anche senza IA restano nomenclatura, misure, ricerca per codice, storico e preferiti.
 
+MAGIC HS DIVENTA UN SITO
+Questa è l'ultima versione del programma per Windows: MAGIC HS si usa ora dal browser, con un account.
+Chiedi l'indirizzo a chi gestisce MAGIC HS e richiedi l'account dalla pagina d'accesso.
+Per portare nel sito storico e preferiti: qui in Profilo > I tuoi dati > Esporta, poi nel sito
+Profilo > I tuoi dati > Importa.
+
 COME SI CHIUDE
 Con il pulsante di spegnimento in alto a destra nella pagina. Se chiudi solo il browser, il programma
 si chiude da solo dopo mezz'ora.
