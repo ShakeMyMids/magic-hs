@@ -414,9 +414,10 @@ def test_aggiornamento_rifiuta_pacchetti_sbagliati(ambiente):
         assert not prog.exists() or not list(prog.iterdir()), k
         assert not list(pc.app.state.dati.lavoro.iterdir()) and not (tmp / "fuori.txt").exists()
     # GitHub non raggiungibile o senza versioni: si continua a lavorare, con un messaggio
-    for k, gh in enumerate((FintoGitHub(errore=503), FintoGitHub())):
+    for k, gh in enumerate((FintoGitHub(errore=503), FintoGitHub(), FintoGitHub(errore=403))):
         r = PC(tmp, mp, nome=f"giu{k}", github=gh).entra().get("/api/admin/locale/aggiornamento").json()
         assert r["pronta"] == "" and r["errore"]
+    assert "troppe richieste" in r["errore"]
     # una versione piu' vecchia di quella in uso non si installa; senza cartella dei programmi non si controlla nulla
     gh = FintoGitHub("0.0.1", pacchetto("0.0.1"))
     r = PC(tmp, mp, nome="vecchia", github=gh).entra().get("/api/admin/locale/aggiornamento").json()

@@ -139,6 +139,8 @@ class Aggiornamenti:
         except httpx.HTTPError as e:
             log.warning("controllo delle versioni non riuscito: %s", e)
             raise ErroreAggiornamento("GitHub non risponde: controlla la connessione o il proxy aziendale")
+        if r.status_code in (403, 429):        # limite di richieste all'API per indirizzo (molti PC dietro la stessa rete)
+            raise ErroreAggiornamento("GitHub ha ricevuto troppe richieste da questa rete: riprovo più tardi")
         if r.status_code != 200:
             raise ErroreAggiornamento(f"GitHub risponde con l'errore {r.status_code}")
         try:
