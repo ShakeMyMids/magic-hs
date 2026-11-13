@@ -27,7 +27,7 @@ async function classifica(p, testo) {
 }
 async function cerca(p, testo) {
   await p.fill('#q', testo);
-  await p.waitForSelector('#risultati .trow.ris');
+  await p.waitForSelector('#risultati[data-q="' + testo + '"] .trow.ris');
 }
 async function senzaScorrimento(p) { return p.evaluate(() => document.documentElement.scrollWidth <= innerWidth); }
 async function richiedi(p, nome, email, password, messaggio) {
@@ -67,6 +67,11 @@ async function accedi(p, email, password) {
     'prima pagina: ricerca per parole, IA spenta');
   await cerca(capo, 'bicicletta');
   ok((await capo.$$('#risultati .trow.ris')).length > 3 && await capo.isVisible('#risultati >> text=Biciclette con cuscinetti a sfere'), 'risultati per parola sotto la casella');
+  await cerca(capo, 'divano');
+  ok(await capo.isVisible('#risultati >> text=mobili per sedersi'), 'sinonimi: «divano» trova i mobili per sedersi');
+  await cerca(capo, 'scarpe di pelle');
+  ok(await capo.isVisible('#risultati >> text=Calzature con suole esterne di cuoio'), 'sinonimi e parole vuote: «scarpe di pelle» trova le calzature di cuoio');
+  await cerca(capo, 'bicicletta');
   await capo.click('#risultati .trow.ris.L button[data-act="usa"]');
   await capo.waitForSelector('.timbro >> text=Scelta manuale');
   ok(await capo.isVisible('#risultati .link.indietro') && !(await capo.isVisible('#risultati .trow.ris')), 'Usa: scheda del codice, risultati ridotti');

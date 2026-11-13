@@ -48,7 +48,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 - `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/`), `accedi.html`, `reimposta.html` e
   `js/accesso.js` (accesso, richiesta di account, nuova password), `attesa.html` con `js/attesa.js` (dati non ancora
   pronti), `js/comune.js` (chiamate API, tema, logo), `js/disegni.js` (scena con nave, gru, treno, camion e aereo, inserita
-  negli elementi `data-scena`), `js/app.js` (prima pagina: ricerca per parola o codice con `cerca()` e risultati in `#risultati`, oppure con
+  negli elementi `data-scena`), `js/app.js` (prima pagina: ricerca per parola o codice con `cerca()`, che ignora le parole vuote e usa i sinonimi di
+  `js/sinonimi.js`, e risultati in `#risultati`, oppure con
   l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; albero
   della nomenclatura; misure), `js/profilo.js`, `js/gestione.js`
   (Utenti, Intelligenza artificiale, Dati TARIC, Registro), `js/attiva-ia.js` (festa alla prima «Prova» riuscita
@@ -75,7 +76,8 @@ pip install -r requirements-dev.txt
 python -m pytest -q tests
 ```
 
-I test usano `conftest.Sito` (il sito con l'amministratore `CAPO`, `registra`/`accedi`/`capo`/`collega`/`riavvia`; `ia=False`
+`tests/test_sinonimi.py` controlla che ogni termine di `js/sinonimi.js` esista nel testo italiano della nomenclatura:
+per un nuovo sinonimo scegli parole o espressioni del testo ufficiale. I test usano `conftest.Sito` (il sito con l'amministratore `CAPO`, `registra`/`accedi`/`capo`/`collega`/`riavvia`; `ia=False`
 ed `extra` per altri servizi IA, `versioni` per i dati già installati) con i finti servizio IA e GitHub (`FintoClaude`,
 `FintoGitHub` con dati pronti e fonte); `sito_claude` è il sito con Claude. Prova nel browser (Playwright, finto servizio
 IA): `tests/e2e_sito.js`, vedi la sezione «Sviluppo» del README. Dopo modifiche all'interfaccia controlla anche il telefono

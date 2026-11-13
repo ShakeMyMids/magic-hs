@@ -311,7 +311,7 @@ function renderRisultati() {
   $('.domanda').classList.toggle('cercando', state.modo === 'parole' && !!q);
   if (state.modo !== 'parole' || !q) { el.hidden = true; el.innerHTML = ''; return; }
   var res = cerca(q), testuale = !/^[\d\s.]+$/.test(q), h;
-  el.hidden = false;
+  el.hidden = false; el.setAttribute('data-q', q);
   if (state.risChiusi) {
     el.innerHTML = res.length ? '<button class="link indietro" type="button" data-act="mostra-ris">' + T.icona('indietro') + 'Torna ai risultati per «' + esc(q) + '»</button>' : '';
     el.hidden = !res.length; return;
@@ -1034,6 +1034,44 @@ function renderEsito() {
 var LOW = null;
 /* search form of a text: lower case, no accents, words separated by single spaces, a space at both ends */
 function piano(s) { return ' ' + s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim() + ' '; }
+/* parole che non servono a cercare: «scarpe di pelle» cerca «scarpe» e «pelle» */
+var VUOTE = {};
+'di da del dello della dei degli delle per con in il lo la le gli un una uno ed al allo alla ai agli alle su tra fra'.split(' ').forEach(function (p) { VUOTE[p] = 1; });
+/* singolare e plurale hanno la stessa radice: per le parole più lunghe si toglie la vocale finale («bicicletta» trova
+   anche «biciclette», «orologio» trova «orologi», «fungo» trova «funghi») */
+function radice(t) { return (t.length >= 4 && /^[a-z]+$/.test(t)) ? t.replace(/[aeio]$/, '') : t; }
+/* sinonimi (js/sinonimi.js) per radice: «scarpe» e «scarpa» portano entrambe a «calzature» */
+var SIN = null;
+function sinonimiDi(r) {
+  if (!SIN) {
+    SIN = {};
+    var s = window.TARIC_SINONIMI || {};
+    Object.keys(s).forEach(function (k) {
+      var c = radice(piano(k).trim());
+      SIN[c] = (SIN[c] || []).concat(s[k].map(function (x) { return piano(x).trim(); }));
+    });
+  }
+  return SIN[r] || [];
+}
+/* punteggio di una parola (o espressione) in un testo già «piano»: più basso è meglio, -1 = assente. Un sinonimo vale
+   solo come parola intera o inizio di parola e viene un po' dopo la parola cercata. */
+function parolaCercata(parola, sinonimo) {
+  var extra = sinonimo ? 1 : 0;
+  if (parola.indexOf(' ') >= 0) return function (t) { var p = t.indexOf(' ' + parola); return p < 0 ? -1 : 1 + (p > 0 ? 2 : 0) + extra; };
+  var r = radice(parola), forma = new RegExp(' ' + r + '(?:[aeio]|io|h[ei])? ');
+  return function (t) {
+    var pos = t.indexOf(' ' + parola + ' '), sc = 0, mm;                         // la parola stessa
+    if (pos < 0) {
+      if ((pos = t.indexOf(' ' + parola)) >= 0) sc += 1;                         // inizio di una parola
+      else if ((mm = forma.exec(t))) { pos = mm.index; sc += 1; }                // stessa parola, altra desinenza
+      else if (sinonimo) return -1;
+      else if ((pos = t.indexOf(' ' + r)) >= 0) sc += 3;                         // stessa radice, parola più lunga
+      else if ((pos = t.indexOf(r)) >= 0) sc += 5;                               // dentro una parola
+      else return -1;
+    }
+    return sc + (pos > 0 ? 2 : 0) + extra;
+  };
+}
 function cerca(q) {
   var out = [], d = digits(q);
   if (/^[\d\s.]+$/.test(q) && d.length >= 2) {
@@ -1041,25 +1079,19 @@ function cerca(q) {
     return out;
   }
   if (!LOW) { LOW = new Array(N); for (var k = 0; k < N; k++) LOW[k] = piano(DESC[k]); }
-  var toks = piano(q).trim().split(' ').filter(function (t) { return t.length > 1; });
+  var toks = piano(q).trim().split(' ').filter(function (t) { return t.length > 1 && !VUOTE[t]; });
   if (!toks.length) return out;
-  // singular and plural share a stem: for longer words the final vowel is dropped ("bicicletta" also finds "biciclette",
-  // "orologio" finds "orologi", "fungo" finds "funghi")
-  var rad = toks.map(function (t) { return (t.length >= 4 && /^[a-z]+$/.test(t)) ? t.replace(/[aeio]$/, '') : t; });
-  var forma = rad.map(function (r) { return new RegExp(' ' + r + '(?:[aeio]|io|h[ei])? '); });
+  // ogni parola cercata vale anche per i suoi sinonimi; un testo va bene se contiene tutte le parole (o un loro sinonimo)
+  var alt = toks.map(function (t) {
+    return [parolaCercata(t, false)].concat(sinonimiDi(radice(t)).map(function (s) { return parolaCercata(s, true); }));
+  });
   var hits = [];
   for (var j = 0; j < N; j++) {
     var t = LOW[j], ok = true, sc = 0;
-    for (var m = 0; m < toks.length; m++) {
-      var pos = t.indexOf(' ' + toks[m] + ' '), mm;                                  // the word itself
-      if (pos < 0) {
-        if ((pos = t.indexOf(' ' + toks[m])) >= 0) sc += 1;                           // beginning of a word
-        else if ((mm = forma[m].exec(t))) { pos = mm.index; sc += 1; }                // same word, other ending
-        else if ((pos = t.indexOf(' ' + rad[m])) >= 0) sc += 3;                       // same stem, longer word
-        else if ((pos = t.indexOf(rad[m])) >= 0) sc += 5;                             // inside a word
-        else { ok = false; break; }
-      }
-      if (pos > 0) sc += 2;
+    for (var m = 0; m < alt.length && ok; m++) {
+      var best = -1;
+      for (var n = 0; n < alt[m].length; n++) { var p = alt[m][n](t); if (p >= 0 && (best < 0 || p < best)) best = p; }
+      if (best < 0) ok = false; else sc += best;
     }
     if (ok) hits.push([sc + HP[j] / 2 + Math.min(t.length, 200) / 40, j]);
   }
@@ -1217,7 +1249,7 @@ function start() {
   renderAll();
   state.avviato = true;
 }
-window.TARIC_DEBUG = { misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
+window.TARIC_DEBUG = { cerca: function (q) { return cerca(q).map(function (i) { return CODE[i]; }); }, misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
 
 /* funzioni usate dalle viste Profilo e Gestione */
 T.app = {
