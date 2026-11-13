@@ -1,8 +1,7 @@
 """Sessioni del browser, password, gettoni monouso, limiti ai tentativi e firma dei moduli.
 
-Programma per Windows: un solo utente, che entra con la chiave dell'avvio (/entra) e tiene un cookie di sessione.
-Sito (modalita' server): account con email e password (argon2), registrazione con approvazione dell'amministratore,
-link monouso per reimpostare la password (li genera l'amministratore: niente posta), tentativi limitati."""
+Account con email e password (argon2), registrazione con approvazione dell'amministratore, link monouso per reimpostare
+la password (li genera l'amministratore: niente posta), tentativi limitati."""
 from __future__ import annotations
 
 import hashlib
@@ -48,7 +47,7 @@ def problema_password(password: str, email: str = "") -> str | None:
     return None
 
 
-def _hasher():                     # argon2 serve solo al sito: il programma per Windows non lo carica
+def _hasher():
     from argon2 import PasswordHasher
     return PasswordHasher()
 

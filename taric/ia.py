@@ -1,7 +1,7 @@
-"""Chiamate all'intelligenza artificiale del servizio scelto su questo PC, con il conteggio delle classificazioni del
-mese. La chiave resta nel programma; il browser manda solo il testo della richiesta.
+"""Chiamate all'intelligenza artificiale del servizio del sito, con il conteggio delle classificazioni del
+mese. La chiave resta sul server; il browser manda solo il testo della richiesta.
 
-Fornitori supportati (scelti in Impostazioni, vedi config._ia):
+Fornitori supportati (scelti dalle variabili del server, vedi config._ia):
   gemini     API di Google Gemini (generateContent)
   anthropic  API Messages di Anthropic (Claude)
   openai     qualsiasi servizio compatibile con OpenAI Chat Completions: Azure OpenAI, Groq, Mistral, OpenRouter,
@@ -189,8 +189,8 @@ class ServizioIA:
 
     # ------------------------------------------------------------------ limite mensile (in classificazioni)
     def limite(self, c: sqlite3.Connection, utente: sqlite3.Row) -> int | None:
-        """Classificazioni al mese consentite; None = senza limite. L'utente del PC (amministratore) non ha limite: il
-        limite per persona (0 = IA spenta) resta per i database delle versioni precedenti."""
+        """Classificazioni al mese consentite; None = senza limite. Gli amministratori non hanno limite; per gli altri vale
+        il limite personale (utenti.quota_ia, 0 = IA spenta) o quello predefinito."""
         if utente["quota_ia"] is not None:
             return int(utente["quota_ia"])
         if utente["ruolo"] == "amministratore":
@@ -215,7 +215,7 @@ class ServizioIA:
 
     @staticmethod
     def uso_mese(c: sqlite3.Connection, mese: str | None = None) -> dict[str, int]:
-        """Uso del mese su questo PC: classificazioni, richieste e token (per Impostazioni)."""
+        """Uso del mese di tutto il sito: classificazioni, richieste e token (per Gestione)."""
         r = c.execute("SELECT COUNT(*) AS richieste, COALESCE(SUM(token_in), 0) AS token_in, COALESCE(SUM(token_cache), 0) AS token_cache, "
                       "COALESCE(SUM(token_out), 0) AS token_out FROM uso_ia WHERE mese = ?", (mese or mese_corrente(),)).fetchone()
         utenti = [x[0] for x in c.execute("SELECT DISTINCT utente_id FROM uso_ia WHERE mese = ? AND utente_id IS NOT NULL", (mese or mese_corrente(),))]

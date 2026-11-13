@@ -1,8 +1,7 @@
 name: Dati TARIC
-# Prepara i dati TARIC del mese con gli stessi controlli del programma (strumenti/dati_mese.py) e li pubblica nella
-# pagina «dati» della pagina delle versioni (una pre-release: non è una versione del programma), come dati-AAAA-MM-01.zip.
-# Il sito su Render e i PC con il programma per Windows li scaricano da lì (se non ci sono ancora, li preparano da sé dalla
-# fonte). Gira ogni giorno dall'1 al 12 del mese finché il mese non è pubblicato, oppure a mano (Actions > Dati TARIC >
+# Prepara i dati TARIC del mese con gli stessi controlli del sito (strumenti/dati_mese.py) e li pubblica nella
+# pagina «dati» della pagina delle versioni (una pre-release: non è una versione di MAGIC HS), come dati-AAAA-MM-01.zip.
+# Il sito su Render li scarica da lì (se non ci sono ancora, li prepara da sé dalla fonte). Gira ogni giorno dall'1 al 12 del mese finché il mese non è pubblicato, oppure a mano (Actions > Dati TARIC >
 # Run workflow, con il mese).
 # Nota: GitHub sospende i flussi pianificati dei progetti pubblici dopo 60 giorni senza attività; a ogni giro il flusso
 # si riattiva da solo per evitarlo. Se fosse sospeso: Actions > Dati TARIC > Enable workflow.
@@ -40,7 +39,7 @@ jobs:
           nome="dati-$mese-01.zip"
           if ! gh release view dati --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release create dati --repo "$GITHUB_REPOSITORY" --prerelease --title "Dati TARIC" \
-              --notes "Dati TARIC del mese pronti per MAGIC HS (scaricati da soli dal programma). Fonte: Commissione europea, DG TAXUD."
+              --notes "Dati TARIC del mese pronti per MAGIC HS (li scarica da solo il sito). Fonte: Commissione europea, DG TAXUD."
           fi
           # tiene attivo il flusso pianificato (GitHub lo sospende dopo 60 giorni senza attività nel progetto)
           gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/dati.yml/enable" > /dev/null || true

@@ -1,4 +1,4 @@
-"""Strumenti comuni dei test: finti servizi esterni (IA e GitHub), un «PC» con MAGIC HS e il «sito» (modalita' server)."""
+"""Strumenti comuni dei test: finti servizi esterni (IA e GitHub) e il sito MAGIC HS come su Render."""
 from __future__ import annotations
 
 import hashlib
@@ -14,8 +14,6 @@ from fastapi.testclient import TestClient
 from taric import sicurezza as S
 from taric.app import crea_app
 from taric.config import carica
-
-CHIAVE = "chiave-di-ingresso-di-prova"
 
 
 class FintoClaude:
@@ -96,14 +94,13 @@ def sha(b: bytes) -> str:
 
 
 class FintoGitHub:
-    """Finta GitHub: ultima versione del programma con il suo pacchetto per Windows, pagina «dati» con i dati pronti dei
-    mesi (dati={"AAAA-MM": archivio}) ed estrazioni della fonte (fonte={"AAAA-MM": archivio}). Quello che manca risponde
-    404 (con errore=... tutto risponde con quell'errore): i test non si collegano mai a GitHub o alla fonte vera."""
+    """Finta GitHub: pagina «dati» con i dati pronti dei mesi (dati={"AAAA-MM": archivio}) ed estrazioni della fonte
+    (fonte={"AAAA-MM": archivio}). Quello che manca risponde 404 (con errore=... tutto risponde con quell'errore): i test
+    non si collegano mai a GitHub o alla fonte vera."""
 
-    def __init__(self, versione: str = "", pacchetto: bytes = b"", digest: str | None = None, errore: int = 0,
-                 dati: dict[str, bytes] | None = None, digest_dati: dict[str, str] | None = None, fonte: dict[str, bytes] | None = None):
-        self.versione, self.pacchetto, self.errore = versione, pacchetto, errore
-        self.digest = digest if digest is not None else sha(pacchetto)
+    def __init__(self, errore: int = 0, dati: dict[str, bytes] | None = None, digest_dati: dict[str, str] | None = None,
+                 fonte: dict[str, bytes] | None = None):
+        self.errore = errore
         self.dati, self.digest_dati, self.fonte = dati or {}, digest_dati or {}, fonte or {}
         self.richieste: list[str] = []
 
@@ -123,94 +120,18 @@ class FintoGitHub:
         if "/eu-taric-" in p:                                   # fonte dell'estrazione (config.fonte_url)
             m = p.rsplit("eu-taric-", 1)[1][:7]
             return httpx.Response(200, content=self.fonte[m]) if m in self.fonte else httpx.Response(404)
-        if not self.versione:
-            return httpx.Response(404, json={"message": "Not Found"})
-        nome = f"magic-hs-windows-{self.versione}.zip"
-        if p.endswith("/releases/latest"):
-            return httpx.Response(200, json={
-                "tag_name": f"v{self.versione}", "draft": False, "prerelease": False, "published_at": "2026-11-20T10:00:00Z",
-                "html_url": f"https://github.com/ShakeMyMids/magic-hs/releases/tag/v{self.versione}",
-                "assets": [{"name": f"MAGIC-HS-{self.versione}.zip", "size": 1, "browser_download_url": "https://example.invalid/x"},
-                           {"name": nome, "size": len(self.pacchetto), "digest": self.digest,
-                            "browser_download_url": f"https://github.com/ShakeMyMids/magic-hs/releases/download/v{self.versione}/{nome}"}]})
-        if p.endswith("/" + nome):
-            return httpx.Response(200, content=self.pacchetto)
         return httpx.Response(404)
-
-
-def pacchetto(versione: str, interna: str = "", altri: dict[str, bytes | str] | None = None) -> bytes:
-    """Pacchetto del programma per Windows (finto ma valido); interna = versione scritta dentro, altri = file in piu'."""
-    b = io.BytesIO()
-    with zipfile.ZipFile(b, "w") as z:
-        z.writestr("python/pythonw.exe", b"MZ")
-        z.writestr("python/Lib/site-packages/taric/__init__.py", f'"""MAGIC HS"""\n__version__ = "{interna or versione}"\n')
-        z.writestr("Avvia MAGIC HS.cmd", "@echo off\r\n")
-        for nome, contenuto in (altri or {}).items():
-            z.writestr(nome, contenuto)
-    return b.getvalue()
-
-
-class PC:
-    """Un PC con MAGIC HS: la cartella dell'utente (dati, programma), finti IA e GitHub. Il nome e' anche il nome utente
-    di Windows. versioni = dati TARIC gia' installati; ia = servizio IA salvato come dalla pagina Impostazioni;
-    avvio = cartella di «Avvia MAGIC HS.cmd»."""
-
-    def __init__(self, tmp: Path, mp: pytest.MonkeyPatch, nome: str = "mrossi", versioni: tuple[str, ...] = (),
-                 ia: dict[str, str] | None = None, extra: dict[str, str] | None = None, github: FintoGitHub | None = None,
-                 avvio: Path | None = None):
-        self.cartella = tmp / nome
-        for v in versioni:                                    # dati gia' installati su questo PC prima dell'avvio
-            dati_finti(self.cartella / "dati" / "taric" / "versioni", v)
-            (self.cartella / "dati" / "taric" / "attiva.txt").write_text(v)
-        self.cfg = carica({"TARIC_DATI": str(self.cartella / "dati"), "TARIC_PORTA": "8765", "TARIC_PROGRAMMI": str(self.cartella / "programma"),
-                           **({"TARIC_AVVIO": str(avvio)} if avvio else {}), **(extra or {})})
-        self.claude = FintoClaude()
-        self.github = github or FintoGitHub()
-        web = httpx.Client(transport=httpx.MockTransport(self.github), follow_redirects=True)
-        with mp.context() as m:
-            m.setenv("USERNAME", nome)
-            self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False,
-                                chiave_ingresso=CHIAVE, istanza="prova", client_aggiornamenti=web, client_dati=web)
-        self.attese: list[float] = []
-        self.app.state.ia.attendi = self.attese.append          # i nuovi tentativi non aspettano davvero
-        self.fermato = False
-
-        def ferma() -> None:
-            self.fermato = True
-        self.app.state.ferma = ferma
-        if ia is not None:
-            r = self.entra().put("/api/admin/locale/ia", json=ia)
-            assert r.status_code == 200, r.text
-
-    def client(self, base: str = "http://127.0.0.1:8765") -> TestClient:
-        return TestClient(self.app, base_url=base, headers={"X-Taric": "1"})
-
-    def entra(self) -> TestClient:
-        c = self.client()
-        r = c.get(f"/entra?k={CHIAVE}", follow_redirects=False)
-        assert r.status_code == 303 and "magic_hs_locale" in r.cookies
-        return c
-
-    def attiva(self) -> str | None:
-        return self.app.state.dati.attiva()
 
 
 @pytest.fixture
 def ambiente(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, pytest.MonkeyPatch]:
     monkeypatch.setenv("TARIC_CONFIG", str(tmp_path / "nessuno.env"))
     for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "TARIC_IA_FORNITORE", "TARIC_IA_URL", "TARIC_IA_CHIAVE",
-              "TARIC_IA_MODELLO", "TARIC_IA_MODELLO_RAPIDO", "TARIC_MODELLO", "TARIC_MODELLO_RAPIDO", "TARIC_DATI", "TARIC_AVVIO",
-              "TARIC_PROGRAMMI", "TARIC_DATI_URL", "TARIC_AGGIORNAMENTI_URL", "TARIC_FONTE_URL", "TARIC_SERVER",
+              "TARIC_IA_MODELLO", "TARIC_IA_MODELLO_RAPIDO", "TARIC_MODELLO", "TARIC_MODELLO_RAPIDO", "TARIC_DATI",
+              "TARIC_DATI_URL", "TARIC_FONTE_URL", "TARIC_SCARICA_DATI",
               "MAGIC_HS_AMMINISTRATORI", "MAGIC_HS_INDIRIZZO", "RENDER_EXTERNAL_URL"):
         monkeypatch.delenv(k, raising=False)
     return tmp_path, monkeypatch
-
-
-@pytest.fixture
-def pc(ambiente) -> PC:
-    """Un PC con i dati di novembre 2026 e Claude come servizio IA."""
-    tmp, mp = ambiente
-    return PC(tmp, mp, versioni=("2026-11-01",), ia={"fornitore": "anthropic", "chiave": "chiave-di-prova"})
 
 
 INDIRIZZO = "https://magic-hs.onrender.com"
@@ -218,18 +139,22 @@ CAPO = "capo@azienda.it"
 
 
 class Sito:
-    """Il sito (modalita' server, come su Render) con i dati di novembre 2026, finti IA e GitHub. L'amministratore e'
-    CAPO (MAGIC_HS_AMMINISTRATORI); ia=True mette la chiave di Gemini nelle variabili del server."""
+    """Il sito come su Render, con finti IA e GitHub. L'amministratore e' CAPO (MAGIC_HS_AMMINISTRATORI); ia=True mette
+    la chiave di Gemini nelle variabili del server (altri servizi: extra con TARIC_IA_*); versioni = dati TARIC gia'
+    installati (novembre 2026); nome = cartella del servizio."""
 
-    def __init__(self, tmp: Path, mp: pytest.MonkeyPatch, ia: bool = True, extra: dict[str, str] | None = None):
-        self.cartella = tmp / "render"
-        dati_finti(self.cartella / "dati" / "taric" / "versioni", "2026-11-01")
-        (self.cartella / "dati" / "taric" / "attiva.txt").write_text("2026-11-01")
+    def __init__(self, tmp: Path, mp: pytest.MonkeyPatch, ia: bool = True, extra: dict[str, str] | None = None,
+                 versioni: tuple[str, ...] = ("2026-11-01",), github: FintoGitHub | None = None, nome: str = "render"):
+        self.cartella = tmp / nome
+        for v in versioni:
+            dati_finti(self.cartella / "dati" / "taric" / "versioni", v)
+            (self.cartella / "dati" / "taric" / "attiva.txt").write_text(v)
         self.claude = FintoClaude()
-        self.github = FintoGitHub()
+        self.github = github or FintoGitHub()
+        self.attese: list[float] = []
         originale = S.verifica_modulo          # nelle prove il modulo si invia subito (niente attesa minima contro i bot)
         mp.setattr(S, "verifica_modulo", lambda segreto, valore, minimo_s=3, massimo_s=7200: originale(segreto, valore, 0, massimo_s))
-        self.extra = {"TARIC_SERVER": "1", "TARIC_DATI": str(self.cartella / "dati"), "MAGIC_HS_AMMINISTRATORI": CAPO,
+        self.extra = {"TARIC_DATI": str(self.cartella / "dati"), "MAGIC_HS_AMMINISTRATORI": CAPO,
                       "MAGIC_HS_INDIRIZZO": INDIRIZZO, **({"GEMINI_API_KEY": "chiave-gemini-server"} if ia else {}), **(extra or {})}
         self.mp = mp
         self.riavvia()
@@ -239,9 +164,8 @@ class Sito:
         self.extra.update(extra)
         self.cfg = carica(self.extra)
         web = httpx.Client(transport=httpx.MockTransport(self.github), follow_redirects=True)
-        self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False,
-                            client_aggiornamenti=web, client_dati=web)
-        self.app.state.ia.attendi = lambda s: None
+        self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False, client_dati=web)
+        self.app.state.ia.attendi = self.attese.append          # i nuovi tentativi non aspettano davvero
 
     def client(self, base: str = INDIRIZZO) -> TestClient:
         return TestClient(self.app, base_url=base, headers={"X-Taric": "1"})
@@ -276,8 +200,18 @@ class Sito:
     def id_di(self, capo: TestClient, email: str) -> int:
         return next(x["id"] for x in capo.get("/api/admin/utenti").json()["utenti"] if x["email"] == email)
 
+    def attiva(self) -> str | None:
+        return self.app.state.dati.attiva()
+
 
 @pytest.fixture
 def sito(ambiente) -> Sito:
     tmp, mp = ambiente
     return Sito(tmp, mp)
+
+
+@pytest.fixture
+def sito_claude(ambiente) -> Sito:
+    """Il sito con Claude (ANTHROPIC_API_KEY) come servizio IA."""
+    tmp, mp = ambiente
+    return Sito(tmp, mp, ia=False, extra={"ANTHROPIC_API_KEY": "chiave-di-prova"})

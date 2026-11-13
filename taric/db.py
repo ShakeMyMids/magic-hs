@@ -1,7 +1,7 @@
-"""Database SQLite del PC: schema, connessioni, impostazioni e registro degli eventi.
+"""Database SQLite del sito: schema, connessioni, impostazioni e registro degli eventi.
 
-Lo schema conserva le tabelle della vecchia versione sito (utenti, gettoni, abbonamenti...): i database gia' creati sui
-PC restano validi e le migrazioni si aggiungono sempre in coda a SCHEMA. Sul PC c'e' un solo utente."""
+Lo schema conserva le tabelle delle versioni precedenti (abbonamenti, pagamenti...): le migrazioni si aggiungono sempre
+in coda a SCHEMA, cosi' un database esistente resta valido."""
 from __future__ import annotations
 
 import json
@@ -146,11 +146,9 @@ SCHEMA = [
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
-    # servizio IA di questo PC: fornitore, url, modello, modello_rapido, chiave (protetta, segreti.proteggi), impostato, aggiornate
-    "ia": {},
-    # limite mensile di classificazioni per chi non e' amministratore (sul PC l'utente lo e' sempre: nessun limite)
+    # limite mensile di classificazioni per chi non e' amministratore (None = senza limite)
     "quota_predefinita": 50,
-    # sito: tetto di classificazioni al mese per tutti insieme (None = nessuno) e registrazioni aperte
+    # tetto di classificazioni al mese per tutti insieme (None = nessuno) e registrazioni aperte
     "tetto_mese": None,
     "registrazione_aperta": True,
 }

@@ -71,10 +71,10 @@ a{color:var(--accento);text-underline-offset:3px;text-decoration-thickness:1px}
 ::selection{background:var(--accento-tenue)}
 .ico{width:1.15em;height:1.15em;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.2em}
 
-.page{max-width:1160px;margin:0 auto;padding:0 20px 64px;display:flex;flex-direction:column;gap:22px}
+.page{max-width:1160px;margin:0 auto;padding:0 max(20px,env(safe-area-inset-right)) 64px max(20px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:22px}
 
 /* ================================================================ barra in alto */
-.barra{position:sticky;top:0;z-index:30;margin:0 -20px;padding:12px 20px;display:flex;align-items:center;gap:16px;
+.barra{position:sticky;top:0;z-index:30;margin:0 -20px;padding:calc(12px + env(safe-area-inset-top)) 20px 12px;display:flex;align-items:center;gap:16px;
   background:var(--vetro);-webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid transparent;transition:border-color .2s}
 .barra.staccata{border-bottom-color:var(--linea)}
 .logo{display:inline-flex;align-items:center;gap:10px;color:var(--inchiostro);text-decoration:none;font:700 18px/1 var(--f);font-stretch:92%;letter-spacing:.01em;white-space:nowrap}
@@ -100,17 +100,25 @@ a{color:var(--accento);text-underline-offset:3px;text-decoration-thickness:1px}
 .iniziali{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accento-tenue);color:var(--accento-forte);font:700 12.5px/1 var(--f);letter-spacing:.02em}
 .chi b{font-weight:550;max-width:16ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chi .tasto-ico{width:30px;height:30px}
+/* tasto per installare MAGIC HS (js/installa.js): solo icona, con la scritta quando c'è posto */
+.tasto-ico.installa span{display:none}
+@media (min-width:1101px){
+  .tasto-ico.installa{display:inline-flex;align-items:center;width:auto;gap:7px;padding:0 13px;border-color:var(--linea);background:var(--carta);color:var(--accento-forte);font:600 14px/1 var(--f)}
+  .tasto-ico.installa span{display:inline}
+}
+@media (min-width:901px) and (max-width:1100px){.chi b{display:none}}
+@media (max-width:374px){.lato{gap:0}.logo{gap:8px}.barra{gap:6px}}
 
-@media (max-width:760px){
-  .page{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+@media (max-width:900px){
+  .page{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
   /* niente sfocatura sulla barra in alto: farebbe da riferimento alla barra fissa in basso */
-  .barra{padding:10px 16px;margin:0 -16px;gap:10px;-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--fondo)}
-  .page{padding-left:16px;padding-right:16px}
+  .barra{padding:calc(10px + env(safe-area-inset-top)) 16px 10px;margin:0 -16px;gap:10px;-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--fondo)}
+  .page{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
   .lato,.schede + .lato{margin-left:auto}
   .chi b{display:none}
   .chi{padding:2px;gap:2px}
   /* le sezioni diventano la barra in basso, come in un'app */
-  .schede{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:40;margin:0;padding:6px;
+  .schede{position:fixed;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom));z-index:40;width:min(560px,calc(100% - 20px));margin:0 auto;padding:6px;
     background:var(--vetro);-webkit-backdrop-filter:saturate(1.4) blur(16px);backdrop-filter:saturate(1.4) blur(16px);border-radius:22px;box-shadow:var(--ombra-alta)}
   .schede a{flex:1 1 0;flex-direction:column;gap:4px;padding:8px 2px 7px;border-radius:16px;font-size:11.5px;font-weight:600}
   .schede a .ico{width:21px;height:21px}
@@ -175,14 +183,36 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 .domanda{position:relative}
 .cerca-merce{position:relative}
 .cerca-merce > .ico{position:absolute;left:16px;top:17px;width:21px;height:21px;color:var(--secondario);pointer-events:none;transition:color .2s}
-#q{display:block;width:100%;min-height:96px;padding:14px 16px 14px 48px;border:1px solid var(--linea-forte);border-radius:16px;background:var(--carta);
-  font:450 18px/1.45 var(--f);resize:vertical;transition:border-color .2s,box-shadow .2s}
+#q{display:block;width:100%;min-height:58px;padding:14px 52px 14px 48px;border:1px solid var(--linea-forte);border-radius:16px;background:var(--carta);
+  font:450 18px/1.45 var(--f);resize:none;transition:border-color .2s,box-shadow .2s,min-height .25s var(--dolce)}
+.modo-ia #q{min-height:110px;resize:vertical}
+.cerca-merce .azzera{position:absolute;right:8px;top:9px}
 #q:hover{border-color:var(--secondario)}
 #q:focus{outline:none;border-color:var(--accento);box-shadow:0 0 0 5px var(--accento-tenue)}
 .cerca-merce:focus-within > .ico{color:var(--accento)}
 #q::placeholder{color:var(--secondario);opacity:.75}
 .domanda .dato.tardi{color:var(--ambra);font-weight:600}
 @media (max-width:560px){#q{font-size:17px}}
+/* interruttore dell'intelligenza artificiale */
+.comandi .interruttore{margin-left:auto}
+.interruttore{position:relative;display:inline-flex;align-items:center;gap:10px;min-height:40px;padding:2px 2px 2px 0;font:600 14.5px/1.2 var(--f);color:var(--secondario);cursor:pointer;user-select:none;-webkit-user-select:none}
+.interruttore input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.interruttore .pista{position:relative;flex:none;width:46px;height:28px;border-radius:999px;background:var(--linea-forte);transition:background-color .2s}
+.interruttore .pista::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--carta);box-shadow:0 1px 3px rgba(10,20,30,.3);transition:transform .25s var(--dolce)}
+.interruttore input:checked + .pista{background:var(--accento)}
+.interruttore input:checked + .pista::after{transform:translateX(18px)}
+.interruttore input:focus-visible + .pista{outline:2px solid var(--accento);outline-offset:3px}
+.interruttore span:last-child{display:inline-flex;align-items:center;gap:6px}
+.interruttore .ico{width:17px;height:17px}
+.interruttore input:checked ~ span:last-child{color:var(--accento-forte)}
+/* risultati della ricerca per parola o codice, sotto la casella */
+#risultati,#esito:not(:empty){margin-top:16px}
+.box.ris-box{padding:16px 6px 6px}
+.ris-box > .lab{padding:0 12px}
+.trow.ris{grid-template-columns:118px minmax(0,1fr) auto;padding-left:12px}
+.trow.ris .ctx{grid-column:2 / -1}
+.link.indietro{font-weight:600;text-decoration:none;padding:6px 2px}
+.link.indietro .ico{width:17px;height:17px}
 
 /* attesa della risposta: testo dei passaggi e barra che scorre */
 .stato{display:flex;align-items:center;gap:9px;font-size:14.5px;color:var(--secondario);font-variant-numeric:tabular-nums}
@@ -233,7 +263,8 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 .alt[aria-pressed="true"]{background:var(--accento-tenue);border-color:color-mix(in srgb,var(--accento) 30%,transparent)}
 .alt .cod{font-weight:650;color:var(--inchiostro)}
 .alt .quando{grid-column:2 / -1;color:var(--secondario);font-size:14px}
-@media (max-width:520px){.alt{grid-template-columns:minmax(0,1fr) auto}.alt .it{grid-column:1 / -1}.alt .quando{grid-column:1 / -1}}
+@media (max-width:520px){.alt{grid-template-columns:minmax(0,1fr) auto}.alt .cod{grid-column:1;grid-row:1}.alt .pill{grid-column:2;grid-row:1;justify-self:end}
+  .alt .it{grid-column:1 / -1}.alt .quando{grid-column:1 / -1}}
 .pill{display:inline-block;padding:3px 9px;border-radius:999px;font:600 12px/1.2 var(--f);white-space:nowrap;background:var(--carta-2);color:var(--secondario)}
 .pill.alta{background:var(--accento-tenue);color:var(--accento-forte)}
 .pill.media{background:var(--ambra-tenue);color:var(--ambra)}
@@ -281,7 +312,8 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 }
 
 /* ================================================================ nomenclatura */
-.box.albero-box{padding:6px}
+.box.albero-box{padding:16px 6px 6px}
+.albero-box > .lab{padding:0 12px}
 .albero{display:flex;flex-direction:column}
 .sez{display:grid;grid-template-columns:22px 44px minmax(0,1fr);gap:8px;align-items:baseline;width:100%;padding:12px 12px;border:0;border-radius:12px;background:none;font:600 15px/1.35 var(--f);text-align:left;cursor:pointer;transition:background-color .18s}
 .sez:hover{background:var(--carta-2)}
@@ -302,6 +334,9 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
   .trow .txt{grid-column:2 / -1;grid-row:2}
   .trow .cod:empty + .txt{grid-column:2;grid-row:1}
   .trow .ctx{grid-column:2 / -1}
+  .trow.ris{grid-template-columns:minmax(0,1fr) auto;padding-left:10px}
+  .trow.ris .cod{grid-column:1}.trow.ris > .btn{grid-column:2}
+  .trow.ris .txt{grid-column:1 / -1}.trow.ris .ctx{grid-column:1 / -1}
 }
 .en{display:inline-block;margin-left:7px;padding:1px 6px;border-radius:6px;background:var(--carta-2);font:650 10.5px/1.4 var(--f);letter-spacing:.04em;color:var(--secondario);vertical-align:1px;white-space:nowrap}
 .lab .dx.tardi{color:var(--ambra);font-weight:600}
@@ -330,6 +365,8 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .st.in_attesa,.st.email_da_confermare,.st.non_disponibile,.st.in_corso,.st.interrotto{background:var(--ambra-tenue);color:var(--ambra)}
 .st.sospeso,.st.rifiutato,.st.errore{background:var(--rosso-tenue);color:var(--rosso)}
 .azioni{display:flex;flex-wrap:wrap;gap:6px}
+.tab td.azioni{display:table-cell;white-space:nowrap}       /* resta una cella: il bordo della riga non si spezza */
+.tab td.azioni > * + *{margin-left:6px}
 .metro{height:8px;border-radius:8px;background:var(--carta-2);border:1px solid var(--linea);max-width:420px;overflow:hidden}
 .metro i{display:block;height:100%;border-radius:8px;background:var(--accento);transform-origin:left;animation:riempi .9s var(--dolce) backwards}
 @keyframes riempi{from{transform:scaleX(0)}}
@@ -362,7 +399,7 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 
 /* ================================================================ avvisi a comparsa */
 #avvisi{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:60;width:min(92vw,460px);pointer-events:none}
-@media (max-width:760px){#avvisi{bottom:calc(100px + env(safe-area-inset-bottom))}}
+@media (max-width:900px){#avvisi{bottom:calc(100px + env(safe-area-inset-bottom))}}
 .toast{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:14px;background:var(--inchiostro);color:var(--carta);font-size:14.5px;box-shadow:var(--ombra-alta);
   animation:sali .35s var(--dolce);transition:opacity .4s,transform .4s var(--dolce)}
 .toast::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--accento-tenue)}
@@ -392,6 +429,8 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
   .tab td[data-l] .piccolo{display:inline;margin-left:4px}
   .tab tr.dettaglio{padding-top:0}
   .tab td .btn{margin-top:6px}
+  .tab td.azioni{display:flex;white-space:normal}
+  .tab td.azioni > * + *{margin-left:0}
 }
 
 /* ================================================================ scena dei trasporti (js/disegni.js)
@@ -423,7 +462,7 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 @keyframes viaggio{0%{transform:translateX(var(--da));opacity:0}12%{opacity:1}85%{opacity:1}100%{transform:translateX(var(--a));opacity:0}}
 @keyframes dondola{from{transform:translateY(0)}to{transform:translateY(2.5px)}}
 
-/* nuova versione del programma pronta: puntino arancio sulla scheda Impostazioni */
+/* richieste di account da approvare: puntino arancio sulla scheda Gestione */
 .schede a.novita{position:relative}
 .schede a.novita::after{content:"";position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--d-cont-1);
   box-shadow:0 0 0 2px var(--fondo)}
@@ -431,7 +470,7 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 /* ritocchi */
 #msg:empty,.accesso #esito:empty{display:none}
 input[type="search"]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
-@media (max-width:760px){.sotto{flex-wrap:nowrap;overflow-x:auto;margin:0 -16px;padding:2px 16px 6px;scrollbar-width:none}.sotto::-webkit-scrollbar{display:none}.sotto .btn{flex:none}}
+@media (max-width:900px){.sotto{flex-wrap:nowrap;overflow-x:auto;margin:0 -16px;padding:2px 16px 6px;scrollbar-width:none}.sotto::-webkit-scrollbar{display:none}.sotto .btn{flex:none}}
 
 /* ================================================================ movimento
    Solo in risposta a un'azione: cambio di sezione, arrivo del risultato (le cifre prendono posto, poi il timbro),
@@ -469,10 +508,6 @@ html.con-finestra{overflow:hidden}
 .box.invito{border-color:color-mix(in srgb,var(--d-cont-1) 45%,var(--linea));background:linear-gradient(135deg,color-mix(in srgb,var(--d-cont-1) 9%,var(--carta)),var(--carta) 60%)}
 .box.invito .lab .ico{color:var(--d-cont-1)}
 
-/* programma per Windows: avviso del passaggio al sito */
-.nota.trasloco{display:flex;gap:8px;align-items:flex-start;margin:0;padding:10px 12px;border-radius:var(--r-m);background:var(--carta-2);border:1px solid var(--linea)}
-.nota.trasloco .ico{flex:none;width:18px;height:18px;margin-top:1px;color:var(--accento)}
-
 /* gestione degli utenti del sito: pannello sotto la riga della persona */
 .tab tr.dettaglio td{padding:0 0 14px;border-top:0}
 .pannello{display:grid;gap:10px;padding:12px 14px;border-radius:var(--r-m);background:var(--carta-2);border:1px solid var(--linea)}
@@ -508,5 +543,46 @@ html.con-finestra{overflow:hidden}
 @keyframes f-salpa{from{transform:translateX(0)}to{transform:translateX(30px)}}
 @media (max-width:560px){.finestra{padding:16px 16px 18px}.finestra.festa{padding:0 0 18px}.festa-testo{padding:6px 16px 0}.festa-testo h2{font-size:20px}}
 
-/* programma chiuso */
-.box.chiuso .lab .ico{color:var(--rosso)}
+
+/* ================================================================ telefono e tablet
+   Tocchi comodi (almeno 40-44 px), campi a 16 px (sotto quella misura l'iPhone ingrandisce la pagina), niente effetti
+   «al passaggio» che restano accesi dopo il tocco, più spazio ai risultati mentre si cerca. */
+@media (pointer:coarse){
+  .btn{min-height:44px}
+  .btn.sm{min-height:40px;padding:8px 13px}
+  .chip{min-height:40px;padding:8px 14px}
+  .tasto-ico{width:44px;height:44px}
+  .chi .tasto-ico{width:38px;height:38px}
+  .campo,select.campo{font-size:16px}
+  .trow{padding-top:11px;padding-bottom:11px}
+  .sez{padding:14px 12px}
+  .alt{padding:13px 12px}
+  .link{min-height:36px}
+  input[type="checkbox"]{width:20px;height:20px}
+  .modo-ia #q{resize:none}
+}
+@media (hover:none){
+  .trow:not(.acceso):hover,.sez:hover,.tab tbody tr:hover{background:none}
+  .trow:active,.sez:active{background:var(--carta-2)}
+  .btn:hover{background:var(--carta);border-color:var(--linea-forte)}
+  .btn.pri:hover{background:var(--accento);border-color:var(--accento)}
+  .btn[aria-pressed="true"]:hover{background:var(--accento-tenue);border-color:transparent}
+  .sotto .btn:hover{background:none;border-color:transparent}
+  .sotto .btn[aria-current]:hover{background:var(--carta);border-color:var(--linea)}
+}
+@media (max-width:900px){
+  /* mentre si cerca, l'illustrazione lascia il posto ai risultati */
+  .domanda.cercando .scena{display:none}
+  .domanda.cercando{gap:12px}
+}
+/* schermi bassi (telefono in orizzontale): la barra in alto scorre via e l'illustrazione non c'è */
+@media (max-height:500px) and (orientation:landscape){
+  .barra{position:static}
+  .domanda .scena{display:none}
+}
+@media (max-height:500px) and (orientation:landscape) and (max-width:900px){
+  .page{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .schede{bottom:calc(6px + env(safe-area-inset-bottom));padding:4px;border-radius:16px}
+  .schede a{flex-direction:row;gap:7px;padding:8px 6px;border-radius:12px;font-size:13px}
+  .schede a .ico{width:18px;height:18px}
+}

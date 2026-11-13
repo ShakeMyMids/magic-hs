@@ -1,4 +1,4 @@
-# Dipendenze del programma (versioni provate); il pacchetto per Windows aggiunge truststore
+# Dipendenze del sito (versioni provate)
 fastapi==0.162.5
 uvicorn==0.54.0
 httpx==0.28.1

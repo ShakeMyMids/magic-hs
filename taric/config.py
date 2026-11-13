@@ -1,9 +1,8 @@
-"""Configurazione di MAGIC HS sul PC.
+"""Configurazione del sito MAGIC HS, dalle variabili d'ambiente (su Render: Environment del servizio).
 
-La imposta programma.py (cartella dei dati, porta, cartella dei programmi). Per casi particolari si possono aggiungere
-variabili d'ambiente TARIC_* o un file indicato da TARIC_CONFIG (programma.py usa ``taric.env`` nella cartella
-dell'utente, se esiste): per esempio TARIC_FONTE_URL o TARIC_FUSO. Le variabili d'ambiente hanno la precedenza sul file.
-Il servizio IA lo sceglie ognuno in Impostazioni: e' salvato nel database del PC (app.applica_ia).
+Principali: TARIC_DATI (cartella dei dati, sul disco), GEMINI_API_KEY (servizio IA), MAGIC_HS_AMMINISTRATORI (email degli
+amministratori), TARIC_IA_MODELLO e TARIC_IA_MODELLO_RAPIDO, TARIC_FUSO, TARIC_FONTE_URL. Possono stare anche in un file
+indicato da TARIC_CONFIG (predefinito ``taric.env``); le variabili d'ambiente hanno la precedenza sul file.
 """
 from __future__ import annotations
 
@@ -50,13 +49,8 @@ class Config:
     aggiornamento_automatico: bool = True
     fuso: str = "Europe/Rome"
     backup_copie: int = 7                  # backup automatici del database da tenere (0 = nessun backup automatico)
-    avvio: Path | None = None              # cartella di «Avvia MAGIC HS.cmd» (per importare le impostazioni della vecchia cartella condivisa)
-    programmi: Path | None = None          # %LOCALAPPDATA%\\MAGIC HS\\programma: dove si installano le nuove versioni (None = nessun aggiornamento)
     scarica_dati: bool = True              # prende da solo i dati TARIC del mese
-    aggiornamenti_url: str = "https://api.github.com/repos/ShakeMyMids/magic-hs/releases/latest"   # "" = niente controllo
     dati_url: str = "https://api.github.com/repos/ShakeMyMids/magic-hs/releases/tags/dati"        # dati pronti; "" = sempre in locale
-    # modalita' server (sito su Render, python -m taric server): account con approvazione, IA unica dell'amministratore
-    server: bool = False
     indirizzo: str = ""                    # indirizzo pubblico, per esempio https://magic-hs.onrender.com (Render: RENDER_EXTERNAL_URL)
     amministratori: frozenset[str] = frozenset()   # email che entrano subito come amministratori (MAGIC_HS_AMMINISTRATORI)
     extra: dict[str, str] = field(default_factory=dict)
@@ -70,10 +64,6 @@ class Config:
     @property
     def ia_nome(self) -> str:
         return {"gemini": "Gemini (Google)", "anthropic": "Claude (Anthropic)"}.get(self.ia_fornitore, self.modello or "")
-
-    def imposta_ia(self, valori: dict[str, str]) -> None:
-        """Cambia il servizio IA mentre il programma è in funzione (scelta in Impostazioni)."""
-        self.ia_fornitore, self.ia_chiave, self.ia_url, self.modello_rapido, self.modello = _ia(valori)
 
 
 # modelli e indirizzi predefiniti per fornitore: (rapido, principale, url)
@@ -123,11 +113,7 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         scarica_dati=_bool(v.get("TARIC_SCARICA_DATI"), True),
         fuso=v.get("TARIC_FUSO", "Europe/Rome"),
         backup_copie=max(0, int(v.get("TARIC_BACKUP_COPIE", "7") or 7)),
-        avvio=Path(v["TARIC_AVVIO"]) if v.get("TARIC_AVVIO") else None,
-        programmi=Path(v["TARIC_PROGRAMMI"]) if v.get("TARIC_PROGRAMMI") else None,
-        aggiornamenti_url=v.get("TARIC_AGGIORNAMENTI_URL", Config.aggiornamenti_url).strip(),
         dati_url=v.get("TARIC_DATI_URL", Config.dati_url).strip(),
-        server=_bool(v.get("TARIC_SERVER"), False),
         indirizzo=(v.get("MAGIC_HS_INDIRIZZO") or v.get("RENDER_EXTERNAL_URL") or "").strip().rstrip("/"),
         amministratori=frozenset(e.strip().lower() for e in re.split(r"[\s,;]+", v.get("MAGIC_HS_AMMINISTRATORI", "")) if "@" in e),
         extra=v,

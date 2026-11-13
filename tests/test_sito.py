@@ -29,17 +29,31 @@ def test_pagine_del_sito(sito: Sito):
     assert c.get("/api/io").status_code == 401 and c.get("/api/io").json()["errore"] == "Sessione scaduta: accedi di nuovo."
     assert c.get("/api/salute").json()["ok"] is True
     assert c.get("/data/2026-11-01/nomenclatura.js").status_code == 401
-    # niente funzioni del programma per Windows sul sito
-    for metodo, url in (("GET", "/entra?k=x"), ("GET", "/api/locale/ping"), ("POST", "/api/locale/chiudi"), ("GET", "/api/admin/locale"),
-                        ("PUT", "/api/admin/locale/ia"), ("GET", "/api/admin/locale/aggiornamento")):
-        assert c.request(metodo, url, json={}).status_code in (404, 405), url
     assert "Strict-Transport-Security" in r.headers
+
+
+def test_installabile_come_app(sito: Sito):
+    """Collegamento sul desktop o icona sul telefono: manifest e service worker raggiungibili anche prima dell'accesso."""
+    c = sito.client()
+    m = c.get("/manifest.webmanifest")
+    assert m.status_code == 200 and m.headers["content-type"].startswith("application/manifest+json")
+    m = m.json()
+    assert (m["id"], m["start_url"], m["scope"], m["display"]) == ("/", "/", "/", "standalone") and m["name"] == "MAGIC HS"
+    taglie = {i["sizes"] for i in m["icons"] if i["type"] == "image/png"}
+    assert {"192x192", "512x512"} <= taglie
+    for i in m["icons"]:
+        assert c.get(i["src"]).status_code == 200, i["src"]
+    sw = c.get("/sw.js")
+    assert sw.status_code == 200 and sw.headers["content-type"].startswith("text/javascript") and sw.headers["cache-control"] == "no-cache"
+    assert "addEventListener('fetch'" in sw.text and "caches." not in sw.text          # niente copie che invecchiano
+    pagina = sito.capo().get("/").text
+    assert 'id="installa"' in pagina and "/static/js/installa.js" in pagina and 'rel="manifest"' in pagina
 
 
 def test_registrazione_e_approvazione(sito: Sito):
     capo = sito.capo()                                        # email di MAGIC_HS_AMMINISTRATORI: entra subito
     io_ = capo.get("/api/io").json()
-    assert io_["ruolo"] == "amministratore" and io_["email"] == CAPO and io_["server"] is True and "programma" not in io_
+    assert io_["ruolo"] == "amministratore" and io_["email"] == CAPO
     assert io_["ia"]["limite"] is None and io_["ia"]["configurata"]
     assert "/data/2026-11-01/" in capo.get("/").text
 
@@ -210,15 +224,24 @@ def test_storico_e_preferiti_separati(sito: Sito):
     assert luca.get("/api/storico").json()["totale"] == 1
 
 
-def test_importa_nel_sito_dal_programma(sito: Sito, ambiente):
-    from conftest import PC
-    tmp, mp = ambiente
-    pc = PC(tmp, mp, nome="pc-di-luca", versioni=("2026-11-01",)).entra()
-    pc.post("/api/storico", json={"testo": "scarpe", "codice": "6403999610", "dati": {"result": 1}})
-    pc.put("/api/preferiti/6403999610", json={"nota": "cliente X"})
-    luca = sito.collega(sito.capo())
-    r = luca.post("/api/io/importa", json=pc.get("/api/io/esporta").json()).json()
-    assert (r["storico"], r["preferiti"]) == (1, 1) and luca.get("/api/preferiti").json()["voci"][0]["nota"] == "cliente X"
+# file di Profilo › I tuoi dati › Esporta
+ESPORTATO = {"formato": "magic-hs", "versione": 1, "esportato": "2026-11-12T10:00:00+00:00",
+                 "profilo": {"nome": "Luca", "azienda": ""}, "preferenze": {"paese": "CN", "flusso": "import", "tema": "auto"},
+                 "preferiti": [{"codice": "6403999610", "nota": "cliente X", "quando": "2026-11-10T09:00:00+00:00"}],
+                 "storico": [{"quando": "2026-11-11T09:00:00+00:00", "testo": "scarpe", "codice": "6403999610", "dati": {"result": 2}},
+                             {"quando": "2026-11-10T09:00:00+00:00", "testo": "trapano", "codice": "8467211000", "dati": {"result": 1}}]}
+
+
+def test_esporta_e_importa(sito: Sito):
+    capo = sito.capo()
+    luca = sito.collega(capo)
+    r = luca.post("/api/io/importa", json=ESPORTATO).json()
+    assert (r["storico"], r["preferiti"]) == (2, 1) and luca.get("/api/preferiti").json()["voci"][0]["nota"] == "cliente X"
+    assert luca.post("/api/io/importa", json=ESPORTATO).json()["storico"] == 0          # niente doppioni
+    assert [v["testo"] for v in luca.get("/api/storico").json()["voci"]] == ["scarpe", "trapano"]
+    r = capo.post("/api/io/importa", json=luca.get("/api/io/esporta").json()).json()    # da un account all'altro
+    assert (r["storico"], r["preferiti"]) == (2, 1)
+    assert capo.post("/api/io/importa", json={"formato": "altro", "storico": [], "preferiti": []}).json()["codice"] == "formato"
 
 
 def test_csrf_origine_e_cookie(sito: Sito):

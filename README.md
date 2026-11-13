@@ -8,8 +8,10 @@ Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'ammini
 
 ## Che cosa fa
 
-- **Classifica**: dalla descrizione della merce l'IA individua le voci candidate. Poi sceglie il codice confrontandolo con il testo ufficiale della nomenclatura, che è in italiano. Le domande affinano la scelta.
-- **Nomenclatura**: albero e ricerca per parola o per codice, senza intelligenza artificiale.
+- **Classifica** (prima pagina): si cerca per parola o per codice nella nomenclatura, senza intelligenza artificiale; i risultati compaiono mentre scrivi e «Usa» apre la scheda del codice. Le parole d'uso comune trovano anche i termini della nomenclatura (per esempio «scarpe» le «calzature», «divano» i «mobili per sedersi», «router» gli apparecchi di routing): l'elenco è in `taric/static/js/sinonimi.js` e si allunga con una riga per parola. Con l'interruttore **Usa l'IA** si descrive invece la merce: l'IA individua le voci candidate e sceglie il codice confrontandolo con il testo ufficiale della nomenclatura, che è in italiano; le domande affinano la scelta. Ogni dispositivo ricorda la scelta dell'interruttore.
+- **Nomenclatura**: l'albero delle sezioni, dei capitoli e delle voci, da sfogliare.
+- **Telefono e tablet**: le sezioni passano nella barra in basso, i pulsanti sono grandi per il dito e la pagina si adatta anche in orizzontale.
+- **Installa** (in alto, e nel Profilo): crea il collegamento sul desktop del computer o l'icona sulla schermata Home del telefono, e MAGIC HS si apre come un'app nella sua finestra. Con Chrome, Edge e i telefoni Android il tasto apre la finestra d'installazione del browser; su iPhone e iPad, Safari per Mac e Firefox mostra i passi da fare.
 - **Misure per paese**: dazi (anche preferenziali, antidumping e contingenti), condizioni, certificati e documenti del riquadro 44 e unità supplementari. Valgono per importazione ed esportazione.
 - **Profilo**, nel proprio account (si ritrova da qualsiasi PC):
   - storico delle classificazioni, che si riaprono con tutti i dettagli;
@@ -49,12 +51,12 @@ Se vuoi un indirizzo tuo (per esempio `magic-hs.azienda.it`), aggiungilo in Rend
 - **Password dimenticata**: *Gestione → Utenti → Modifica → Link per la password*. Il link vale 3 giorni e una volta sola; mandalo alla persona. Il sito non manda email.
 - **Registrazioni**: si possono chiudere in *Gestione → Intelligenza artificiale* (casella «Si possono chiedere nuovi account»). Gli indirizzi di `MAGIC_HS_AMMINISTRATORI` possono sempre registrarsi.
 - **Aggiornamenti**: ogni modifica unita a `main` si pubblica da sola su Render (`autoDeploy`). Durante il riavvio il sito resta irraggiungibile per qualche secondo. I dati TARIC del mese il server li scarica da solo dalla pagina `dati` del progetto. Se non ci sono ancora, li prepara lui dalla fonte.
-- **Copie di sicurezza**: il server fa ogni giorno un backup del database sul suo disco, e Render tiene istantanee automatiche del disco. Una copia da tenere altrove si scarica da *Gestione → Dati TARIC → Copia del database*. Per rimetterne una: dalla *Shell* del servizio su Render, `python -m taric --cartella /var/data/magic-hs ripristina FILE`, poi *Manual Deploy → Restart*.
+- **Copie di sicurezza**: il server fa ogni giorno un backup del database sul suo disco, e Render tiene istantanee automatiche del disco. Una copia da tenere altrove si scarica da *Gestione → Dati TARIC → Copia del database*. Per rimetterne una: dalla *Shell* del servizio su Render, `python -m taric ripristina FILE` (il database attuale finisce prima in un nuovo backup), poi *Manual Deploy → Restart service*.
 - **Cambiare modello o chiave**: su Render, in *Environment*, modifica `GEMINI_API_KEY`, `TARIC_IA_MODELLO` (scelta del codice, predefinito `gemini-3.7-flash`) o `TARIC_IA_MODELLO_RAPIDO` (ricerca delle voci, predefinito `gemini-3.5-flash-lite`). Il servizio si riavvia da solo. *Elenco dei modelli* in Gestione mostra quelli disponibili per la chiave.
 
 ### Come funziona
 
-`python -m taric server` avvia lo stesso programma Python del PC in **modalità sito**:
+`python -m taric server` avvia il server Python (FastAPI e SQLite):
 - account con email e password (argon2), registrazione con modulo firmato e trappola per i bot, tentativi limitati (5 password errate per email in 15 minuti, 5 registrazioni all'ora per rete);
 - sessioni con cookie `HttpOnly`, `Secure` e `SameSite`;
 - un solo servizio IA dalle variabili d'ambiente;
@@ -75,7 +77,7 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
 
 ## Dati TARIC
 
-- **Fonte**: le estrazioni mensili della Commissione europea (DG TAXUD), gruppo CIRCABC «TARIC and Quota data and information». Il flusso GitHub *Dati TARIC* (`.github/workflows/dati.yml`) prepara ogni mese i dati con gli stessi controlli del programma (`strumenti/dati_mese.py`) e li pubblica nella pre-release `dati`; il server li scarica da lì. Altrimenti scarica l'estrazione dalla copia pubblicata dal progetto [taric-opendata](https://github.com/rousseauxy/taric-opendata) e la prepara lui.
+- **Fonte**: le estrazioni mensili della Commissione europea (DG TAXUD), gruppo CIRCABC «TARIC and Quota data and information». Il flusso GitHub *Dati TARIC* (`.github/workflows/dati.yml`) prepara ogni mese i dati con gli stessi controlli del sito (`strumenti/dati_mese.py`) e li pubblica nella pre-release `dati`; il server li scarica da lì. Altrimenti scarica l'estrazione dalla copia pubblicata dal progetto [taric-opendata](https://github.com/rousseauxy/taric-opendata) e la prepara lui.
 - **Controlli prima dell'installazione**:
   - file e colonne attesi;
   - mese dell'estrazione;
@@ -87,18 +89,6 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
 - **Se la fonte non funziona**: carica a mano l'archivio .zip con i file Excel del mese (*Gestione → Dati TARIC → Carica a mano*).
 - **Fuori dal TARIC**: IVA, accise e misure nazionali; per quelle resta AIDA.
 - GitHub sospende i flussi pianificati dei progetti senza attività da 60 giorni. *Dati TARIC* si riattiva da solo a ogni giro; se fosse sospeso: *Actions → Dati TARIC → Enable workflow*. Intanto il server prepara i dati da sé.
-
-## Programma per Windows (in ritiro)
-
-La versione **1.4.0** è l'ultima del programma per Windows. Mostra l'avviso «MAGIC HS diventa un sito» e in *Profilo → I tuoi dati → Esporta* salva storico e preferiti in un file, da importare nel sito con *Profilo → I tuoi dati → Importa*. Chi ha il programma la riceve da sola dalla [pagina delle versioni](https://github.com/ShakeMyMids/magic-hs/releases); chi lo usava dalla vecchia cartella condivisa la riceve con *Aggiorna per tutti*.
-
-Il programma gira sul PC (`%LOCALAPPDATA%\MAGIC HS`) con il servizio IA scelto da ognuno, la chiave protetta da Windows. I dettagli sono in `taric/programma.py` e `windows/LEGGIMI.txt`. Per rimettere un backup sul PC, con MAGIC HS chiuso:
-
-```bat
-"%LOCALAPPDATA%\MAGIC HS\programma\<versione>\python\python.exe" -I -m taric ripristina "%LOCALAPPDATA%\MAGIC HS\dati\backup\magic-hs-AAAA-MM-GG-HHMMSS.zip"
-```
-
-**Costruire e pubblicare**: `python strumenti/pacchetto_windows.py` crea in `dist/` `MAGIC-HS-<versione>.zip` e `magic-hs-windows-<versione>.zip`. Il flusso *Programma per Windows* li prova su un vero Windows e li pubblica quando su `main` arriva una `__version__` senza pagina.
 
 ## Sicurezza in breve
 
@@ -118,7 +108,7 @@ Il programma gira sul PC (`%LOCALAPPDATA%\MAGIC HS`) con il servizio IA scelto d
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q tests                       # sito, programma, IA, dati, backup
+python -m pytest -q tests                       # sito, IA, dati, backup
 TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.py   # con un'estrazione vera (circa un minuto)
 ```
 
@@ -126,11 +116,11 @@ Il sito si avvia anche in locale: `TARIC_DATI=prova/dati MAGIC_HS_AMMINISTRATORI
 
 Prova nel browser (Playwright):
 1. prepara i dati di un mese con `python strumenti/dati_mese.py AAAA-MM dati-AAAA-MM-01.zip`;
-2. avvia `python tests/finto_claude.py 9100 dati-AAAA-MM-01.zip`, che imita GitHub e le API di Gemini, Claude e dei servizi compatibili OpenAI;
+2. avvia `python tests/finto_claude.py 9100 dati-AAAA-MM-01.zip`, che imita la pagina `dati` di GitHub e le API di Gemini, Claude e dei servizi compatibili OpenAI;
 3. avvia il sito con `TARIC_IA_FORNITORE=openai TARIC_IA_URL=http://127.0.0.1:9100/v1 TARIC_IA_MODELLO=finto-modello TARIC_IA_CHIAVE=chiave-finta TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati MAGIC_HS_AMMINISTRATORI=capo@azienda.it python -m taric server --porta 8810`;
 4. lancia `node tests/e2e_sito.js http://localhost:8810 shots-sito`.
 
-Per il programma per Windows c'è `tests/e2e_locale.js` (vedi l'intestazione del file). Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
+Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
 
 ## Fonti e licenze
 

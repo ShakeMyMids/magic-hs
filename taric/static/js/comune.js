@@ -9,8 +9,8 @@
     });
   };
 
-  /* Chiamata alle API del programma. Risolve con il JSON della risposta; in caso d'errore rifiuta con
-     { stato, codice, errore }. Con una sessione scaduta torna alla pagina iniziale (salvo opzioni.resta). */
+  /* Chiamata alle API del sito. Risolve con il JSON della risposta; in caso d'errore rifiuta con
+     { stato, codice, errore }. Con una sessione scaduta torna alla pagina di accesso (salvo opzioni.resta). */
   T.api = function (metodo, url, corpo, opzioni) {
     opzioni = opzioni || {};
     var init = { method: metodo, credentials: 'same-origin', headers: { 'X-Taric': '1', 'Accept': 'application/json' }, signal: opzioni.signal };
@@ -21,15 +21,42 @@
       var leggi = tipo.indexOf('application/json') >= 0 ? r.json() : r.text().then(function (t) { return { testo: t }; });
       return leggi.catch(function () { return {}; }).then(function (d) {
         if (r.ok) return d;
-        if (r.status === 401 && !opzioni.resta) location.href = '/';      // sessione scaduta: la pagina iniziale spiega come riaprire
+        if (r.status === 401 && !opzioni.resta) location.href = '/accedi';      // sessione scaduta
         throw { stato: r.status, codice: (d && d.codice) || 'errore_' + r.status, errore: (d && d.errore) || 'Errore di MAGIC HS (' + r.status + '). Riprova.' };
       });
     }, function (e) {
       if (e && e.name === 'AbortError') throw e;
-      if (T.alOffline) T.alOffline();            // forse il programma si è chiuso
-      throw { stato: 0, codice: 'offline', errore: T.server ? 'MAGIC HS non risponde: controlla la connessione e riprova.'
-        : 'MAGIC HS non risponde: se l\'hai chiuso, riaprilo da «Avvia MAGIC HS».' };
+      throw { stato: 0, codice: 'offline', errore: 'MAGIC HS non risponde: controlla la connessione e riprova.' };
     });
+  };
+
+  /* finestra sopra la pagina: Esc o clic fuori la chiudono, il tasto Tab resta dentro, poi si torna dove si era */
+  T.finestra = function (html, idTitolo, classe) {
+    var prima = document.activeElement, velo = document.createElement('div');
+    velo.className = 'velo';
+    velo.innerHTML = '<div class="finestra ' + classe + '" role="dialog" aria-modal="true" aria-labelledby="' + idTitolo + '">' + html + '</div>';
+    document.body.appendChild(velo);
+    document.documentElement.classList.add('con-finestra');
+    var f = velo.firstChild;
+    function chiudi() {
+      if (!velo.parentNode) return;
+      velo.parentNode.removeChild(velo);
+      document.documentElement.classList.remove('con-finestra');
+      document.removeEventListener('keydown', tasti, true);
+      if (prima && prima.focus && document.contains(prima)) prima.focus();
+    }
+    function tasti(ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); chiudi(); return; }
+      if (ev.key !== 'Tab') return;
+      var el = Array.prototype.filter.call(f.querySelectorAll('a[href],button:not([disabled]),input:not([disabled])'), function (x) { return x.offsetParent !== null; });
+      if (!el.length) return;
+      if (ev.shiftKey && document.activeElement === el[0]) { ev.preventDefault(); el[el.length - 1].focus(); }
+      else if (!ev.shiftKey && document.activeElement === el[el.length - 1]) { ev.preventDefault(); el[0].focus(); }
+    }
+    document.addEventListener('keydown', tasti, true);
+    velo.addEventListener('mousedown', function (ev) { if (ev.target === velo) chiudi(); });
+    f.addEventListener('click', function (ev) { if (ev.target.closest('[data-f="chiudi"]')) chiudi(); });
+    return { el: f, chiudi: chiudi };
   };
 
   T.dataOra = function (iso, soloData) {
