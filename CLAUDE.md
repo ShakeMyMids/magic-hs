@@ -40,7 +40,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   sottoprocesso con `python -I`; l'installazione avviene solo con codice di uscita 0 e ultima riga `CONTROLLI OK`.
   Non indebolire i controlli per far passare un mese: se cambia il formato dei file, adegua lo script.
 - `taric/backup.py`: backup del database (.zip con solo `taric.db`, API di backup di SQLite), uno al giorno dal
-  pianificatore, e ripristino (`python -m taric ripristina FILE` dalla Shell di Render, poi riavvio; `taric/__main__.py`:
+  pianificatore, e ripristino (`python -m taric ripristina FILE` dalla Shell di Render: a sito acceso, riconosciuto da
+  `dati/server.pid`, il backup va in `ripristino-in-attesa.db` e si rimette al riavvio; `taric/__main__.py`:
   controlla integrità e schema, salva prima il database attuale).
 - `taric/nomenclatura_it.json`: testo ufficiale italiano della nomenclatura (estrazione del 1° luglio 2026).
 - `taric/__main__.py`: `server` (porta da `$PORT`, intestazioni del proxy HTTPS), `backup`, `ripristina` (cartella dei
@@ -69,6 +70,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   richiesta dal server contro le richieste da altri siti (insieme al controllo dell'origine).
 - Tutto il testo inserito con `innerHTML` passa da `esc()`.
 - I file `data/` sono dati non fidati generati: il server li serve solo con nomi validati (`dati.RE_FILE`).
+- Le pagine HTML passano da `con_impronte()` in `app.py`: i link a `/static/` ricevono `?v=<impronta>` e una cache lunga.
+  Non scrivere a mano altri indirizzi di file statici senza passare da lì.
 - Dentro una `db.transazione()` un'eccezione annulla tutto.
 - Non mettere chiavi o file di `dati/` nel repository.
 
@@ -83,7 +86,8 @@ python -m pytest -q tests
 per un nuovo sinonimo scegli parole o espressioni del testo ufficiale. I test usano `conftest.Sito` (il sito con l'amministratore `CAPO`, `registra`/`accedi`/`capo`/`collega`/`riavvia`; `ia=False`
 ed `extra` per altri servizi IA, `versioni` per i dati già installati) con i finti servizio IA e GitHub (`FintoClaude`,
 `FintoGitHub` con dati pronti e fonte); `sito_claude` è il sito con Claude. Prova nel browser (Playwright, finto servizio
-IA): `tests/e2e_sito.js`, vedi la sezione «Sviluppo» del README. Dopo modifiche all'interfaccia controlla anche il telefono
+IA): `tests/sito_di_prova.sh` e `tests/e2e_sito.js`, che GitHub esegue a ogni modifica (job `browser` di
+`.github/workflows/test.yml`); vedi la sezione «Sviluppo» del README. Dopo modifiche all'interfaccia controlla anche il telefono
 (larghezza 390 px, anche in orizzontale), il tablet (810 px in verticale, 1080 in orizzontale) e il tema scuro: fino a 900 px
 le sezioni sono nella barra in basso, con `(pointer:coarse)` i pulsanti sono di almeno 40-44 px e i campi a 16 px (sotto,
 l'iPhone ingrandisce la pagina); niente elementi che compaiono o spariscono quando un campo prende o perde il fuoco.

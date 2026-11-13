@@ -7,8 +7,10 @@ un limite mensile di classificazioni per persona e un tetto mensile per tutti. S
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import re
 import secrets
 import sqlite3
@@ -22,10 +24,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.middleware.gzip import GZipMiddleware
 
 from . import __version__
 from . import sicurezza as S
-from .backup import Backup
+from .backup import Backup, ErroreBackup
 from .config import Config
 from .dati import GestoreDati
 from .db import Database, iso
@@ -35,6 +38,7 @@ log = logging.getLogger("taric")
 STATIC = Path(__file__).with_name("static")
 COOKIE = "magic_hs"
 RE_CODICE = re.compile(r"^\d{10}$")
+RE_STATICO = re.compile(r'(src|href)="/static/([A-Za-z0-9_./-]+)"')
 RE_AREA = re.compile(r"^[A-Z0-9]{2,4}$")
 
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
@@ -165,6 +169,12 @@ def segreto_moduli(cartella: Path) -> bytes:
 def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
              client_dati: httpx.Client | None = None) -> FastAPI:
     """Crea il sito: client_ia e client_dati sostituiscono, nelle prove, i servizi esterni."""
+    try:                                   # backup preparato a sito acceso con «python -m taric ripristina»
+        rimesso = Backup(cfg.dati).applica_in_attesa()
+        if rimesso:
+            log.warning("database ripristinato all'avvio: %s", rimesso)
+    except ErroreBackup as e:
+        log.error("ripristino all'avvio non riuscito: %s", e)
     db = Database(cfg.dati / "taric.db")
     ia = ServizioIA(cfg, db, client_ia)
     dati = GestoreDati(cfg, db, client_dati)
@@ -179,13 +189,18 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     @asynccontextmanager
     async def vita(_app: FastAPI) -> AsyncIterator[None]:
+        pid = cfg.dati / "server.pid"           # per «python -m taric ripristina»: il sito e' acceso
+        pid.write_text(str(os.getpid()))
         if pianificatore:
             dati.avvia_pianificatore(copie, attesa=600)
         yield
         dati.ferma()
+        pid.unlink(missing_ok=True)
 
     app = FastAPI(title="MAGIC HS", docs_url=None, redoc_url=None, openapi_url=None, lifespan=vita)
     app.state.cfg, app.state.db, app.state.dati, app.state.ia = cfg, db, dati, ia
+    # file compressi (la nomenclatura del mese pesa circa 2 MB, compressa un quarto)
+    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
     # ------------------------------------------------------------------ utilita'
     def utente_corrente(request: Request) -> sqlite3.Row | None:
@@ -237,6 +252,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             resp.headers["Strict-Transport-Security"] = "max-age=31536000"
         if request.url.path.startswith("/api/"):
             resp.headers["Cache-Control"] = "no-store"
+        elif request.url.path.startswith("/static/"):
+            # con l'impronta del contenuto (?v=) il file non cambia mai: il browser lo tiene; senza, lo ricontrolla
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable" if request.query_params.get("v") else "no-cache"
         return resp
 
     @app.exception_handler(Errore)
@@ -249,8 +267,28 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return JSONResponse({"errore": "Dati non validi: controlla " + ", ".join(campi) + ".", "codice": "dati_non_validi"}, status_code=422)
 
     # ------------------------------------------------------------------ pagine
-    def pagina(nome: str) -> FileResponse:
-        return FileResponse(STATIC / nome, media_type="text/html", headers={"Cache-Control": "no-cache"})
+    impronte: dict[tuple[str, int], str] = {}
+
+    def impronta(rel: str) -> str:
+        """Prime cifre dello SHA-256 di un file statico: cambia quando cambia il file."""
+        f = STATIC / rel
+        try:
+            chiave = (rel, f.stat().st_mtime_ns)
+        except OSError:
+            return ""
+        if chiave not in impronte:
+            impronte[chiave] = hashlib.sha256(f.read_bytes()).hexdigest()[:12]
+        return impronte[chiave]
+
+    def con_impronte(html: str) -> str:
+        """/static/x.js -> /static/x.js?v=impronta: dopo un aggiornamento il browser prende i file nuovi, mai un misto."""
+        def sostituisci(m: re.Match[str]) -> str:
+            v = impronta(m.group(2))
+            return f'{m.group(1)}="/static/{m.group(2)}' + (f'?v={v}"' if v else '"')
+        return RE_STATICO.sub(sostituisci, html)
+
+    def pagina(nome: str) -> HTMLResponse:
+        return HTMLResponse(con_impronte((STATIC / nome).read_text(encoding="utf-8")), headers={"Cache-Control": "no-cache"})
 
     @app.get("/", include_in_schema=False)
     def home(request: Request) -> Response:
@@ -260,7 +298,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         if v is None:
             return pagina("attesa.html")
         html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{DATI}}", f"/data/{v}/")
-        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+        return HTMLResponse(con_impronte(html), headers={"Cache-Control": "no-cache"})
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
     def manifest() -> FileResponse:

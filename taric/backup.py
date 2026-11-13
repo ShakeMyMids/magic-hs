@@ -131,9 +131,38 @@ class Backup:
         return time.time() - p.stat().st_mtime > ore * 3600
 
     # ------------------------------------------------------------ ripristino (a MAGIC HS chiuso)
-    def ripristina(self, archivio: Path) -> str:
-        """Sostituisce il database con quello del backup. Va eseguito con MAGIC HS chiuso.
-        Il database attuale viene prima salvato in un nuovo backup."""
+    @property
+    def in_attesa(self) -> Path:
+        """Database da rimettere al prossimo avvio (preparato da programma_ripristino a sito acceso)."""
+        return self.dati / "ripristino-in-attesa.db"
+
+    def programma_ripristino(self, archivio: Path) -> str:
+        """A sito acceso: controlla il backup e lo mette da parte; il sito lo rimette al prossimo avvio (applica_in_attesa),
+        quando nessuno sta scrivendo nel database."""
+        nuovo = self._estrai(archivio)
+        try:
+            descrizione = controlla_db(nuovo)
+            os.chmod(nuovo, 0o600)
+            os.replace(nuovo, self.in_attesa)
+        finally:
+            for f in (nuovo, Path(f"{nuovo}-wal"), Path(f"{nuovo}-shm")):
+                f.unlink(missing_ok=True)
+        return descrizione
+
+    def applica_in_attesa(self) -> str | None:
+        """All'avvio, prima di aprire il database: rimette il backup preparato da programma_ripristino, se c'e'."""
+        if not self.in_attesa.is_file():
+            return None
+        try:
+            return self.ripristina(self.in_attesa)
+        except ErroreBackup:
+            os.replace(self.in_attesa, self.dati / "ripristino-non-riuscito.db")       # niente tentativi a ogni avvio
+            raise
+        finally:
+            self.in_attesa.unlink(missing_ok=True)
+
+    def _estrai(self, archivio: Path) -> Path:
+        """Copia il database del backup (.zip con solo taric.db, oppure .db) in un file temporaneo nella cartella dei dati."""
         if not archivio.is_file():
             raise ErroreBackup(f"file non trovato: {archivio}")
         self.dati.mkdir(parents=True, exist_ok=True)
@@ -152,6 +181,16 @@ class Backup:
                 if archivio.stat().st_size > MASSIMO_DB:
                     raise ErroreBackup("database troppo grande")
                 shutil.copyfile(archivio, nuovo)
+        except BaseException:
+            nuovo.unlink(missing_ok=True)
+            raise
+        return nuovo
+
+    def ripristina(self, archivio: Path) -> str:
+        """Sostituisce il database con quello del backup, a sito spento (da acceso: programma_ripristino).
+        Il database attuale viene prima salvato in un nuovo backup."""
+        nuovo = self._estrai(archivio)
+        try:
             descrizione = controlla_db(nuovo)
             prima = self.crea().name if self.db.exists() else None
             for suffisso in ("-wal", "-shm"):

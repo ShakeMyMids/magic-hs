@@ -16,3 +16,29 @@ jobs:
       - run: python -m pytest -q tests
       - name: Controllo sintassi JavaScript
         run: for f in taric/static/js/*.js; do node --check "$f"; done
+
+  # prova nel browser (tests/e2e_sito.js): il sito con un finto servizio IA e i dati veri dell'ultimo mese pubblicato
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - name: Playwright e Chromium
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw" && npm init -y > /dev/null && npm install --no-audit --no-fund playwright@1.63
+          npx playwright install --with-deps chromium
+      - name: Dati TARIC dell'ultimo mese pubblicato
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download dati --repo "$GITHUB_REPOSITORY" --pattern 'dati-*.zip' --dir "$RUNNER_TEMP/dati"
+      - name: Sito di prova
+        run: tests/sito_di_prova.sh "$(ls "$RUNNER_TEMP"/dati/dati-*.zip | sort | tail -1)" "$RUNNER_TEMP/sito"
+      - name: Prova nel browser
+        run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node tests/e2e_sito.js http://localhost:8810 "$RUNNER_TEMP/schermate"
+      - name: Registro del sito (se qualcosa non va)
+        if: failure()
+        run: tail -60 "$RUNNER_TEMP/sito/sito.log" || true

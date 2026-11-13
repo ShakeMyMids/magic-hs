@@ -51,7 +51,7 @@ Se vuoi un indirizzo tuo (per esempio `magic-hs.azienda.it`), aggiungilo in Rend
 - **Password dimenticata**: *Gestione → Utenti → Modifica → Link per la password*. Il link vale 3 giorni e una volta sola; mandalo alla persona. Il sito non manda email.
 - **Registrazioni**: si possono chiudere in *Gestione → Intelligenza artificiale* (casella «Si possono chiedere nuovi account»). Gli indirizzi di `MAGIC_HS_AMMINISTRATORI` possono sempre registrarsi.
 - **Aggiornamenti**: ogni modifica unita a `main` si pubblica da sola su Render (`autoDeploy`). Durante il riavvio il sito resta irraggiungibile per qualche secondo. I dati TARIC del mese il server li scarica da solo dalla pagina `dati` del progetto. Se non ci sono ancora, li prepara lui dalla fonte.
-- **Copie di sicurezza**: il server fa ogni giorno un backup del database sul suo disco, e Render tiene istantanee automatiche del disco. Una copia da tenere altrove si scarica da *Gestione → Dati TARIC → Copia del database*. Per rimetterne una: dalla *Shell* del servizio su Render, `python -m taric ripristina FILE` (il database attuale finisce prima in un nuovo backup), poi *Manual Deploy → Restart service*.
+- **Copie di sicurezza**: il server fa ogni giorno un backup del database sul suo disco, e Render tiene istantanee automatiche del disco. Una copia da tenere altrove si scarica da *Gestione → Dati TARIC → Copia del database*. Per rimetterne una: dalla *Shell* del servizio su Render, `python -m taric ripristina FILE` controlla il backup e lo mette da parte; poi *Manual Deploy → Restart service*: al riavvio il sito rimette il database (quello attuale finisce prima in un nuovo backup), così nessuna modifica fatta nel frattempo va persa a metà.
 - **Cambiare modello o chiave**: su Render, in *Environment*, modifica `GEMINI_API_KEY`, `TARIC_IA_MODELLO` (scelta del codice, predefinito `gemini-3.7-flash`) o `TARIC_IA_MODELLO_RAPIDO` (ricerca delle voci, predefinito `gemini-3.5-flash-lite`). Il servizio si riavvia da solo. *Elenco dei modelli* in Gestione mostra quelli disponibili per la chiave.
 
 ### Come funziona
@@ -114,11 +114,10 @@ TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.p
 
 Il sito si avvia anche in locale: `TARIC_DATI=prova/dati MAGIC_HS_AMMINISTRATORI=tu@azienda.it python -m taric server --porta 8810`, poi `http://localhost:8810`. Con Docker, come su Render: `docker build -t magic-hs .` e poi `docker run -p 10000:10000 -e PORT=10000 -v $PWD/disco:/var/data magic-hs`.
 
-Prova nel browser (Playwright):
-1. prepara i dati di un mese con `python strumenti/dati_mese.py AAAA-MM dati-AAAA-MM-01.zip`;
-2. avvia `python tests/finto_claude.py 9100 dati-AAAA-MM-01.zip`, che imita la pagina `dati` di GitHub e le API di Gemini, Claude e dei servizi compatibili OpenAI;
-3. avvia il sito con `TARIC_IA_FORNITORE=openai TARIC_IA_URL=http://127.0.0.1:9100/v1 TARIC_IA_MODELLO=finto-modello TARIC_IA_CHIAVE=chiave-finta TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati MAGIC_HS_AMMINISTRATORI=capo@azienda.it python -m taric server --porta 8810`;
-4. lancia `node tests/e2e_sito.js http://localhost:8810 shots-sito`.
+Prova nel browser (Playwright), la stessa che GitHub esegue a ogni modifica:
+1. prendi i dati di un mese dalla pagina `dati` (oppure preparali con `python strumenti/dati_mese.py AAAA-MM dati-AAAA-MM-01.zip`);
+2. `tests/sito_di_prova.sh dati-AAAA-MM-01.zip prova-sito` avvia il finto servizio IA e GitHub (`tests/finto_claude.py`) e il sito sulla porta 8810, e aspetta i dati;
+3. lancia `node tests/e2e_sito.js http://localhost:8810 shots-sito`.
 
 Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
 
