@@ -1,8 +1,10 @@
 /* MAGIC HS - illustrazioni a tema: le merci in viaggio per nave, aereo, treno e camion.
-   T.scena(classe) restituisce l'SVG della scena (porto, gru, treno merci, camion e aereo); i colori vengono dal
-   tema (variabili --d-* in app.css). comune.js la inserisce negli elementi con l'attributo data-scena; con
-   data-scena="in-viaggio" i mezzi si muovono (pagina d'attesa), salvo «movimento ridotto» nel sistema. T.festa() è la scena
-   dell'intelligenza artificiale appena collegata. */
+   T.scena(classe) restituisce la scena in due composizioni: larga (porto, gru, treno merci, camion, aereo) e compatta
+   (nave, gru, camion e aereo) per i riquadri stretti, come il telefono e la pagina d'accesso; app.css ne mostra una sola
+   secondo la larghezza del riquadro (container query), così niente viene tagliato. I colori vengono dal tema (variabili
+   --d-* in app.css). comune.js la inserisce negli elementi con l'attributo data-scena: data-scena="vivo" anima piano
+   nuvole, onde, nave e aereo e fa arrivare i mezzi; "in-viaggio" li fa viaggiare (pagina d'attesa). Con «movimento
+   ridotto» nel sistema la scena resta ferma. T.festa() è la scena dell'intelligenza artificiale appena collegata. */
 (function () {
   'use strict';
   var T = window.TARIC = window.TARIC || {};
@@ -17,10 +19,10 @@
   }
 
   /* cielo: nuvole e aereo con la scia */
-  var cielo =
-    '<path class="d-nuvola" d="M548 44a14 14 0 0 1 26-7 18 18 0 0 1 33 4 11 11 0 0 1 3 22h-58a10 10 0 0 1-4-19z"/>' +
-    '<path class="d-nuvola" d="M1040 70a12 12 0 0 1 22-6 16 16 0 0 1 29 4 10 10 0 0 1 2 19h-50a9 9 0 0 1-3-17z"/>' +
-    '<path class="d-scia" d="M560 96C650 72 750 60 846 50"/>' +
+  function nuvola(x, y, k) {
+    return '<g class="d-nuvola-g"><path class="d-nuvola" transform="translate(' + x + ' ' + y + ') scale(' + k + ')" d="M0 18a14 14 0 0 1 26-7 18 18 0 0 1 33 4 11 11 0 0 1 3 22H4a10 10 0 0 1-4-19z"/></g>';
+  }
+  var aereo =
     '<g class="s-aereo"><g transform="translate(130 0) rotate(-7 770 40)">' +
     '<path class="d-t" d="M712 34h86c10 0 18 3 22 6-4 3-12 6-22 6h-86c-5 0-8-2.6-8-6s3-6 8-6z"/>' +
     '<path class="d-t" d="M748 41h22l-20 26h-12z"/><path class="d-t" d="M752 37h16l-10-15h-10z"/>' +
@@ -29,6 +31,9 @@
     '<circle class="d-oblo" cx="728" cy="39" r="1.6"/><circle class="d-oblo" cx="736" cy="39" r="1.6"/><circle class="d-oblo" cx="744" cy="39" r="1.6"/>' +
     '<circle class="d-oblo" cx="776" cy="39" r="1.6"/><circle class="d-oblo" cx="784" cy="39" r="1.6"/><circle class="d-oblo" cx="792" cy="39" r="1.6"/>' +
     '</g></g>';
+  var cielo = nuvola(548, 26, 1) + nuvola(1040, 52, 0.86) + '<path class="d-scia" d="M560 96C650 72 750 60 846 50"/>' + aereo;
+  var cieloStretto = nuvola(24, 14, 0.72) + nuvola(604, 64, 0.6) + '<path class="d-scia" d="M524 58C540 50 552 42 566 34"/>' +
+    '<g transform="translate(-270 -12)">' + aereo + '</g>';
 
   /* mare con la nave portacontainer, banchina con la gru */
   var colonne = [3, 2, 3, 3, 2, 3, 2], colori = [1, 2, 3, 2, 1, 3, 2, 1, 3, 1, 2, 3, 2, 1, 3, 2, 3, 1, 2, 1, 2];
@@ -66,15 +71,16 @@
     '</g>';
 
   /* strada con il camion */
-  var camion =
-    '<path class="d-strada" d="M756 152H1200"/>' +
-    cont(1020, 124, 40, 16, 2) + cont(1062, 124, 40, 16, 1) + cont(1104, 124, 40, 16, 3) + cont(1041, 107, 40, 16, 1) + cont(1083, 107, 40, 16, 2) +
+  var pila = cont(1020, 124, 40, 16, 2) + cont(1062, 124, 40, 16, 1) + cont(1104, 124, 40, 16, 3) + cont(1041, 107, 40, 16, 1) + cont(1083, 107, 40, 16, 2);
+  var mezzo =
     '<g class="s-camion"><g transform="translate(-110 0)">' + cont(904, 95, 116, 28, 1) +
     '<rect class="d-t" x="900" y="123" width="124" height="6" rx="2"/>' +
     '<path class="d-t" d="M1026 131V102a6 6 0 0 1 6-6h20l20 17v18z"/><path class="d-oblo" d="M1036 101h14l13 11h-27z"/>' +
     '<rect class="d-c1" x="1028" y="120" width="44" height="3"/>' +
     ruota(918, 133, 7) + ruota(936, 133, 7) + ruota(1004, 133, 7) + ruota(1040, 133, 7) + ruota(1060, 133, 7) +
     '</g></g>';
+  var camion = '<path class="d-strada" d="M756 152H1200"/>' + pila + mezzo;
+  var camionStretto = '<path class="d-strada" d="M500 152H700"/><g transform="translate(-284 0)">' + mezzo + '</g>';
 
   /* festa per l'intelligenza artificiale collegata (js/attiva-ia.js): la gru cala sulla nave un container con le
      scintille, che si illumina; la nave suona la sirena e salpa. Le animazioni sono in app.css (.festa) */
@@ -113,8 +119,12 @@
       '</g>' + scintille + '</svg>';
   };
 
+  function svg(tipo, classe, larghezza, interno) {
+    return '<svg class="scena-svg scena-' + tipo + (classe ? ' ' + classe : '') + '" viewBox="0 0 ' + larghezza + ' 170" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false">' +
+      interno + '</svg>';
+  }
   T.scena = function (classe) {
-    return '<svg class="scena-svg' + (classe ? ' ' + classe : '') + '" viewBox="0 0 1200 170" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">' +
-      cielo + mare + gru + nave + treno + camion + '</svg>';
+    return svg('larga', classe, 1200, cielo + mare + gru + nave + treno + camion) +
+      svg('stretta', classe, 700, cieloStretto + mare + gru + nave + camionStretto);
   };
 })();

@@ -35,6 +35,8 @@
   --ombra:0 1px 2px rgba(20,40,60,.07);
   --ombra-alta:0 18px 40px -24px rgba(20,40,60,.45),0 2px 6px -2px rgba(20,40,60,.1);
   --vetro:rgba(225,230,235,.86);
+  --alone-1:rgba(27,85,132,.13); --alone-2:rgba(233,119,46,.09);     /* aloni dello sfondo: mare e container */
+  --ombra-scheda:inset 0 1px 0 rgba(255,255,255,.65),0 1px 2px rgba(20,40,60,.06),0 14px 34px -22px rgba(20,40,60,.3);
   --f:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
   --f-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --r-l:18px; --r-m:12px; --r-s:8px;
@@ -49,6 +51,8 @@
     --su-accento:#0a1119; --marchio-t:#f08a3c; --ombra:0 1px 2px rgba(0,0,0,.3); --ombra-alta:0 22px 44px -26px rgba(0,0,0,.85),0 2px 6px -2px rgba(0,0,0,.4);
     --d-tratto:#7fb8e6; --d-cont-1:#e9772e; --d-cont-2:#3d8fd6; --d-cont-3:#4d6378; --d-mare:#17324d; --d-cielo:#122638; --d-nuvola:#1c3550;
     --vetro:rgba(13,21,30,.84); color-scheme:dark;
+    --alone-1:rgba(127,184,230,.1); --alone-2:rgba(233,119,46,.07);
+    --ombra-scheda:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.35),0 18px 40px -26px rgba(0,0,0,.9);
   }
 }
 :root[data-theme="dark"]{
@@ -58,12 +62,17 @@
     --su-accento:#0a1119; --marchio-t:#f08a3c; --ombra:0 1px 2px rgba(0,0,0,.3); --ombra-alta:0 22px 44px -26px rgba(0,0,0,.85),0 2px 6px -2px rgba(0,0,0,.4);
     --d-tratto:#7fb8e6; --d-cont-1:#e9772e; --d-cont-2:#3d8fd6; --d-cont-3:#4d6378; --d-mare:#17324d; --d-cielo:#122638; --d-nuvola:#1c3550;
     --vetro:rgba(13,21,30,.84); color-scheme:dark;
+    --alone-1:rgba(127,184,230,.1); --alone-2:rgba(233,119,46,.07);
+    --ombra-scheda:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.35),0 18px 40px -26px rgba(0,0,0,.9);
 }
 
 /* ================================================================ base */
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-padding-top:80px}
-body{margin:0;background:var(--fondo);color:var(--inchiostro);font:400 16px/1.5 var(--f);-webkit-font-smoothing:antialiased}
+html{background:var(--fondo)}
+body{margin:0;min-height:100vh;color:var(--inchiostro);font:400 16px/1.5 var(--f);-webkit-font-smoothing:antialiased;
+  background:radial-gradient(1100px 560px at 8% -6%,var(--alone-1),transparent 70%),radial-gradient(900px 520px at 100% -4%,var(--alone-2),transparent 65%),var(--fondo);
+  background-repeat:no-repeat}
 [hidden]{display:none !important}
 button,input,select,textarea{font:inherit;color:inherit}
 a{color:var(--accento);text-underline-offset:3px;text-decoration-thickness:1px}
@@ -75,10 +84,14 @@ a{color:var(--accento);text-underline-offset:3px;text-decoration-thickness:1px}
 
 /* ================================================================ barra in alto */
 .barra{position:sticky;top:0;z-index:30;margin:0 -20px;padding:calc(12px + env(safe-area-inset-top)) 20px 12px;display:flex;align-items:center;gap:16px;
-  background:var(--vetro);-webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid transparent;transition:border-color .2s}
-.barra.staccata{border-bottom-color:var(--linea)}
+  background:transparent;border-bottom:1px solid transparent;transition:border-color .2s,background-color .2s,box-shadow .2s}
+/* trasparente sopra lo sfondo sfumato; vetro smerigliato quando la pagina scorre sotto */
+.barra.staccata{background:var(--vetro);-webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px);
+  border-bottom-color:var(--linea);box-shadow:0 14px 30px -26px rgba(20,40,60,.55)}
 .logo{display:inline-flex;align-items:center;gap:10px;color:var(--inchiostro);text-decoration:none;font:700 18px/1 var(--f);font-stretch:92%;letter-spacing:.01em;white-space:nowrap}
-.logo .marchio{width:30px;height:30px;flex:none}
+.logo .marchio{width:30px;height:30px;flex:none;transform-origin:50% 80%}
+.logo:hover .marchio{animation:rolla .8s var(--dolce)}
+@keyframes rolla{30%{transform:rotate(-9deg)}65%{transform:rotate(5deg)}}
 .marchio .m-fondo{fill:var(--accento)}
 .marchio .m-c{fill:var(--su-accento)}
 .marchio .m-r{fill:var(--su-accento);opacity:.6}
@@ -88,6 +101,8 @@ a{color:var(--accento);text-underline-offset:3px;text-decoration-thickness:1px}
 .schede a{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;color:var(--secondario);text-decoration:none;font:550 14.5px/1 var(--f);transition:background-color .2s,color .2s}
 .schede a:hover{color:var(--inchiostro)}
 .schede a[aria-current="page"]{background:var(--carta);color:var(--accento-forte);box-shadow:var(--ombra),0 0 0 1px var(--linea)}
+.schede a[aria-current="page"] .ico{animation:salta .45s var(--dolce)}
+@keyframes salta{40%{transform:translateY(-3px) scale(1.1)}}
 .lato{display:flex;align-items:center;gap:6px;margin-left:auto}
 .schede + .lato{margin-left:0}
 .tasto-ico{display:inline-grid;place-items:center;width:38px;height:38px;padding:0;border:1px solid transparent;border-radius:999px;background:none;color:var(--secondario);cursor:pointer;transition:background-color .2s,color .2s,transform .15s}
@@ -112,7 +127,8 @@ a{color:var(--accento);text-underline-offset:3px;text-decoration-thickness:1px}
 @media (max-width:900px){
   .page{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
   /* niente sfocatura sulla barra in alto: farebbe da riferimento alla barra fissa in basso */
-  .barra{padding:calc(10px + env(safe-area-inset-top)) 16px 10px;margin:0 -16px;gap:10px;-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--fondo)}
+  .barra{padding:calc(10px + env(safe-area-inset-top)) 16px 10px;margin:0 -16px;gap:10px}
+  .barra.staccata{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--fondo)}
   .page{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
   .lato,.schede + .lato{margin-left:auto}
   .chi b{display:none}
@@ -127,13 +143,15 @@ a{color:var(--accento);text-underline-offset:3px;text-decoration-thickness:1px}
 
 /* ================================================================ schede */
 .foglio{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
-.box{grid-column:span 12;min-width:0;display:flex;flex-direction:column;gap:12px;padding:20px 22px 22px;background:var(--carta);border:1px solid var(--linea);border-radius:var(--r-l);box-shadow:var(--ombra)}
+.box{grid-column:span 12;min-width:0;display:flex;flex-direction:column;gap:12px;padding:20px 22px 22px;background:var(--carta);border:1px solid var(--linea);border-radius:var(--r-l);box-shadow:var(--ombra-scheda)}
 @media (min-width:860px){
   .s4{grid-column:span 4}.s5{grid-column:span 5}.s6{grid-column:span 6}.s7{grid-column:span 7}.s8{grid-column:span 8}
 }
 @media (max-width:560px){.box{padding:16px 16px 18px;border-radius:16px}.foglio{gap:12px}}
 .lab{display:flex;flex-wrap:wrap;align-items:center;gap:4px 9px;margin:0;font:650 15px/1.3 var(--f);color:var(--inchiostro)}
 .lab .ico{width:18px;height:18px;color:var(--accento)}
+/* l'icona che apre il titolo di una scheda sta in un tondino colorato */
+.lab > .ico:first-child{box-sizing:content-box;width:16px;height:16px;padding:6px;border-radius:10px;background:var(--accento-tenue);color:var(--accento-forte)}
 /* numero della casella del DAU: un'informazione per chi dichiara, non una decorazione */
 .lab b{display:inline-grid;place-items:center;min-width:28px;height:22px;padding:0 6px;border-radius:7px;background:var(--accento-tenue);color:var(--accento-forte);font:700 12.5px/1 var(--f);font-variant-numeric:tabular-nums}
 .lab .dx{margin-left:auto;font-weight:450;font-size:13.5px;color:var(--secondario)}
@@ -150,8 +168,10 @@ a{color:var(--accento);text-underline-offset:3px;text-decoration-thickness:1px}
 .btn:hover{background:var(--carta-2);border-color:var(--accento)}
 .btn:active{transform:scale(.97)}
 .btn .ico{width:17px;height:17px}
-.btn.pri{background:var(--accento);border-color:var(--accento);color:var(--su-accento);box-shadow:0 6px 16px -10px var(--accento)}
-.btn.pri:hover{background:var(--accento-forte);border-color:var(--accento-forte)}
+.btn.pri{background:linear-gradient(180deg,color-mix(in srgb,var(--accento) 84%,#fff),var(--accento) 62%);border-color:var(--accento);color:var(--su-accento);
+  box-shadow:0 8px 18px -10px var(--accento),inset 0 1px 0 rgba(255,255,255,.22)}
+.btn.pri:hover{background:linear-gradient(180deg,var(--accento),var(--accento-forte));border-color:var(--accento-forte);box-shadow:0 12px 24px -12px var(--accento)}
+@media (hover:hover){.btn:hover,.chip:hover{transform:translateY(-1px)}.btn:active,.chip:active{transform:scale(.97)}}
 .btn.sm{padding:6px 11px;font-size:13.5px;border-radius:10px}
 .btn.sm .ico{width:15px;height:15px}
 .btn[disabled]{opacity:.5;cursor:not-allowed;transform:none}
@@ -176,7 +196,10 @@ input[type="checkbox"]{accent-color:var(--accento);width:17px;height:17px}
 ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:15px}
 
 /* ================================================================ classifica: la domanda */
-.domanda{gap:14px}
+.domanda{gap:14px;transition:box-shadow .45s var(--dolce),border-color .45s}
+/* con l'IA accesa la scheda della domanda si illumina appena */
+.domanda.modo-ia{border-color:color-mix(in srgb,var(--accento) 40%,var(--linea));
+  box-shadow:var(--ombra-scheda),0 0 0 3px color-mix(in srgb,var(--accento) 12%,transparent),0 24px 48px -30px var(--accento)}
 .domanda h2{margin:0;font:650 clamp(22px,3.2vw,28px)/1.15 var(--f);font-stretch:96%;letter-spacing:-.01em}
 .titolo-riga{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px}
 .domanda .dato{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondario)}
@@ -199,7 +222,9 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 .interruttore input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
 .interruttore .pista{position:relative;flex:none;width:46px;height:28px;border-radius:999px;background:var(--linea-forte);transition:background-color .2s}
 .interruttore .pista::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--carta);box-shadow:0 1px 3px rgba(10,20,30,.3);transition:transform .25s var(--dolce)}
-.interruttore input:checked + .pista{background:var(--accento)}
+.interruttore input:checked + .pista{background:linear-gradient(90deg,var(--accento),color-mix(in srgb,var(--accento) 55%,var(--d-cont-1)))}
+.interruttore input:checked ~ span:last-child .ico{animation:brilla .7s var(--dolce)}
+@keyframes brilla{0%{transform:scale(.6) rotate(-25deg)}60%{transform:scale(1.25) rotate(10deg)}}
 .interruttore input:checked + .pista::after{transform:translateX(18px)}
 .interruttore input:focus-visible + .pista{outline:2px solid var(--accento);outline-offset:3px}
 .interruttore span:last-child{display:inline-flex;align-items:center;gap:6px}
@@ -211,6 +236,10 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 .ris-box > .lab{padding:0 12px}
 .trow.ris{grid-template-columns:118px minmax(0,1fr) auto;padding-left:12px}
 .trow.ris .ctx{grid-column:2 / -1}
+.ris-box .trow.ris + .trow.ris,.ris-box .trow.ris + .trow.info{box-shadow:0 -1px 0 color-mix(in srgb,var(--linea) 75%,transparent)}
+.ris-box.arriva .trow.ris{animation:sale .34s var(--dolce) backwards;animation-delay:calc(var(--i,0) * 24ms)}
+@keyframes sale{from{opacity:0;transform:translateY(7px)}}
+@media (hover:hover){.ris-box .trow.ris:hover{box-shadow:inset 3px 0 0 var(--accento)}}
 .link.indietro{font-weight:600;text-decoration:none;padding:6px 2px}
 .link.indietro .ico{width:17px;height:17px}
 
@@ -223,7 +252,7 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 @keyframes scorri{from{transform:translateX(-100%)}to{transform:translateX(270%)}}
 
 /* ================================================================ casella 33: il codice */
-.principale{box-shadow:var(--ombra-alta);border-color:var(--linea-forte)}
+.principale{box-shadow:var(--ombra-alta);border-color:var(--linea-forte);background:linear-gradient(180deg,color-mix(in srgb,var(--accento) 6%,var(--carta)),var(--carta) 140px)}
 .testa33{display:flex;flex-wrap:wrap;gap:14px 20px;align-items:center;justify-content:space-between}
 .c33{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}
 .cel{display:flex;flex-direction:column;justify-content:space-between;gap:6px;padding:12px 16px 10px;border-radius:14px;background:var(--carta-2);border:1px solid var(--linea);min-width:0}
@@ -435,9 +464,12 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 
 /* ================================================================ scena dei trasporti (js/disegni.js)
    In cima alla scheda, a tutta larghezza: cielo, nave portacontainer, gru, treno merci, camion e aereo. */
-.scena{display:block;aspect-ratio:1200/170;min-height:76px;max-height:170px;margin:-20px -22px 2px;overflow:hidden;border-radius:var(--r-l) var(--r-l) 0 0;
+.scena{display:block;margin:-20px -22px 2px;overflow:hidden;border-radius:var(--r-l) var(--r-l) 0 0;container-type:inline-size;line-height:0;
   background:linear-gradient(180deg,var(--d-cielo) 0%,color-mix(in srgb,var(--d-cielo) 40%,var(--carta)) 72%,var(--carta) 100%)}
-.scena-svg{display:block;width:100%;height:100%}
+/* due composizioni (js/disegni.js): larga, oppure compatta nei riquadri stretti; la scena intera, mai tagliata */
+.scena-svg{display:block;width:100%;height:auto}
+.scena-stretta{display:none}
+@container (max-width:640px){.scena-larga{display:none}.scena-stretta{display:block}}
 .accesso .scena{margin:-28px -28px 4px}
 @media (max-width:560px){.scena{margin:-16px -16px 0;border-radius:16px 16px 0 0}.accesso .scena{margin:-22px -18px 0}}
 .d-t{fill:var(--d-tratto)}
@@ -461,6 +493,21 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .in-viaggio .s-nave{animation:dondola 2.6s ease-in-out infinite alternate}
 @keyframes viaggio{0%{transform:translateX(var(--da));opacity:0}12%{opacity:1}85%{opacity:1}100%{transform:translateX(var(--a));opacity:0}}
 @keyframes dondola{from{transform:translateY(0)}to{transform:translateY(2.5px)}}
+/* scena viva (prima pagina e accesso): nuvole e onde si muovono piano, la nave dondola, l'aereo plana; treno e camion
+   arrivano una volta all'apertura */
+.vivo .d-nuvola-g{animation:nuvola 18s ease-in-out infinite alternate}
+.vivo .d-nuvola-g + .d-nuvola-g{animation-duration:24s;animation-direction:alternate-reverse}
+.vivo .d-onda{animation:onde 4s ease-in-out infinite alternate}
+.vivo .s-nave{animation:dondola 3.2s ease-in-out infinite alternate}
+.vivo .s-aereo{animation:plana 6s ease-in-out infinite alternate}
+.vivo .d-scia{animation:scia 1.8s linear infinite}
+.vivo .s-camion{animation:arriva 1.5s .25s var(--dolce) backwards}
+.vivo .s-treno{animation:arriva 1.7s .45s var(--dolce) backwards}
+@keyframes nuvola{to{transform:translateX(30px)}}
+@keyframes onde{to{transform:translateX(-14px)}}
+@keyframes plana{to{transform:translate(10px,-5px)}}
+@keyframes scia{to{stroke-dashoffset:-22}}
+@keyframes arriva{from{transform:translateX(110px);opacity:0}}
 
 /* richieste di account da approvare: puntino arancio sulla scheda Gestione */
 .schede a.novita{position:relative}
@@ -490,7 +537,8 @@ details.piu[open]::details-content{height:auto}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.4s;animation-timing-function:ease}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms !important;animation-delay:0s !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}
-  .stato .ico,.avanza i,.in-viaggio .s-camion,.in-viaggio .s-treno,.in-viaggio .s-aereo,.in-viaggio .s-nave{animation:none !important}
+  .stato .ico,.avanza i,.in-viaggio .s-camion,.in-viaggio .s-treno,.in-viaggio .s-aereo,.in-viaggio .s-nave,
+  .vivo .d-nuvola-g,.vivo .d-onda,.vivo .s-nave,.vivo .s-aereo,.vivo .d-scia{animation:none !important}
   ::view-transition-old(root),::view-transition-new(root){animation:none !important}
 }
 
