@@ -238,6 +238,12 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 .trow.ris .ctx{grid-column:2 / -1}
 /* archivio aziendale: le classificazioni già fatte in azienda, prima dei risultati della nomenclatura */
 .ris-box > .lab + .albero + .lab{margin-top:10px}
+/* preferiti cambiati con i dati del mese (js/profilo.js) */
+details.cambi{margin-top:6px}
+details.piu.cambi > summary{color:var(--ambra)}
+details.cambi > summary .ico{width:15px;height:15px}
+ul.cambi{margin:6px 0 2px;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--secondario)}
+ul.cambi b{color:var(--inchiostro)}
 .trow.ris.arch{background:color-mix(in srgb,var(--accento) 6%,transparent)}
 .trow.ris.arch .ctx{color:var(--accento-forte)}
 .gia{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--r-m);background:var(--accento-tenue);color:var(--inchiostro)}

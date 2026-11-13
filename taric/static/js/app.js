@@ -1357,6 +1357,12 @@ T.app = {
   utente: function () { return state.utente; },
   aggiornaIo: aggiornaIo,
   caricaSinonimi: caricaSinonimi,
+  tipoMisura: function (t) { return TIPI_IT[t] || ('misura ' + t); },
+  fmtDazio: fmtDazio,
+  nomeArea: nomeArea,
+  dataIt: dataIt,
+  oggi: oggiNum,
+  controllaCambi: controllaCambi,
   preferiti: state.preferiti,
   vista: vista,
   apriCodice: function (c) {
@@ -1382,6 +1388,18 @@ document.addEventListener('taric:tema', function (ev) {
   T.api('PUT', '/api/io/preferenze', { paese: u.preferenze.paese || '', flusso: u.preferenze.flusso || 'import', tema: ev.detail }).catch(function () { /* resta solo su questo dispositivo */ });
 });
 
+/* preferiti cambiati con i dati del mese: puntino sulla scheda Profilo finché non si guardano */
+function controllaCambi() {
+  if (!Object.keys(state.preferiti).length) return;
+  T.api('GET', '/api/preferiti/cambi').then(function (r) {
+    var n = Object.keys(r.cambi || {}).length, visti = null, tab = $('#tab-profilo');
+    try { visti = localStorage.getItem('magic-hs.cambi-visti'); } catch (e) { /* niente archivio: il puntino resta */ }
+    var nuovo = n > 0 && visti !== r.a;
+    tab.classList.toggle('novita', nuovo);
+    if (nuovo) tab.title = n === 1 ? 'Un preferito è cambiato con i dati del mese' : n + ' preferiti sono cambiati con i dati del mese'; else tab.removeAttribute('title');
+  }, function () { /* niente avvisi */ });
+}
+
 /* esce dall'account */
 $('#esci').addEventListener('click', function () {
   T.api('POST', '/api/esci', null, { resta: true }).then(vaiAllAccesso, vaiAllAccesso);
@@ -1403,7 +1421,7 @@ function avvia() {
     try { state.modo = localStorage.getItem('magic-hs.modo') === 'ia' ? 'ia' : 'parole'; } catch (e) { /* senza archivio: ricerca per parole */ }
     impostaIA();
     caricaSinonimi(); caricaArchivio();
-    return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
+    return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); controllaCambi(); }, function () { /* niente preferiti */ });
   }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', avvia); else avvia();

@@ -18,6 +18,7 @@
     return Promise.all([
       T.api('GET', '/api/storico?limite=50').then(function (r) { st.storico = r.voci; st.totale = r.totale; st.finito = r.voci.length >= r.totale; }),
       T.api('GET', '/api/preferiti').then(function (r) { st.preferiti = r.voci; }),
+      T.api('GET', '/api/preferiti/cambi').then(function (r) { st.cambi = r; segnaVisti(); }, function () { st.cambi = null; }),
       app().aggiornaIo()
     ]).then(disegna, function (e) { el.innerHTML = '<p class="errore">' + esc(e.errore || 'Profilo non disponibile.') + '</p>'; });
   }
@@ -121,10 +122,48 @@
         '<div class="m"><span class="cod">' + esc(T.grp(v.codice)) + '</span> ' + esc(d.slice(0, 90)) + ' · ' + esc(T.dataOra(v.quando)) + '</div></div>';
     }).join('');
   }
+  /* ---------- preferiti cambiati con i dati del mese (/api/preferiti/cambi) ---------- */
+  function segnaVisti() {
+    var r = st.cambi;
+    if (!r || !r.a || !Object.keys(r.cambi || {}).length) return;
+    try { localStorage.setItem('magic-hs.cambi-visti', r.a); } catch (e) { /* niente archivio */ }
+    var tab = document.getElementById('tab-profilo');
+    if (tab) { tab.classList.remove('novita'); tab.removeAttribute('title'); }
+  }
+  function valori(righe) {
+    var a = app(), oggi = a.oggi();
+    return righe.map(function (x) {
+      var v = x.dazio ? a.fmtDazio(x.dazio) : (x.condizioni ? 'con condizioni o documenti' : 'senza dazio');
+      if (x.dal > oggi) v += ' dal ' + a.dataIt(x.dal);
+      if (x.al) v += ' fino al ' + a.dataIt(x.al);
+      return v;
+    }).join('; ');
+  }
+  function righeCambi(c) {
+    var a = app(), out = [];
+    if (c.sparito) return ['<li>Il codice non c\'è più nei dati del mese: cercane il nuovo nella nomenclatura.</li>'];
+    if (c.descrizione) out.push('<li>Descrizione nuova: «' + esc(c.descrizione.slice(0, 200)) + '»</li>');
+    c.misure.forEach(function (m) {
+      var nome = a.tipoMisura(m.tipo) + (m.addizionale ? ' (codice ' + m.addizionale + ')' : '') + ', ' + a.nomeArea(m.origine) + (m.flusso === 'export' ? ' · esportazione' : '');
+      var p = valori(m.prima), d = valori(m.dopo);
+      if (!m.prima.length) out.push('<li><b>Nuova</b> · ' + esc(nome) + ': ' + esc(d) + '</li>');
+      else if (!m.dopo.length) out.push('<li><b>Tolta</b> · ' + esc(nome) + ' (era ' + esc(p) + ')</li>');
+      else out.push('<li>' + esc(nome) + ': ' + (p === d ? 'cambiate condizioni o documenti' : esc(p) + ' → <b>' + esc(d) + '</b>') + '</li>');
+    });
+    return out;
+  }
+  function avvisoCambi(codice) {
+    var r = st.cambi, c = r && r.cambi && r.cambi[codice];
+    if (!c) return '';
+    var righe = righeCambi(c), mostra = righe.slice(0, 8);
+    return '<details class="piu cambi"><summary>' + T.icona('attenzione') + 'Cambiato con i dati di ' + esc(meseIt(r.a.slice(0, 7))) + '</summary><ul class="cambi">' +
+      mostra.join('') + (righe.length > mostra.length ? '<li>e altre ' + (righe.length - mostra.length) + ' differenze: aprilo per vedere le misure di oggi.</li>' : '') + '</ul></details>';
+  }
+
   function rigaPreferito(v) {
     var d = app().descrizione(v.codice), perc = app().percorso(v.codice);
     var titolo = perc.length > 1 ? perc[perc.length - 2] + ' › ' + d : d;
-    return '<div class="voce"><div><span class="cod">' + esc(T.grp(v.codice)) + '</span> <span class="t">' + esc((titolo || 'codice non presente nei dati attuali').slice(0, 160)) + '</span></div>' +
+    return '<div class="voce"><div><span class="cod">' + esc(T.grp(v.codice)) + '</span> <span class="t">' + esc((titolo || 'codice non presente nei dati attuali').slice(0, 160)) + '</span>' + avvisoCambi(v.codice) + '</div>' +
       '<div class="azioni"><button class="btn sm" type="button" data-p="apri-codice" data-c="' + esc(v.codice) + '">Apri</button>' +
       '<button class="btn sm" type="button" data-p="togli-preferito" data-c="' + esc(v.codice) + '">Togli</button></div>' +
       '<form class="fila" data-p="nota" data-c="' + esc(v.codice) + '"><input class="campo" name="nota" maxlength="500" placeholder="Nota personale (cliente, articolo, osservazioni)" value="' + esc(v.nota) + '">' +

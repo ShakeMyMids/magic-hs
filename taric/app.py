@@ -29,8 +29,9 @@ from starlette.middleware.gzip import GZipMiddleware
 from . import __version__
 from . import sicurezza as S
 from .backup import Backup, ErroreBackup
+from .cambi import cambi
 from .config import Config
-from .dati import GestoreDati
+from .dati import RE_VERSIONE, GestoreDati
 from .db import Database, iso
 from .ia import ErroreIA, ServizioIA, mese_corrente
 from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
@@ -742,6 +743,25 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 np += c.execute("INSERT INTO preferiti(utente_id, codice, nota, quando) VALUES (?, ?, ?, ?) ON CONFLICT(utente_id, codice) DO NOTHING",
                                 (u["id"], codice, str(p.get("nota") or "").strip()[:500], str(p.get("quando") or iso())[:40])).rowcount
         return json_ok(storico=nuove, preferiti=np)
+
+    # ------------------------------------------------------------------ preferiti: cosa e' cambiato con i dati del mese
+    @app.get("/api/preferiti/cambi")
+    def cambi_preferiti(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Differenze tra la versione dei dati in uso e la precedente installata, per i codici preferiti."""
+        att = dati.attiva()
+        nomi = sorted(d.name for d in dati.versioni.iterdir() if d.is_dir() and RE_VERSIONE.match(d.name) and (d / "nomenclatura.js").is_file()) \
+            if dati.versioni.is_dir() else []
+        prec = max((n for n in nomi if att and n < att), default=None)
+        if not att or not prec:
+            return {"da": prec, "a": att, "cambi": {}}
+        with db.connessione() as c:
+            codici = [r[0] for r in c.execute("SELECT codice FROM preferiti WHERE utente_id = ?", (u["id"],))]
+        try:
+            diff = cambi(dati.versioni / prec, dati.versioni / att, codici)
+        except (OSError, ValueError, KeyError, IndexError) as e:          # file dei dati inattesi: niente avvisi, il resto funziona
+            log.warning("confronto dei preferiti %s -> %s non riuscito: %s", prec, att, e)
+            diff = {}
+        return {"da": prec, "a": att, "cambi": diff}
 
     # ------------------------------------------------------------------ archivio aziendale: classificazioni gia' fatte
     @app.get("/api/archivio")
