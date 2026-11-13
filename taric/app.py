@@ -266,6 +266,12 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def manifest() -> FileResponse:
         return FileResponse(STATIC / "manifest.webmanifest", media_type="application/manifest+json")
 
+    @app.get("/sw.js", include_in_schema=False)
+    def service_worker() -> FileResponse:
+        """Service worker per installare il sito come app: alla radice, perche' valga per tutte le pagine, e sempre
+        ricontrollato, cosi' una nuova versione arriva subito."""
+        return FileResponse(STATIC / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
     @app.get("/data/{versione}/{percorso:path}", include_in_schema=False)
     def file_dati(versione: str, percorso: str, request: Request) -> Response:
         if utente_corrente(request) is None:

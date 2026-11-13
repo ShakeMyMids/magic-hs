@@ -47,7 +47,9 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   dati da `$TARIC_DATI`, che il `Dockerfile` imposta in `/var/data/magic-hs/dati`).
 - `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/`), `accedi.html`, `reimposta.html` e
   `js/accesso.js` (accesso, richiesta di account, nuova password), `attesa.html` con `js/attesa.js` (dati non ancora
-  pronti), `js/comune.js` (chiamate API, tema, logo), `js/disegni.js` (scena con nave, gru, treno, camion e aereo, inserita
+  pronti), `js/comune.js` (chiamate API, tema, logo, finestre `T.finestra`), `js/installa.js` (tasto Installa: finestra
+  d'installazione del browser con `beforeinstallprompt`, altrimenti i passi per iPhone/iPad, Safari, Firefox; registra
+  `sw.js`, servito come `/sw.js`, che non conserva niente e senza rete mostra solo un avviso), `js/disegni.js` (scena con nave, gru, treno, camion e aereo, inserita
   negli elementi `data-scena`), `js/app.js` (prima pagina: ricerca per parola o codice con `cerca()`, che ignora le parole vuote e usa i sinonimi di
   `js/sinonimi.js`, e risultati in `#risultati`, oppure con
   l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; albero

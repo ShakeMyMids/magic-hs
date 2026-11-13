@@ -32,6 +32,24 @@ def test_pagine_del_sito(sito: Sito):
     assert "Strict-Transport-Security" in r.headers
 
 
+def test_installabile_come_app(sito: Sito):
+    """Collegamento sul desktop o icona sul telefono: manifest e service worker raggiungibili anche prima dell'accesso."""
+    c = sito.client()
+    m = c.get("/manifest.webmanifest")
+    assert m.status_code == 200 and m.headers["content-type"].startswith("application/manifest+json")
+    m = m.json()
+    assert (m["id"], m["start_url"], m["scope"], m["display"]) == ("/", "/", "/", "standalone") and m["name"] == "MAGIC HS"
+    taglie = {i["sizes"] for i in m["icons"] if i["type"] == "image/png"}
+    assert {"192x192", "512x512"} <= taglie
+    for i in m["icons"]:
+        assert c.get(i["src"]).status_code == 200, i["src"]
+    sw = c.get("/sw.js")
+    assert sw.status_code == 200 and sw.headers["content-type"].startswith("text/javascript") and sw.headers["cache-control"] == "no-cache"
+    assert "addEventListener('fetch'" in sw.text and "caches." not in sw.text          # niente copie che invecchiano
+    pagina = sito.capo().get("/").text
+    assert 'id="installa"' in pagina and "/static/js/installa.js" in pagina and 'rel="manifest"' in pagina
+
+
 def test_registrazione_e_approvazione(sito: Sito):
     capo = sito.capo()                                        # email di MAGIC_HS_AMMINISTRATORI: entra subito
     io_ = capo.get("/api/io").json()

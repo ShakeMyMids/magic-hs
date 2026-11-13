@@ -5,34 +5,7 @@
   'use strict';
   var T = window.TARIC, esc = T.esc;
 
-  /* finestra sopra la pagina: Esc o clic fuori la chiudono, il tasto Tab resta dentro, poi si torna dove si era */
-  function finestra(html, idTitolo, classe) {
-    var prima = document.activeElement, velo = document.createElement('div');
-    velo.className = 'velo';
-    velo.innerHTML = '<div class="finestra ' + classe + '" role="dialog" aria-modal="true" aria-labelledby="' + idTitolo + '">' + html + '</div>';
-    document.body.appendChild(velo);
-    document.documentElement.classList.add('con-finestra');
-    var f = velo.firstChild;
-    function chiudi() {
-      if (!velo.parentNode) return;
-      velo.parentNode.removeChild(velo);
-      document.documentElement.classList.remove('con-finestra');
-      document.removeEventListener('keydown', tasti, true);
-      if (prima && prima.focus && document.contains(prima)) prima.focus();
-    }
-    function tasti(ev) {
-      if (ev.key === 'Escape') { ev.preventDefault(); chiudi(); return; }
-      if (ev.key !== 'Tab') return;
-      var el = Array.prototype.filter.call(f.querySelectorAll('a[href],button:not([disabled]),input:not([disabled])'), function (x) { return x.offsetParent !== null; });
-      if (!el.length) return;
-      if (ev.shiftKey && document.activeElement === el[0]) { ev.preventDefault(); el[el.length - 1].focus(); }
-      else if (!ev.shiftKey && document.activeElement === el[el.length - 1]) { ev.preventDefault(); el[0].focus(); }
-    }
-    document.addEventListener('keydown', tasti, true);
-    velo.addEventListener('mousedown', function (ev) { if (ev.target === velo) chiudi(); });
-    f.addEventListener('click', function (ev) { if (ev.target.closest('[data-f="chiudi"]')) chiudi(); });
-    return { el: f, chiudi: chiudi };
-  }
+  var finestra = T.finestra;
 
   /* ------------------------------------------------------------------ festa: intelligenza artificiale collegata */
   T.festaIA = function (info) {

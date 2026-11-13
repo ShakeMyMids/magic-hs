@@ -1,13 +1,13 @@
 // Prova nel browser del sito (come su Render): l'amministratore si registra ed entra, ricerca per parola o codice in
 // prima pagina e interruttore dell'IA, un collega chiede l'account e aspetta l'approvazione, classificazioni con l'IA fino
-// al limite mensile, link per la password, sospensione, uscita, telefono, tablet e tema scuro. IA finta
+// al limite mensile, link per la password, sospensione, installazione come app, uscita, telefono, tablet e tema scuro. IA finta
 // (tests/finto_claude.py) come servizio unico del server.
 // Uso: python tests/finto_claude.py 9100 dati-AAAA-MM-01.zip &
 //      TARIC_DATI=P MAGIC_HS_AMMINISTRATORI=capo@azienda.it TARIC_IA_FORNITORE=openai TARIC_IA_URL=http://127.0.0.1:9100/v1 \
 //        TARIC_IA_MODELLO=finto-modello TARIC_IA_CHIAVE=chiave-finta TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati \
 //        python -m taric server --porta 8810 &
 //      node tests/e2e_sito.js http://localhost:8810 cartella-schermate
-const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
+const { chromium, devices } = require(process.env.PLAYWRIGHT || 'playwright');
 const fs = require('fs');
 const B = process.argv[2] || 'http://localhost:8810';
 const out = process.argv[3] || 'shots-sito';
@@ -61,6 +61,15 @@ async function accedi(p, email, password) {
   await pronta(capo);
   ok(await capo.isVisible('#tab-gestione') && (await capo.textContent('#tab-gestione')).trim() === 'Gestione', 'amministratore dentro, scheda Gestione');
   ok((await capo.getAttribute('#esci', 'title')) === 'Esci', 'pulsante Esci');
+
+  // installazione come app: manifest e service worker a posto per Chromium, tasto con le istruzioni
+  const sw = await capo.evaluate(() => navigator.serviceWorker.ready.then(r => r.active && r.active.scriptURL));
+  const cdp = await ca.newCDPSession(capo);
+  const inst = await cdp.send('Page.getInstallabilityErrors');
+  ok(/\/sw\.js$/.test(sw || '') && !inst.installabilityErrors.length, 'installabile come app (service worker attivo, nessun errore)');
+  await capo.click('#installa'); await capo.waitForSelector('.finestra.installa');
+  ok(await capo.isVisible('.finestra.installa >> text=Installa pagina come app'), 'Installa: istruzioni per il computer');
+  await capo.click('.finestra.installa .btn.pri');
 
   // prima pagina: ricerca per parola o codice, senza IA
   ok(!(await capo.isChecked('#modo-ia')) && (await capo.textContent('#titolo-q')) === 'Che merce cerchi?' && (await capo.textContent('#vai')).trim() === 'Cerca',
@@ -182,6 +191,23 @@ async function accedi(p, email, password) {
   await q.goto(B + '/#gestione'); await q.waitForSelector('button[data-g="u-apri"]');
   await q.screenshot({ path: out + '/9-tel-utenti.png', fullPage: true });
   ok(await senzaScorrimento(q), 'telefono: niente scorrimento di lato');
+
+  // iPhone: icona sulla schermata Home
+  const ci = await b.newContext({ ...devices['iPhone 13'] });
+  const ip = await ci.newPage(); attenzione(ip, 'iphone');
+  await accedi(ip, 'capo@azienda.it', 'Porto-Container-42'); await pronta(ip);
+  await ip.click('#installa'); await ip.waitForSelector('.finestra.installa');
+  ok(await ip.isVisible('.finestra.installa >> text=Aggiungi alla schermata Home'), 'Installa su iPhone: istruzioni per la schermata Home');
+  await ip.screenshot({ path: out + '/11-iphone-installa.png' });
+  ok(await senzaScorrimento(ip), 'iPhone: niente scorrimento di lato');
+  await ci.close();
+
+  // senza rete il service worker mostra un avviso invece dell'errore del browser
+  await ca.setOffline(true);
+  await capo.goto(B + '/');
+  ok(await capo.isVisible('text=Non c\'è connessione'), 'senza rete: avviso di MAGIC HS');
+  await ca.setOffline(false);
+  await capo.goto(B + '/'); await pronta(capo);
 
   // tablet in verticale e in orizzontale
   for (const [nome, w, h] of [['tablet', 810, 1080], ['tablet-orizzontale', 1080, 810]]) {

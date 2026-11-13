@@ -76,6 +76,10 @@
     else h += '<div class="elenco">' + st.preferiti.map(rigaPreferito).join('') + '</div>';
     h += '</div></div>';
 
+    if (T.installata && !T.installata()) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('installa') + 'MAGIC HS come app</div>' +
+      '<p class="nota">Collegamento sul desktop del computer o icona sulla schermata Home del telefono: si apre con un tocco, nella sua finestra.</p>' +
+      '<div class="fila"><button class="btn sm" type="button" data-installa>' + T.icona('installa') + 'Installa</button></div></div></div>';
+
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'I tuoi dati</div>' +
       '<p class="nota">Storico, preferiti e preferenze sono nel tuo account: li ritrovi da qualsiasi PC. «Esporta» ne salva una copia in un file, «Importa» la riporta qui.</p>' +
       '<div class="fila"><button class="btn sm" type="button" data-p="esporta">' + T.icona('scarica') + 'Esporta</button>' +

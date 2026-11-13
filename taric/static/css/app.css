@@ -100,6 +100,14 @@ a{color:var(--accento);text-underline-offset:3px;text-decoration-thickness:1px}
 .iniziali{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accento-tenue);color:var(--accento-forte);font:700 12.5px/1 var(--f);letter-spacing:.02em}
 .chi b{font-weight:550;max-width:16ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chi .tasto-ico{width:30px;height:30px}
+/* tasto per installare MAGIC HS (js/installa.js): solo icona, con la scritta quando c'è posto */
+.tasto-ico.installa span{display:none}
+@media (min-width:1101px){
+  .tasto-ico.installa{display:inline-flex;align-items:center;width:auto;gap:7px;padding:0 13px;border-color:var(--linea);background:var(--carta);color:var(--accento-forte);font:600 14px/1 var(--f)}
+  .tasto-ico.installa span{display:inline}
+}
+@media (min-width:901px) and (max-width:1100px){.chi b{display:none}}
+@media (max-width:374px){.lato{gap:0}.logo{gap:8px}.barra{gap:6px}}
 
 @media (max-width:900px){
   .page{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
