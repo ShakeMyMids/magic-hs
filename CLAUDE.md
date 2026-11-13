@@ -14,11 +14,20 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 
 - `taric/app.py`: pagine e API. Accesso: `/accedi`, `/api/registrazione` (modulo firmato, trappola `sito_web`),
   `/api/accedi`, `/api/esci`, `/api/io/password`, `/api/reimposta-password` (link dell'amministratore). Comuni: profilo,
-  storico, preferiti, IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
-  `ia`, `impostazioni`, `backup`, dati TARIC, registro. `/api/salute` per Render. Gli errori si restituiscono come
+  storico (colonna `condivisa` dalla preferenza `condividi`), preferiti (`/api/preferiti/cambi`: differenze con la versione
+  precedente dei dati, da `taric/cambi.py`), archivio aziendale (`/api/archivio`), sinonimi (`/api/sinonimi`), parole senza
+  risultati (`/api/ricerche-vuote`, anonime), IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
+  `ia`, `impostazioni`, `backup`, `copia-esterna`, dati TARIC (con lo stato della copia esterna), `ricerca` e `sinonimi`,
+  registro. `/api/salute` per Render. Middleware: compressione gzip e cache lunga per i file con `?v=`. Gli errori si restituiscono come
   `{"errore": "<messaggio italiano>", "codice": "<codice>"}`.
 - `taric/config.py`: configurazione dalle variabili d'ambiente (`TARIC_*`, `GEMINI_API_KEY`, `MAGIC_HS_*`,
-  `RENDER_EXTERNAL_URL` per `config.indirizzo`).
+  `RENDER_EXTERNAL_URL` per `config.indirizzo`, `MAGIC_HS_COPIA_*` per la copia esterna).
+- `taric/ricerca.py`: le regole della ricerca di `app.js` (`piano`, `radice`) lato server, per controllare che i termini
+  di un sinonimo esistano nella nomenclatura (`presente`). `taric/cambi.py`: cosa cambia per un codice tra due versioni.
+- `taric/copia.py`: copia settimanale del database in un archivio compatibile S3 (firma AWS Signature V4 con httpx, senza
+  librerie in più; nomi a rotazione su 8 settimane; dopo un errore si riprova dopo 6 ore; esito in `impostazioni`
+  `copia_esterna`). Il pianificatore la chiama tra i suoi `compiti`; il backup si scrive con `Backup.scrivi` in un file a
+  parte, fuori dall'elenco dei backup giornalieri.
 - `taric/db.py`: schema SQLite. Le migrazioni vanno aggiunte in coda alla lista `SCHEMA`; `PRAGMA user_version`
   dice quali sono già applicate. Le tabelle delle versioni precedenti restano.
 - `taric/sicurezza.py`: sessioni (cookie `magic_hs`), password argon2, tentativi limitati (tabella `tentativi`), gettoni
@@ -54,9 +63,12 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   negli elementi `data-scena`: due composizioni, larga e compatta, scelte in `app.css` con una container query sulla
   larghezza del riquadro, così sul telefono niente viene tagliato; `data-scena="vivo"` la anima piano), `js/app.js` (prima pagina: ricerca per parola o codice con `cerca()`, che ignora le parole vuote e usa i sinonimi di
   `js/sinonimi.js`, e risultati in `#risultati`, oppure con
-  l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; albero
-  della nomenclatura; misure), `js/profilo.js`, `js/gestione.js`
-  (Utenti, Intelligenza artificiale, Dati TARIC, Registro), `js/attiva-ia.js` (festa alla prima «Prova» riuscita
+  l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; sopra i
+  risultati l'archivio aziendale e, prima di chiedere all'IA una descrizione già classificata, la proposta di riprenderla;
+  le ricerche senza risultati vanno a `/api/ricerche-vuote`; albero della nomenclatura; misure con il calcolo degli
+  importi `calcolaDazio` e la stampa, stili `@media print` in fondo ad `app.css`), `js/profilo.js` (anche gli avvisi
+  sui preferiti cambiati), `js/gestione.js`
+  (Utenti, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Registro), `js/attiva-ia.js` (festa alla prima «Prova» riuscita
   dell'amministratore: `T.festaIA`, scena `T.festa()` di `disegni.js`, animazioni `.festa` in `app.css` con lo stato
   finale uguale a quello senza animazioni). Tema «porto»: blu marina e arancio dei container, colori solo nelle variabili
   di `css/app.css` (anche quelle `--d-*` delle illustrazioni). Testi brevi: niente spiegazioni ovvie nelle pagine. Le
@@ -85,7 +97,9 @@ python -m pytest -q tests
 `tests/test_sinonimi.py` controlla che ogni termine di `js/sinonimi.js` esista nel testo italiano della nomenclatura:
 per un nuovo sinonimo scegli parole o espressioni del testo ufficiale. I test usano `conftest.Sito` (il sito con l'amministratore `CAPO`, `registra`/`accedi`/`capo`/`collega`/`riavvia`; `ia=False`
 ed `extra` per altri servizi IA, `versioni` per i dati già installati) con i finti servizio IA e GitHub (`FintoClaude`,
-`FintoGitHub` con dati pronti e fonte); `sito_claude` è il sito con Claude. Prova nel browser (Playwright, finto servizio
+`FintoGitHub` con dati pronti e fonte, `FintoS3` per la copia esterna, che ricalcola la firma); `sito_claude` è il sito
+con Claude. `tests/test_copia.py` controlla la firma con l'esempio della documentazione AWS e con firme calcolate da
+botocore. Prova nel browser (Playwright, finto servizio
 IA): `tests/sito_di_prova.sh` e `tests/e2e_sito.js`, che GitHub esegue a ogni modifica (job `browser` di
 `.github/workflows/test.yml`); vedi la sezione «Sviluppo» del README. Dopo modifiche all'interfaccia controlla anche il telefono
 (larghezza 390 px, anche in orizzontale), il tablet (810 px in verticale, 1080 in orizzontale) e il tema scuro: fino a 900 px

@@ -92,15 +92,21 @@ class Backup:
 
     # ------------------------------------------------------------ creazione
     def crea(self) -> Path:
-        if not self.db.exists():
-            raise ErroreBackup("non c'e' ancora un database da salvare")
         self.cartella.mkdir(mode=0o700, parents=True, exist_ok=True)
         nome = f"magic-hs-{datetime.now():%Y-%m-%d-%H%M%S}.zip"
         dest = self.cartella / nome
         while dest.exists():                                   # due backup nello stesso secondo
             time.sleep(1)
             dest = self.cartella / f"magic-hs-{datetime.now():%Y-%m-%d-%H%M%S}.zip"
-        tmp = self.cartella / f".in-corso-{secrets.token_hex(4)}"
+        self.scrivi(dest)
+        self.pota()
+        return dest
+
+    def scrivi(self, dest: Path) -> None:
+        """Scrive in dest un backup (.zip con taric.db); la cartella di dest deve esistere."""
+        if not self.db.exists():
+            raise ErroreBackup("non c'e' ancora un database da salvare")
+        tmp = dest.parent / f".in-corso-{secrets.token_hex(4)}"
         tmp.mkdir()
         try:
             copia = tmp / NOME_DB
@@ -112,8 +118,6 @@ class Backup:
             os.replace(parziale, dest)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-        self.pota()
-        return dest
 
     def pota(self) -> None:
         tieni = max(self.copie, 1)

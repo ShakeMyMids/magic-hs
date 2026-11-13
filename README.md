@@ -8,21 +8,24 @@ Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'ammini
 
 ## Che cosa fa
 
-- **Classifica** (prima pagina): si cerca per parola o per codice nella nomenclatura, senza intelligenza artificiale; i risultati compaiono mentre scrivi e «Usa» apre la scheda del codice. Le parole d'uso comune trovano anche i termini della nomenclatura (per esempio «scarpe» le «calzature», «divano» i «mobili per sedersi», «router» gli apparecchi di routing): l'elenco è in `taric/static/js/sinonimi.js` e si allunga con una riga per parola. Con l'interruttore **Usa l'IA** si descrive invece la merce: l'IA individua le voci candidate e sceglie il codice confrontandolo con il testo ufficiale della nomenclatura, che è in italiano; le domande affinano la scelta. Ogni dispositivo ricorda la scelta dell'interruttore.
+- **Classifica** (prima pagina): si cerca per parola o per codice nella nomenclatura, senza intelligenza artificiale; i risultati compaiono mentre scrivi e «Usa» apre la scheda del codice. In cima vengono le voci che contengono le parole così come sono scritte, poi quelle con le sole radici o con un sinonimo. Le parole d'uso comune trovano anche i termini della nomenclatura (per esempio «scarpe» le «calzature», «divano» i «mobili per sedersi», «router» gli apparecchi di routing): l'elenco è in `taric/static/js/sinonimi.js`, e l'amministratore ne aggiunge altri da *Gestione → Ricerca*. Con l'interruttore **Usa l'IA** si descrive invece la merce: l'IA individua le voci candidate e sceglie il codice confrontandolo con il testo ufficiale della nomenclatura, che è in italiano; le domande affinano la scelta. Ogni dispositivo ricorda la scelta dell'interruttore.
+- **Archivio aziendale**: sopra i risultati della nomenclatura compaiono le merci **già classificate in azienda**, con il codice scelto e chi l'ha fatto. Se si chiede all'IA una descrizione già classificata, MAGIC HS propone di riprendere quella classificazione, senza una nuova richiesta e senza consumare il limite del mese. Chi preferisce non condividere le proprie toglie la spunta nel Profilo.
+- **Scheda del codice**: descrizione, percorso nella nomenclatura e misure; il **calcolo degli importi** dà una stima di dazio e IVA dal valore in dogana, dalla massa e dalle quantità (le misure che dipendono da condizioni o da prezzi d'entrata restano «non calcolabili»). **Stampa o PDF** prepara un foglio pulito, con data e versione dei dati, da allegare alla pratica.
 - **Nomenclatura**: l'albero delle sezioni, dei capitoli e delle voci, da sfogliare.
 - **Telefono e tablet**: le sezioni passano nella barra in basso, i pulsanti sono grandi per il dito e la pagina si adatta anche in orizzontale.
 - **Installa** (in alto, e nel Profilo): crea il collegamento sul desktop del computer o l'icona sulla schermata Home del telefono, e MAGIC HS si apre come un'app nella sua finestra. Con Chrome, Edge e i telefoni Android il tasto apre la finestra d'installazione del browser; su iPhone e iPad, Safari per Mac e Firefox mostra i passi da fare.
 - **Misure per paese**: dazi (anche preferenziali, antidumping e contingenti), condizioni, certificati e documenti del riquadro 44 e unità supplementari. Valgono per importazione ed esportazione.
 - **Profilo**, nel proprio account (si ritrova da qualsiasi PC):
   - storico delle classificazioni, che si riaprono con tutti i dettagli;
-  - voci preferite con una nota;
-  - paese, flusso e tema predefiniti;
+  - voci preferite con una nota; quando arrivano i dati del mese e un preferito cambia (dazio, misure, descrizione, codice soppresso) compare un puntino sulla scheda e il preferito mostra cosa è cambiato;
+  - paese, flusso e tema predefiniti, e la scelta di condividere le proprie classificazioni con i colleghi;
   - classificazioni con l'IA del mese, rispetto al proprio limite;
   - password, uscita dagli altri dispositivi, esportazione e importazione di storico e preferiti.
 - **Gestione**, per l'amministratore:
   - **Utenti**: richieste di account da approvare (con il messaggio di chi la chiede), limite personale, link per reimpostare la password, amministratori, sospensione ed eliminazione;
   - **Intelligenza artificiale**: stato e prova del servizio, limite mensile per persona, tetto mensile per tutti, registrazioni aperte o chiuse, uso del mese per persona;
-  - **Dati TARIC**: versioni, aggiornamento immediato, caricamento manuale, ritorno alla versione precedente, copia del database;
+  - **Dati TARIC**: versioni, aggiornamento immediato, caricamento manuale, ritorno alla versione precedente, copia del database (anche fuori da Render, vedi sotto);
+  - **Ricerca**: le parole cercate senza risultati (quante volte, quando), da trasformare in **sinonimi** che valgono subito per tutti; un sinonimo si accetta solo se i termini esistono nella nomenclatura;
   - **Registro** degli eventi.
 
 ## Sito su Render
@@ -51,7 +54,13 @@ Se vuoi un indirizzo tuo (per esempio `magic-hs.azienda.it`), aggiungilo in Rend
 - **Password dimenticata**: *Gestione → Utenti → Modifica → Link per la password*. Il link vale 3 giorni e una volta sola; mandalo alla persona. Il sito non manda email.
 - **Registrazioni**: si possono chiudere in *Gestione → Intelligenza artificiale* (casella «Si possono chiedere nuovi account»). Gli indirizzi di `MAGIC_HS_AMMINISTRATORI` possono sempre registrarsi.
 - **Aggiornamenti**: ogni modifica unita a `main` si pubblica da sola su Render (`autoDeploy`). Durante il riavvio il sito resta irraggiungibile per qualche secondo. I dati TARIC del mese il server li scarica da solo dalla pagina `dati` del progetto. Se non ci sono ancora, li prepara lui dalla fonte.
-- **Copie di sicurezza**: il server fa ogni giorno un backup del database sul suo disco, e Render tiene istantanee automatiche del disco. Una copia da tenere altrove si scarica da *Gestione → Dati TARIC → Copia del database*. Per rimetterne una: dalla *Shell* del servizio su Render, `python -m taric ripristina FILE` controlla il backup e lo mette da parte; poi *Manual Deploy → Restart service*: al riavvio il sito rimette il database (quello attuale finisce prima in un nuovo backup), così nessuna modifica fatta nel frattempo va persa a metà.
+- **Copie di sicurezza**: il server fa ogni giorno un backup del database sul suo disco, e Render tiene istantanee automatiche del disco. Una copia da tenere altrove si scarica da *Gestione → Dati TARIC → Copia del database*. Meglio ancora, il server può mandarne una **ogni settimana fuori da Render**, in un archivio compatibile S3 (vedi *Copia fuori da Render*). Per rimetterne una: dalla *Shell* del servizio su Render, `python -m taric ripristina FILE` controlla il backup e lo mette da parte; poi *Manual Deploy → Restart service*: al riavvio il sito rimette il database (quello attuale finisce prima in un nuovo backup), così nessuna modifica fatta nel frattempo va persa a metà.
+- **Copia fuori da Render** (consigliata; pochi centesimi al mese):
+  1. crea un contenitore privato (bucket) in un servizio compatibile S3: per esempio [Backblaze B2](https://www.backblaze.com/cloud-storage) (*Buckets → Create a Bucket*, privato) o Cloudflare R2;
+  2. crea una chiave che possa scrivere solo in quel contenitore (B2: *Application Keys → Add a New Application Key*, accesso *Read and Write* al solo bucket);
+  3. su Render, in *Environment*, aggiungi `MAGIC_HS_COPIA_URL` (l'indirizzo del contenitore, per B2 `https://s3.<regione>.backblazeb2.com/<bucket>`, per R2 `https://<account>.r2.cloudflarestorage.com/<bucket>`), `MAGIC_HS_COPIA_CHIAVE` (l'identificativo della chiave) e `MAGIC_HS_COPIA_SEGRETO` (la chiave segreta). La regione si ricava dall'indirizzo; se serve, indicala in `MAGIC_HS_COPIA_REGIONE`.
+
+  Dopo il riavvio la prima copia parte entro dieci minuti, poi una alla settimana: `magic-hs-copia-1.zip` … `magic-hs-copia-8.zip`, che si sovrascrivono a giro (restano le ultime 8 settimane). L'esito e il tasto *Manda fuori adesso* sono in *Gestione → Dati TARIC → Copia del database*; se l'invio non riesce, il motivo compare lì e in *Da sistemare*, e il server riprova dopo 6 ore. Per rimettere una di queste copie si usa `python -m taric ripristina` come per le altre.
 - **Cambiare modello o chiave**: su Render, in *Environment*, modifica `GEMINI_API_KEY`, `TARIC_IA_MODELLO` (scelta del codice, predefinito `gemini-3.7-flash`) o `TARIC_IA_MODELLO_RAPIDO` (ricerca delle voci, predefinito `gemini-3.5-flash-lite`). Il servizio si riavvia da solo. *Elenco dei modelli* in Gestione mostra quelli disponibili per la chiave.
 
 ### Come funziona
@@ -98,8 +107,8 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
   - Content-Security-Policy senza script esterni o in linea;
   - HSTS e cookie `Secure` su HTTPS;
   - nessuna pagina dentro la cornice di altri siti.
-- **Chiave dell'IA**: solo nelle variabili del servizio su Render, mai nei browser né nel repository.
-- **Dati di ciascuno**: storico e preferiti si vedono solo dal proprio account; l'amministratore vede l'uso dell'IA, non le classificazioni.
+- **Chiavi** (IA e copia esterna): solo nelle variabili del servizio su Render, mai nei browser né nel repository. La copia esterna è firmata (AWS Signature V4) e va solo su HTTPS.
+- **Dati di ciascuno**: i preferiti si vedono solo dal proprio account. Le classificazioni sono condivise con i colleghi nell'archivio aziendale (descrizione, codice, risultato e nome di chi l'ha fatta), a meno di togliere la spunta nel Profilo; quelle fatte prima di questa funzione restano personali. L'amministratore vede l'uso dell'IA e le parole cercate senza risultati, senza sapere chi le ha cercate.
 - **Archivi caricati** e dati TARIC scaricati: trattati come non fidati, con nomi e dimensioni controllati; i dati si installano solo se superano i controlli.
 - **Chi può modificare il repository** su GitHub può cambiare il sito: proteggi l'account con l'autenticazione a due fattori.
 - **Font**: locali (licenza SIL OFL), quindi nessun servizio di terzi caricato dalle pagine.
@@ -108,7 +117,7 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q tests                       # sito, IA, dati, backup
+python -m pytest -q tests                       # sito, IA, dati, backup, ricerca, archivio, copia esterna
 TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.py   # con un'estrazione vera (circa un minuto)
 ```
 
@@ -116,7 +125,7 @@ Il sito si avvia anche in locale: `TARIC_DATI=prova/dati MAGIC_HS_AMMINISTRATORI
 
 Prova nel browser (Playwright), la stessa che GitHub esegue a ogni modifica:
 1. prendi i dati di un mese dalla pagina `dati` (oppure preparali con `python strumenti/dati_mese.py AAAA-MM dati-AAAA-MM-01.zip`);
-2. `tests/sito_di_prova.sh dati-AAAA-MM-01.zip prova-sito` avvia il finto servizio IA e GitHub (`tests/finto_claude.py`) e il sito sulla porta 8810, e aspetta i dati;
+2. `tests/sito_di_prova.sh dati-AAAA-MM-01.zip prova-sito` avvia i finti servizio IA, GitHub e archivio S3 (`tests/finto_claude.py`) e il sito sulla porta 8810, e aspetta i dati;
 3. lancia `node tests/e2e_sito.js http://localhost:8810 shots-sito`.
 
 Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.

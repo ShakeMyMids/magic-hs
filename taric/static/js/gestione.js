@@ -18,6 +18,7 @@
     password_reimpostata: 'Password reimpostata', accesso_bloccato: 'Accesso bloccato (password errate)', utente_eliminato: 'Account eliminato',
     ruolo: 'Ruolo cambiato', quota_ia: 'Limite personale cambiato', impostazioni_sito: 'Limiti e registrazioni cambiati',
     backup_scaricato: 'Copia del database scaricata', sessioni_chiuse: 'Uscita da tutti i dispositivi',
+    copia_esterna: 'Copia del database mandata fuori', copia_esterna_errore: 'Copia esterna non riuscita',
     sinonimo: 'Sinonimo aggiunto', sinonimo_tolto: 'Sinonimo tolto'
   };
   function numero(n) { return Number(n || 0).toLocaleString('it-IT'); }
@@ -57,6 +58,7 @@
     if (r.in_attesa && st.sotto !== 'utenti') a.push(r.in_attesa === 1 ? 'C\'è una richiesta di account da approvare: vai su Utenti.' : 'Ci sono ' + r.in_attesa + ' richieste di account da approvare: vai su Utenti.');
     if (!r.ia && st.sotto !== 'ia') a.push('La classificazione assistita è spenta: inserisci la chiave di Gemini nel servizio su Render (vedi Intelligenza artificiale).');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC: vai su Dati TARIC.');
+    if (r.copia_esterna && st.sotto !== 'dati') a.push(r.copia_esterna === 'errore' ? 'L\'ultima copia del database fuori da Render non è riuscita: vedi Dati TARIC.' : 'La copia del database fuori da Render è spenta: manca qualcosa nelle variabili MAGIC_HS_COPIA_* (vedi Dati TARIC).');
     if (a.length) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Da sistemare</div>' + a.map(function (t) { return '<p class="avviso">' + esc(t) + '</p>'; }).join('') + '</div></div>';
     return h;
   }
@@ -77,9 +79,7 @@
     h += '<div class="box s4"><div class="lab">' + T.icona('aggiorna') + 'Aggiorna adesso</div><form class="modulo" data-g="aggiorna"><label>Mese (vuoto = corrente)<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Scarica e installa</button></div>' + riga('aggiorna') + '</form></div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scarica') + 'Copia del database</div>' +
-      '<p class="nota">Account, storico, preferiti e uso dell\'IA di tutti. Il server ne fa una al giorno sul suo disco; scaricane una ogni tanto da tenere altrove.</p>' +
-      '<div class="fila"><a class="btn sm" href="/api/admin/backup" download>' + T.icona('scarica') + 'Scarica la copia</a></div></div></div>';
+    h += copiaDatabase(d.copia_esterna || {});
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('carica') + 'Carica a mano un\'estrazione</div><p class="nota">I file Excel del mese (CIRCABC «TARIC and Quota data and information») in un archivio .zip.</p>' +
       '<form class="modulo" data-g="carica"><div class="due"><label>Archivio .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
@@ -95,6 +95,20 @@
       }).join('') + '</tbody></table></div>' + (d.ultimi.length ? '' : '<p class="vuoto">Nessun aggiornamento ancora.</p>') +
       registroAperto() + '</div></div>';
     return h;
+  }
+  /* copia del database: sul disco del server ogni giorno, fuori da Render ogni settimana (MAGIC_HS_COPIA_*) */
+  function copiaDatabase(c) {
+    var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scarica') + 'Copia del database</div>' +
+      '<p class="nota">Account, storico, preferiti e uso dell\'IA di tutti. Il server ne fa una al giorno sul suo disco' +
+      (c.attiva ? ' e una alla settimana in <b>' + esc(c.destinazione) + '</b>.' : '; scaricane una ogni tanto da tenere altrove.') + '</p>';
+    if (c.attiva && c.esito === 'errore') h += '<p class="errore">Invio del ' + esc(T.dataOra(c.tentata)) + ' non riuscito: ' + esc(c.messaggio) + '. Si riprova da solo dopo 6 ore.</p>';
+    if (c.attiva && c.riuscita) h += '<p class="esito-ok">Ultima copia esterna: ' + esc(T.dataOra(c.riuscita)) + ' (' + esc(c.oggetto) + ')</p>';
+    else if (c.attiva && !c.tentata) h += '<p class="nota">La prima copia esterna parte entro dieci minuti.</p>';
+    if (c.problema) h += '<p class="avviso">Copia esterna spenta. ' + esc(c.problema) + '</p>';
+    else if (!c.attiva) h += '<p class="nota">Per mandarne una alla settimana fuori da Render (Backblaze B2, Cloudflare R2, Amazon S3…) imposta le variabili <code>MAGIC_HS_COPIA_*</code> del servizio, come spiega il README.</p>';
+    return h + '<div class="fila"><a class="btn sm" href="/api/admin/backup" download>' + T.icona('scarica') + 'Scarica la copia</a>' +
+      (c.attiva ? '<button class="btn sm" type="button" data-g="copia-esterna"' + (st.copiaInCorso ? ' disabled' : '') + '>' + T.icona('carica') + (st.copiaInCorso ? 'Invio in corso…' : 'Manda fuori adesso') + '</button>' : '') +
+      '</div>' + riga('copia') + '</div></div>';
   }
   function registroAperto() {
     return st.registro ? '<div class="lab" style="margin-top:8px">' + esc(st.registro.titolo) + '<span class="dx"><button class="link" type="button" data-g="chiudi-registro">chiudi</button></span></div><pre class="registro">' + esc(st.registro.testo) + '</pre>' : '';
@@ -375,5 +389,10 @@
     } else if (g === 'registro-agg') {
       T.api('GET', '/api/admin/dati/registro/' + id).then(function (r) { st.registro = { titolo: 'Registro dell\'aggiornamento', testo: r.testo || '(vuoto)' }; disegna(); });
     } else if (g === 'chiudi-registro') { st.registro = null; disegna(); }
+    else if (g === 'copia-esterna') {
+      st.copiaInCorso = true; msg('copia'); disegna();
+      T.api('POST', '/api/admin/copia-esterna').then(function (r) { msg('copia', 'Copia mandata: ' + r.oggetto + '.', true); },
+        function (e) { msg('copia', errore(e)); }).then(function () { st.copiaInCorso = false; return carica(); });
+    }
   });
 })();

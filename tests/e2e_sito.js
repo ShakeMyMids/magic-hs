@@ -205,6 +205,15 @@ async function accedi(p, email, password) {
   ok(await usate() === prima, 'descrizione già classificata: ripresa senza una nuova richiesta all\'IA');
   await capo.click('#interruttore-ia'); await capo.fill('#q', ''); await capo.click('#tab-gestione');
 
+  // copia del database fuori dal server (finto archivio S3 di tests/finto_claude.py): la prima parte da sola all'avvio
+  await capo.click('button[data-v="dati"]');
+  await capo.waitForSelector('text=Ultima copia esterna');
+  ok(await capo.isVisible('text=una alla settimana in 127.0.0.1:9100/s3/magic-hs'), 'copia esterna: destinazione e prima copia automatica');
+  await capo.click('button[data-g="copia-esterna"]');
+  await capo.waitForSelector('text=Copia mandata: magic-hs-copia-');
+  const oggetti = (await (await fetch('http://127.0.0.1:9100/s3/')).json()).oggetti;
+  ok(Object.keys(oggetti).length === 1 && Object.values(oggetti)[0] > 1000, 'copia esterna adesso: il .zip del database è nell\'archivio');
+
   // password dimenticata: link preparato dall'amministratore
   await capo.click('button[data-v="utenti"]');
   // selettore stabile: la tabella si ridisegna quando arrivano i dati, un riferimento all'elemento si perderebbe

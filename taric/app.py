@@ -31,6 +31,7 @@ from . import sicurezza as S
 from .backup import Backup, ErroreBackup
 from .cambi import cambi
 from .config import Config
+from .copia import CopiaEsterna
 from .dati import RE_VERSIONE, GestoreDati
 from .db import Database, iso
 from .ia import ErroreIA, ServizioIA, mese_corrente
@@ -179,8 +180,8 @@ def segreto_moduli(cartella: Path) -> bytes:
 
 # ------------------------------------------------------------------ applicazione
 def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
-             client_dati: httpx.Client | None = None) -> FastAPI:
-    """Crea il sito: client_ia e client_dati sostituiscono, nelle prove, i servizi esterni."""
+             client_dati: httpx.Client | None = None, client_copia: httpx.Client | None = None) -> FastAPI:
+    """Crea il sito: client_ia, client_dati e client_copia sostituiscono, nelle prove, i servizi esterni."""
     try:                                   # backup preparato a sito acceso con «python -m taric ripristina»
         rimesso = Backup(cfg.dati).applica_in_attesa()
         if rimesso:
@@ -191,6 +192,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     ia = ServizioIA(cfg, db, client_ia)
     dati = GestoreDati(cfg, db, client_dati)
     copie = Backup(cfg.dati, cfg.backup_copie)
+    fuori = CopiaEsterna(cfg, db, client_copia)
+    if fuori.problema():
+        log.warning("copia esterna del database spenta: %s", fuori.problema())
 
     segreto = segreto_moduli(cfg.dati)
     with db.transazione() as c:       # gli indirizzi di MAGIC_HS_AMMINISTRATORI sono sempre amministratori attivi
@@ -204,7 +208,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         pid = cfg.dati / "server.pid"           # per «python -m taric ripristina»: il sito e' acceso
         pid.write_text(str(os.getpid()))
         if pianificatore:
-            dati.avvia_pianificatore(copie, attesa=600)
+            dati.avvia_pianificatore(copie, attesa=600, compiti=(lambda: fuori.automatica(copie),))
         yield
         dati.ferma()
         pid.unlink(missing_ok=True)
@@ -595,6 +599,21 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             db.evento(c, "backup_scaricato", autore_id=a["id"], dettagli=f.name)
         return FileResponse(f, media_type="application/zip", filename=f.name)
 
+    @app.post("/api/admin/copia-esterna")
+    def admin_copia_esterna(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Manda subito una copia del database nell'archivio esterno (MAGIC_HS_COPIA_*)."""
+        if not fuori.attiva:
+            raise Errore(409, fuori.problema() or "Copia esterna non configurata: vedi MAGIC_HS_COPIA_* nel README.", "copia_spenta")
+        s = fuori.esegui(copie)
+        with db.transazione() as c:
+            if s["esito"] == "ok":
+                db.evento(c, "copia_esterna", autore_id=a["id"], dettagli=f"{s['destinazione']}/{s['oggetto']}")
+            else:
+                db.evento(c, "copia_esterna_errore", autore_id=a["id"], dettagli=s["messaggio"])
+        if s["esito"] != "ok":
+            raise Errore(502, "Copia non riuscita: " + s["messaggio"], "copia_non_riuscita")
+        return s
+
     # ------------------------------------------------------------------ profilo
     def descrivi_utente(c: sqlite3.Connection, u: sqlite3.Row) -> dict[str, Any]:
         lim = ia.limite(c, u)
@@ -894,7 +913,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def admin_riepilogo(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         with db.connessione() as c:
             in_attesa = c.execute("SELECT COUNT(*) FROM utenti WHERE stato = 'in_attesa'").fetchone()[0]
-        return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso, "in_attesa": in_attesa}
+        s = fuori.stato()
+        return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso, "in_attesa": in_attesa,
+                "copia_esterna": "spenta" if s["problema"] else ("errore" if s["attiva"] and s["esito"] == "errore" else "")}
 
     @app.get("/api/admin/eventi")
     def admin_eventi(limite: int = 200, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
@@ -906,7 +927,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.get("/api/admin/dati")
     def admin_dati(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         return {"attiva": dati.attiva(), "versioni": dati.elenco(), "in_corso": dati.in_corso, "ultimi": dati.ultimi(),
-                "automatico": cfg.aggiornamento_automatico, "fonte": cfg.fonte_url, "prossimo": dati.da_fare()}
+                "automatico": cfg.aggiornamento_automatico, "fonte": cfg.fonte_url, "prossimo": dati.da_fare(),
+                "copia_esterna": fuori.stato()}
 
     @app.get("/api/admin/dati/registro/{agg_id}")
     def admin_registro(agg_id: int, a: sqlite3.Row = Depends(richiede_admin)) -> PlainTextResponse:

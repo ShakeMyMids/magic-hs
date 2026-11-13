@@ -1,7 +1,8 @@
 """Configurazione del sito MAGIC HS, dalle variabili d'ambiente (su Render: Environment del servizio).
 
 Principali: TARIC_DATI (cartella dei dati, sul disco), GEMINI_API_KEY (servizio IA), MAGIC_HS_AMMINISTRATORI (email degli
-amministratori), TARIC_IA_MODELLO e TARIC_IA_MODELLO_RAPIDO, TARIC_FUSO, TARIC_FONTE_URL. Possono stare anche in un file
+amministratori), TARIC_IA_MODELLO e TARIC_IA_MODELLO_RAPIDO, TARIC_FUSO, TARIC_FONTE_URL, MAGIC_HS_COPIA_URL,
+MAGIC_HS_COPIA_REGIONE, MAGIC_HS_COPIA_CHIAVE e MAGIC_HS_COPIA_SEGRETO (copia del database fuori dal server). Possono stare anche in un file
 indicato da TARIC_CONFIG (predefinito ``taric.env``); le variabili d'ambiente hanno la precedenza sul file.
 """
 from __future__ import annotations
@@ -53,6 +54,10 @@ class Config:
     dati_url: str = "https://api.github.com/repos/ShakeMyMids/magic-hs/releases/tags/dati"        # dati pronti; "" = sempre in locale
     indirizzo: str = ""                    # indirizzo pubblico, per esempio https://magic-hs.onrender.com (Render: RENDER_EXTERNAL_URL)
     amministratori: frozenset[str] = frozenset()   # email che entrano subito come amministratori (MAGIC_HS_AMMINISTRATORI)
+    copia_url: str = ""                    # copia settimanale del database in un archivio S3 (MAGIC_HS_COPIA_*, vedi copia.py)
+    copia_regione: str = ""
+    copia_chiave: str = ""
+    copia_segreto: str = field(default="", repr=False)
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -116,5 +121,9 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         dati_url=v.get("TARIC_DATI_URL", Config.dati_url).strip(),
         indirizzo=(v.get("MAGIC_HS_INDIRIZZO") or v.get("RENDER_EXTERNAL_URL") or "").strip().rstrip("/"),
         amministratori=frozenset(e.strip().lower() for e in re.split(r"[\s,;]+", v.get("MAGIC_HS_AMMINISTRATORI", "")) if "@" in e),
+        copia_url=v.get("MAGIC_HS_COPIA_URL", "").strip().rstrip("/"),
+        copia_regione=v.get("MAGIC_HS_COPIA_REGIONE", "").strip(),
+        copia_chiave=v.get("MAGIC_HS_COPIA_CHIAVE", "").strip(),
+        copia_segreto=v.get("MAGIC_HS_COPIA_SEGRETO", "").strip(),
         extra=v,
     )
