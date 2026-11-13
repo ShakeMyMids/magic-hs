@@ -173,6 +173,21 @@ async function accedi(p, email, password) {
   ok(await luca.isVisible('text=2 di 2 classificazioni') && await luca.isVisible('text=luca@azienda.it'), 'profilo con account e uso');
   await luca.screenshot({ path: out + '/5-profilo.png', fullPage: true });
 
+  // archivio aziendale: quello che ha classificato Luca lo ritrova l'amministratore, e non lo rifà con l'IA
+  await capo.click('#tab-classifica'); await capo.reload(); await pronta(capo);
+  if (await capo.isChecked('#modo-ia')) await capo.click('#interruttore-ia');
+  await cerca(capo, 'scarpe sportive');
+  ok(await capo.isVisible('#risultati >> text=Già classificate in azienda') && await capo.isVisible('#risultati .arch >> text=Luca Bianchi'),
+    'archivio aziendale: le classificazioni dei colleghi nella ricerca per parole');
+  const usate = async () => (await capo.evaluate(() => fetch('/api/io').then(r => r.json()))).ia.usate;
+  const prima = await usate();
+  await capo.click('#interruttore-ia'); await capo.fill('#q', 'Scarpe sportive di pelle'); await capo.click('#vai');
+  await capo.waitForSelector('.gia >> text=Già classificata da Luca Bianchi');
+  await capo.click('[data-act="riusa"]');
+  await capo.waitForSelector('.timbro >> text=Proposta');
+  ok(await usate() === prima, 'descrizione già classificata: ripresa senza una nuova richiesta all\'IA');
+  await capo.click('#interruttore-ia'); await capo.fill('#q', ''); await capo.click('#tab-gestione');
+
   // password dimenticata: link preparato dall'amministratore
   await capo.click('button[data-v="utenti"]');
   // selettore stabile: la tabella si ridisegna quando arrivano i dati, un riferimento all'elemento si perderebbe

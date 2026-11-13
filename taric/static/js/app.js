@@ -93,6 +93,8 @@ var FREQUENTI = ['CN', 'US', 'GB', 'CH', 'TR', 'JP', 'KR', 'IN', 'VN', 'TW'];
 var state = {
   view: 'classifica',
   modo: 'parole',      // parole: ricerca nella nomenclatura | ia: classificazione con l'intelligenza artificiale
+  gia: null,           // classificazione identica già nell'archivio aziendale (si riprende senza chiamare l'IA)
+  forzaIA: false,
   risChiusi: false,    // risultati della ricerca ridotti a un link dopo aver scelto un codice
   risTutti: false,
   ai: 'wait',          // wait | ok | no
@@ -295,7 +297,7 @@ function cercaOra() {
     state.anima = true; state.risChiusi = true; renderAll(); qEl.blur(); return;
   }
   state.risChiusi = false; renderRisultati(); renderMsg(); qEl.blur();
-  if (!cerca(q).length) segnalaVuota(q, true);
+  if (!cerca(q).length && !archivioPer(q).length) segnalaVuota(q, true);
   var r = $('#risultati'); if (r && !r.hidden && r.scrollIntoView) r.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function rigaRisultato(i, n) {
@@ -318,11 +320,15 @@ function renderRisultati() {
     el.hidden = !res.length; return;
   }
   var ponte = (testuale && state.utente && state.utente.ia && state.utente.ia.configurata) ? '<button class="btn sm" type="button" data-act="chiedi">' + T.icona('scintille') + 'Classifica con l\'IA</button>' : '';
-  h = '<div class="box ris-box' + (nuovi ? ' arriva' : '') + '"><div class="lab">' + T.icona('cerca') + 'Risultati<span class="dx">' + (res.length === 150 ? 'più di 150' : res.length) + '</span></div><div class="albero">';
-  if (!res.length && testuale) segnalaVuota(q, false);
+  var arch = archivioPer(q);
+  h = '<div class="box ris-box' + (nuovi ? ' arriva' : '') + '">';
+  if (arch.length) h += '<div class="lab">' + T.icona('utenti') + 'Già classificate in azienda<span class="dx">' + arch.length + '</span></div><div class="albero">' +
+    arch.map(rigaArchivio).join('') + '</div>';
+  h += '<div class="lab">' + T.icona('cerca') + 'Nella nomenclatura<span class="dx">' + (res.length === 150 ? 'più di 150' : res.length) + '</span></div><div class="albero">';
+  if (!res.length && !arch.length && testuale) segnalaVuota(q, false);
   if (!res.length) h += '<div class="trow info"><span class="txt nota">Nessun risultato. ' +
     (testuale ? 'La nomenclatura usa termini suoi (per esempio «foratrici» per i trapani): prova un\'altra parola' + (ponte ? ' oppure fai classificare la merce all\'IA.' : '.') : 'Controlla le cifre del codice.') + '</span>' + ponte + '</div>';
-  h += res.slice(0, state.risTutti ? res.length : MOSTRATI).map(rigaRisultato).join('');
+  h += res.slice(0, state.risTutti ? res.length : MOSTRATI).map(function (i, n) { return rigaRisultato(i, n + arch.length); }).join('');
   if (res.length > MOSTRATI && !state.risTutti) h += '<div class="trow info"><button class="btn sm" type="button" data-act="tutti-ris">Mostra tutti (' + (res.length === 150 ? 'primi 150' : res.length) + ')</button></div>';
   else if (res.length === 150) h += '<div class="trow info"><span class="txt nota">Mostro i primi 150 risultati: aggiungi una parola o qualche cifra.</span></div>';
   if (res.length && ponte) h += '<div class="trow info"><span class="txt nota">Non trovi la voce? Puoi far classificare «' + esc(q) + '» all\'IA.</span>' + ponte + '</div>';
@@ -335,7 +341,7 @@ function salvaStorico() {
   var r = state.result;
   if (!r || !r.best) return;
   T.api('POST', '/api/storico', { testo: state.q, codice: r.best.code, dati: { q: state.q, answers: state.answers, heads: state.heads, result: r } })
-    .then(function (x) { if (T.viste && T.viste.profilo) T.viste.profilo.daRicaricare = true; return x; }, function () { /* lo storico non è indispensabile */ });
+    .then(function (x) { if (T.viste && T.viste.profilo) T.viste.profilo.daRicaricare = true; caricaArchivio(); return x; }, function () { /* lo storico non è indispensabile */ });
 }
 var prefT = null;
 function salvaPreferenze() {
@@ -366,6 +372,11 @@ function classifica(soloScelta) {
     state.result = null; state.answers = []; state.heads = []; state.picks = {}; state.trad = {};
     state.sel = r; state.anima = true; renderAll(); return;
   }
+  if (!soloScelta && !state.forzaIA) {                     // già classificata in azienda: si riprende, senza costi
+    var g = giaClassificata(state.q);
+    if (g) { state.gia = g; renderMsg(); return; }
+  }
+  state.forzaIA = false; state.gia = null;
   if (!sampleFn) { state.error = state.ai === 'wait' ? 'Attendi un istante: sto caricando il tuo profilo.' : state.aiMotivo; renderMsg(); return; }
   if (state.q.length > 2000) { state.error = ERR.prompt_too_large; renderMsg(); return; }
 
@@ -903,6 +914,15 @@ function renderStato() {
 function renderMsg() {
   var h = '';
   if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>';
+  var g = state.modo === 'ia' && state.gia;
+  if (g) {
+    var gi = byCode.get(g.codice);
+    h += '<div class="gia"><p class="cosa">' + T.icona('utenti') + 'Già classificata ' + (g.chi === 'tu' ? 'da te' : 'da ' + esc(g.chi)) + ' il ' + esc(T.dataOra(g.quando, true)) +
+      ': <b>' + esc(grp(g.codice)) + '</b> ' + esc(descOf(gi)) + '</p>' +
+      '<div class="fila"><button class="btn pri" type="button" data-act="riusa">' + T.icona('storico') + 'Riprendi quella classificazione</button>' +
+      '<button class="btn" type="button" data-act="ancora-ia">' + T.icona('bacchetta') + 'Classifica di nuovo con l\'IA</button></div>' +
+      '<p class="nota">Riprenderla non usa una nuova classificazione del mese.</p></div>';
+  }
   var ia = state.utente && state.utente.ia;
   if (state.modo === 'ia' && state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
   if (state.modo === 'ia' && state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Classificazioni con l\'IA questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
@@ -1093,6 +1113,59 @@ function parolaCercata(parola, sinonimo) {
     return sc + (pos > 0 ? 3 : 0) + extra;
   };
 }
+/* le parole di una ricerca, ognuna con i suoi sinonimi: null se non c'è niente da cercare */
+function alternative(q) {
+  var toks = piano(q).trim().split(' ').filter(function (t) { return t.length > 1 && !VUOTE[t]; });
+  if (!toks.length) return null;
+  return toks.map(function (t) {
+    return [parolaCercata(t, false)].concat(sinonimiDi(radice(t)).map(function (s) { return parolaCercata(s, true); }));
+  });
+}
+function punteggio(alt, t) {
+  var sc = 0;
+  for (var m = 0; m < alt.length; m++) {
+    var best = -1;
+    for (var n = 0; n < alt[m].length; n++) { var p = alt[m][n](t); if (p >= 0 && (best < 0 || p < best)) best = p; }
+    if (best < 0) return -1;
+    sc += best;
+  }
+  return sc;
+}
+
+/* archivio aziendale: classificazioni già fatte dai colleghi (che le condividono) e da sé (/api/archivio) */
+var ARCH = [];
+function caricaArchivio() {
+  return T.api('GET', '/api/archivio').then(function (r) {
+    ARCH = (r.voci || []).map(function (v) { v.t = piano(v.testo); return v; });
+    if (state.avviato) renderRisultati();
+  }, function () { /* senza archivio la ricerca va lo stesso */ });
+}
+function archivioPer(q) {
+  var alt = alternative(q);
+  if (!alt || /^[\d\s.]+$/.test(q)) return [];
+  var hits = [];
+  ARCH.forEach(function (v, k) {
+    if (!byCode.has(v.codice)) return;                     // codice che non c'è più nella nomenclatura del mese
+    var sc = punteggio(alt, v.t);
+    if (sc >= 0) hits.push([sc, k]);
+  });
+  hits.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+  return hits.slice(0, 5).map(function (x) { return ARCH[x[1]]; });
+}
+/* la stessa descrizione già classificata con l'IA: la più recente */
+function giaClassificata(q) {
+  var k = piano(q);
+  for (var i = 0; i < ARCH.length; i++) if (ARCH[i].ia && ARCH[i].t === k && byCode.has(ARCH[i].codice)) return ARCH[i];
+  return null;
+}
+function rigaArchivio(v, n) {
+  var i = byCode.get(v.codice), chi = v.chi === 'tu' ? 'tu' : v.chi;
+  return '<div class="trow ris arch L" data-act="usa" data-i="' + i + '" style="--i:' + n + '">' +
+    '<span class="cod">' + esc(showCode(i)) + '</span><span class="txt">' + esc(descOf(i)) + '</span>' +
+    '<button class="btn sm" type="button" data-act="usa" data-i="' + i + '">Usa</button>' +
+    '<span class="ctx">«' + esc(v.testo) + '» · ' + esc(chi) + ', ' + esc(T.dataOra(v.quando, true)) + (v.volte > 1 ? ' · ' + v.volte + ' volte' : '') + '</span></div>';
+}
+
 function cerca(q) {
   var out = [], d = digits(q);
   if (/^[\d\s.]+$/.test(q) && d.length >= 2) {
@@ -1100,21 +1173,13 @@ function cerca(q) {
     return out;
   }
   if (!LOW) { LOW = new Array(N); for (var k = 0; k < N; k++) LOW[k] = piano(DESC[k]); }
-  var toks = piano(q).trim().split(' ').filter(function (t) { return t.length > 1 && !VUOTE[t]; });
-  if (!toks.length) return out;
   // ogni parola cercata vale anche per i suoi sinonimi; un testo va bene se contiene tutte le parole (o un loro sinonimo)
-  var alt = toks.map(function (t) {
-    return [parolaCercata(t, false)].concat(sinonimiDi(radice(t)).map(function (s) { return parolaCercata(s, true); }));
-  });
+  var alt = alternative(q);
+  if (!alt) return out;
   var hits = [];
   for (var j = 0; j < N; j++) {
-    var t = LOW[j], ok = true, sc = 0;
-    for (var m = 0; m < alt.length && ok; m++) {
-      var best = -1;
-      for (var n = 0; n < alt[m].length; n++) { var p = alt[m][n](t); if (p >= 0 && (best < 0 || p < best)) best = p; }
-      if (best < 0) ok = false; else sc += best;
-    }
-    if (ok) hits.push([sc + HP[j] * 0.35 + Math.min(t.length, 200) / 40, j]);         // a parità, prima le voci più generali e brevi
+    var t = LOW[j], sc = punteggio(alt, t);
+    if (sc >= 0) hits.push([sc + HP[j] * 0.35 + Math.min(t.length, 200) / 40, j]);    // a parità, prima le voci più generali e brevi
   }
   hits.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
   return hits.slice(0, 150).map(function (x) { return x[1]; });
@@ -1205,6 +1270,15 @@ document.addEventListener('click', function (ev) {
     });
   }
   else if (act === 'chiedi') { cambiaModo('ia'); classifica(false); }
+  else if (act === 'ancora-ia') { state.gia = null; state.forzaIA = true; classifica(false); }
+  else if (act === 'riusa' && state.gia) {
+    t.disabled = true;
+    T.api('GET', '/api/archivio/' + state.gia.id).then(function (r) {
+      state.gia = null; ripristina(r.dati); renderAll(); renderFornite();
+      T.avviso('Classificazione ripresa: nessuna nuova richiesta all\'IA.');
+      var es = $('#esito'); if (es && es.scrollIntoView) es.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, function (e) { state.gia = null; state.error = e.errore || 'Non riesco a riprenderla.'; renderMsg(); });
+  }
   else if (act === 'mostra-ris') { state.risChiusi = false; renderRisultati(); var rr = $('#risultati'); if (rr.scrollIntoView) rr.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   else if (act === 'tutti-ris') { state.risTutti = true; renderRisultati(); }
   else if (act === 'flusso') { state.flow = t.getAttribute('data-f'); renderEsito(); salvaPreferenze(); }
@@ -1231,6 +1305,7 @@ $('#q').addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !e
 var qT = null;
 $('#q').addEventListener('input', function () {
   $('#q-x').hidden = !$('#q').value;
+  if (state.gia) { state.gia = null; renderMsg(); }
   if (state.modo !== 'parole') return;
   state.risChiusi = false; state.risTutti = false; if (state.error) { state.error = ''; renderMsg(); }
   clearTimeout(qT); qT = setTimeout(renderRisultati, 140);
@@ -1293,6 +1368,7 @@ T.app = {
     ripristina(d); vista('classifica'); renderAll(); renderFornite(); var e = $('#esito'); if (e.scrollIntoView) e.scrollIntoView({ block: 'start' });
   },
   preferenze: function (p) {
+    if (state.utente) state.utente.preferenze = p;
     state.country = p.paese || ''; state.flow = p.flusso === 'export' ? 'export' : 'import';
     T.tema(p.tema); renderEsito();
   }
@@ -1326,7 +1402,7 @@ function avvia() {
     state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
     try { state.modo = localStorage.getItem('magic-hs.modo') === 'ia' ? 'ia' : 'parole'; } catch (e) { /* senza archivio: ricerca per parole */ }
     impostaIA();
-    caricaSinonimi();
+    caricaSinonimi(); caricaArchivio();
     return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
   }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
 }

@@ -81,6 +81,7 @@ class Preferenze(BaseModel):
     paese: str = Field(default="", max_length=4)
     flusso: Literal["import", "export"] = "import"
     tema: Literal["auto", "chiaro", "scuro"] = "auto"
+    condividi: Optional[bool] = None            # classificazioni nell'archivio aziendale (None = lascia com'e')
 
 
 class VoceStorico(BaseModel):
@@ -602,7 +603,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         except ValueError:
             pref = {}
         return {"id": u["id"], "nome": u["nome"], "email": u["email"], "azienda": u["azienda"], "ruolo": u["ruolo"],
-                "preferenze": {"paese": pref.get("paese", ""), "flusso": pref.get("flusso", "import"), "tema": pref.get("tema", "auto")},
+                "preferenze": {"paese": pref.get("paese", ""), "flusso": pref.get("flusso", "import"), "tema": pref.get("tema", "auto"),
+                               "condividi": pref.get("condividi", True) is not False},
                 "ia": {"disponibile": ia.disponibile and lim != 0 and not tetto, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
                        "usate": ia.usate(c, u["id"]), "mese": mese_corrente(), "tetto": tetto},
                 "dati": {"versione": dati.attiva(), "aggiornamento": (dati.in_corso or {}).get("fase")}}
@@ -624,8 +626,11 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         if paese and not RE_AREA.match(paese):
             raise Errore(422, "Paese non valido.", "paese")
         with db.transazione() as c:
-            c.execute("UPDATE utenti SET preferenze = ? WHERE id = ?",
-                      (json.dumps({"paese": paese, "flusso": body.flusso, "tema": body.tema}), u["id"]))
+            pref = json.loads(c.execute("SELECT preferenze FROM utenti WHERE id = ?", (u["id"],)).fetchone()[0] or "{}")
+            pref.update({"paese": paese, "flusso": body.flusso, "tema": body.tema})
+            if body.condividi is not None:
+                pref["condividi"] = body.condividi
+            c.execute("UPDATE utenti SET preferenze = ? WHERE id = ?", (json.dumps(pref), u["id"]))
         return json_ok()
 
     # ------------------------------------------------------------------ storico
@@ -653,9 +658,10 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         testo_dati = json.dumps(body.dati, ensure_ascii=False)
         if len(testo_dati) > 200_000:
             raise Errore(413, "Classificazione troppo grande da salvare.", "troppo_grande")
+        condivisa = json.loads(u["preferenze"] or "{}").get("condividi", True) is not False      # archivio aziendale
         with db.transazione() as c:
-            sid = c.execute("INSERT INTO storico(utente_id, quando, testo, codice, dati) VALUES (?, ?, ?, ?, ?)",
-                            (u["id"], iso(), body.testo.strip(), body.codice, testo_dati)).lastrowid
+            sid = c.execute("INSERT INTO storico(utente_id, quando, testo, codice, dati, condivisa) VALUES (?, ?, ?, ?, ?, ?)",
+                            (u["id"], iso(), body.testo.strip(), body.codice, testo_dati, int(condivisa))).lastrowid
             c.execute("DELETE FROM storico WHERE utente_id = ? AND id NOT IN (SELECT id FROM storico WHERE utente_id = ? ORDER BY id DESC LIMIT 500)",
                       (u["id"], u["id"]))
         return json_ok(id=sid)
@@ -736,6 +742,38 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 np += c.execute("INSERT INTO preferiti(utente_id, codice, nota, quando) VALUES (?, ?, ?, ?) ON CONFLICT(utente_id, codice) DO NOTHING",
                                 (u["id"], codice, str(p.get("nota") or "").strip()[:500], str(p.get("quando") or iso())[:40])).rowcount
         return json_ok(storico=nuove, preferiti=np)
+
+    # ------------------------------------------------------------------ archivio aziendale: classificazioni gia' fatte
+    @app.get("/api/archivio")
+    def archivio(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Le classificazioni con codice condivise dai colleghi (e le proprie), raggruppate per descrizione e codice: la
+        ricerca per parole le propone per prime e prima di chiamare l'IA si riprende quella identica."""
+        gruppi: dict[tuple[str, str], dict[str, Any]] = {}
+        with db.connessione() as c:
+            righe = c.execute(
+                "SELECT s.id, s.testo, s.codice, s.quando, s.utente_id, u.nome, json_extract(s.dati, '$.result') IS NOT NULL AS ia "
+                "FROM storico s JOIN utenti u ON u.id = s.utente_id "
+                "WHERE s.codice != '' AND (s.condivisa = 1 OR s.utente_id = ?) ORDER BY s.id DESC LIMIT 5000", (u["id"],))
+            for r in righe:
+                chiave = (piano(r["testo"]).strip(), r["codice"])
+                g = gruppi.get(chiave)
+                if g is None:
+                    if len(gruppi) >= 2000:
+                        continue
+                    gruppi[chiave] = {"id": r["id"], "testo": r["testo"], "codice": r["codice"], "quando": r["quando"],
+                                      "chi": "tu" if r["utente_id"] == u["id"] else r["nome"], "volte": 1, "ia": bool(r["ia"])}
+                else:
+                    g["volte"] += 1
+        return {"voci": list(gruppi.values())}
+
+    @app.get("/api/archivio/{sid}")
+    def voce_archivio(sid: int, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Una classificazione dell'archivio, completa: si riapre senza una nuova richiesta all'IA."""
+        with db.connessione() as c:
+            r = c.execute("SELECT testo, codice, quando, dati FROM storico WHERE id = ? AND (condivisa = 1 OR utente_id = ?)", (sid, u["id"])).fetchone()
+        if r is None:
+            raise Errore(404, "Classificazione non trovata.", "non_trovata")
+        return {"testo": r["testo"], "codice": r["codice"], "quando": r["quando"], "dati": json.loads(r["dati"])}
 
     # ------------------------------------------------------------------ ricerca per parole: sinonimi e parole senza risultati
     @app.get("/api/sinonimi")

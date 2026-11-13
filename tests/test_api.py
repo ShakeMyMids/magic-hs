@@ -16,7 +16,7 @@ def test_senza_intestazione_anti_csrf_le_modifiche_sono_rifiutate(sito_claude: S
     r = c.put("/api/io/preferenze", json={"paese": "CN"}, headers={"Sec-Fetch-Site": "cross-site"})
     assert r.status_code == 403
     assert c.put("/api/io/preferenze", json={"paese": "CN", "flusso": "export", "tema": "scuro"}).status_code == 200
-    assert c.get("/api/io").json()["preferenze"] == {"paese": "CN", "flusso": "export", "tema": "scuro"}
+    assert c.get("/api/io").json()["preferenze"] == {"paese": "CN", "flusso": "export", "tema": "scuro", "condividi": True}
     assert c.put("/api/io/preferenze", json={"paese": "<b>"}).status_code == 422
 
 

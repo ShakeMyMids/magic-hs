@@ -236,6 +236,13 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 .ris-box > .lab{padding:0 12px}
 .trow.ris{grid-template-columns:118px minmax(0,1fr) auto;padding-left:12px}
 .trow.ris .ctx{grid-column:2 / -1}
+/* archivio aziendale: le classificazioni già fatte in azienda, prima dei risultati della nomenclatura */
+.ris-box > .lab + .albero + .lab{margin-top:10px}
+.trow.ris.arch{background:color-mix(in srgb,var(--accento) 6%,transparent)}
+.trow.ris.arch .ctx{color:var(--accento-forte)}
+.gia{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--r-m);background:var(--accento-tenue);color:var(--inchiostro)}
+.gia .cosa{font-size:16px}
+.gia .cosa .ico{color:var(--accento-forte);margin-right:7px;vertical-align:-3px}
 .ris-box .trow.ris + .trow.ris,.ris-box .trow.ris + .trow.info{box-shadow:0 -1px 0 color-mix(in srgb,var(--linea) 75%,transparent)}
 .ris-box.arriva .trow.ris{animation:sale .34s var(--dolce) backwards;animation-delay:calc(var(--i,0) * 24ms)}
 @keyframes sale{from{opacity:0;transform:translateY(7px)}}

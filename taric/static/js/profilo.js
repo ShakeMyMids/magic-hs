@@ -58,7 +58,8 @@
       paesi.map(function (x) { return '<option value="' + esc(x[1]) + '"' + (x[1] === p.paese ? ' selected' : '') + '>' + esc(x[0]) + '</option>'; }).join('') + '</select></label>' +
       '<label>Flusso predefinito<select class="campo" data-p="pref" name="flusso"><option value="import"' + (p.flusso !== 'export' ? ' selected' : '') + '>Importazione</option><option value="export"' + (p.flusso === 'export' ? ' selected' : '') + '>Esportazione</option></select></label>' +
       '<label>Tema<select class="campo" data-p="pref" name="tema"><option value="auto"' + (p.tema === 'auto' ? ' selected' : '') + '>Come il dispositivo</option><option value="chiaro"' + (p.tema === 'chiaro' ? ' selected' : '') + '>Chiaro</option><option value="scuro"' + (p.tema === 'scuro' ? ' selected' : '') + '>Scuro</option></select></label>' +
-      '</div></div></div></div>';
+      '</div><label class="spunta"><input type="checkbox" data-p="pref" name="condividi"' + (p.condividi !== false ? ' checked' : '') + '> Condividi le mie classificazioni con i colleghi: le ritrovano nella ricerca e non le rifanno con l\'IA</label>' +
+      '</div></div></div>';
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Storico delle classificazioni<span class="dx">' + st.totale + ' salvate</span></div>';
     if (!st.caricato) h += '<p class="vuoto">Carico…</p>';
@@ -161,8 +162,8 @@
   el.addEventListener('change', function (ev) {
     if (ev.target.getAttribute('data-p') === 'importa') { importa(ev.target); return; }
     if (ev.target.getAttribute('data-p') !== 'pref') return;
-    var io = u(), p = { paese: io.preferenze.paese, flusso: io.preferenze.flusso, tema: io.preferenze.tema };
-    p[ev.target.name] = ev.target.value;
+    var io = u(), p = { paese: io.preferenze.paese, flusso: io.preferenze.flusso, tema: io.preferenze.tema, condividi: io.preferenze.condividi !== false };
+    p[ev.target.name] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value;
     T.api('PUT', '/api/io/preferenze', p).then(function () {
       io.preferenze = p; app().preferenze(p); T.avviso('Preferenza salvata.');
     }, function (e) { T.avviso(e.errore, 'male'); });
