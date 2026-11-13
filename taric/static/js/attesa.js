@@ -1,12 +1,11 @@
 /* MAGIC HS - pagina d'attesa dei dati TARIC: si apre l'app appena i dati sono pronti.
-   Sul PC di un collega i dati arrivano solo dalla cartella condivisa; chi gestisce MAGIC HS può scaricarli
-   di nuovo o caricare a mano l'archivio dell'estrazione. */
+   Se il download non riesce si può riprovare o caricare a mano l'archivio dell'estrazione. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
   var modulo = document.getElementById('modulo');
   var esito = document.getElementById('esito');
-  var fase = document.getElementById('fase'), giri = 0;
+  var fase = document.getElementById('fase');
 
   function mostra(testo, ok) { esito.innerHTML = testo ? '<p class="' + (ok ? 'esito-ok' : 'errore') + '">' + esc(testo) + '</p>' : ''; }
   function occupato(si) { var b = modulo.querySelector('button[type="submit"]'); if (b) b.disabled = si; }
@@ -28,14 +27,7 @@
   function controlla() {
     T.api('GET', '/api/stato', null, { resta: true }).then(function (s) {
       if (s.dati_pronti) { location.href = '/'; return; }
-      if (!s.editore) {
-        fase.textContent = 'I dati TARIC arrivano dalla cartella condivisa. Se l\'hai sincronizzata da poco, aspetta che OneDrive finisca di scaricarla: ' +
-          'la pagina si apre da sola. Se l\'attesa si prolunga, chiedi a chi gestisce MAGIC HS di aprirlo sul suo PC per pubblicare i dati.';
-        if (giri++ % 3 === 0) T.api('POST', '/api/locale/sincronizza', null, { resta: true }).catch(function () { /* riprova al giro dopo */ });
-        return;
-      }
-      fase.textContent = s.aggiornamento ? 'In corso: ' + s.aggiornamento + '…'
-        : 'Nessun download in corso in questo momento. MAGIC HS riprova da solo ogni dieci minuti, oppure usa i pulsanti qui sotto.';
+      fase.textContent = s.aggiornamento ? 'In corso: ' + s.aggiornamento + '…' : 'Nessun download in corso: MAGIC HS riprova ogni dieci minuti.';
     }).then(function () { setTimeout(controlla, 4000); }, function () { setTimeout(controlla, 8000); });
   }
   controlla();

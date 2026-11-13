@@ -90,37 +90,15 @@ var FREQUENTI = ['CN', 'US', 'GB', 'CH', 'TR', 'JP', 'KR', 'IN', 'VN', 'TW'];
 /* ================================================================
    State
    ================================================================ */
-var ESEMPI = ['trapano avvitatore a batteria', 'scarpe da ginnastica con tomaia in pelle', 'olio extravergine d\'oliva in bottiglia da 1 litro', 'power bank da 20 000 mAh', 'bicicletta elettrica a pedalata assistita'];
-var ESEMPIO = {
-  q: 'trapano avvitatore a batteria',
-  result: {
-    merce: 'Trapano avvitatore portatile con motore elettrico incorporato, alimentato a batteria',
-    best: { code: '8467211000', it: 'Trapani di ogni tipo con motore elettrico incorporato, che funzionano senza sorgente esterna di energia (a batteria).', why: 'È un utensile per l\'impiego a mano con motore elettrico incorporato, quindi voce 8467. Tra i trapani, l\'alimentazione a batteria porta alla sottovoce di quelli che funzionano senza sorgente esterna di energia.', conf: 90 },
-    alts: [
-      { code: '8467219900', it: 'Altri trapani elettrici, alimentati dalla rete.', when: 'Scegli questa se il trapano funziona solo collegato alla presa di corrente.', conf: 25 },
-      { code: '8467219100', it: 'Trapani elettropneumatici alimentati dalla rete.', when: 'Scegli questa se è un tassellatore elettropneumatico a filo.', conf: 12 },
-      { code: '8467292000', it: 'Altri utensili elettrici a batteria, diversi da trapani e seghe.', when: 'Scegli questa se l\'utensile serve solo ad avvitare e non a forare.', conf: 18 }
-    ],
-    domande: [
-      { q: 'Come è alimentato l\'utensile?', opts: ['Batteria ricaricabile', 'Cavo di rete'], why: 'Separa 8467 21 10 dalle sottovoci 8467 21 91 e 8467 21 99.' },
-      { q: 'Qual è la funzione principale?', opts: ['Forare, anche con avvitatura', 'Solo avvitare'], why: 'Un avvitatore senza funzione di foratura rientra tra gli altri utensili della 8467 29.' }
-    ],
-    attenzione: ['Se la batteria agli ioni di litio viaggia separata dall\'utensile va classificata a parte, alla voce 8507.'],
-    altre: []
-  }
-};
-
 var state = {
   view: 'classifica',
   ai: 'wait',          // wait | ok | no
   aiMotivo: '',
   utente: null,        // risposta di /api/io
-  recenti: [],         // ultime descrizioni classificate (dallo storico)
   preferiti: {},       // codice -> { nota }
   q: '', answers: [], heads: [],
   result: null,        // normalized AI result
   sel: null,           // { code, idx }
-  esempio: false,
   picks: {}, extra: '',
   busy: null, error: '', warn: '',
   country: '', flow: 'import',
@@ -156,14 +134,19 @@ function infoBlock() {
   if (!state.answers.length) return '';
   return '\nINFORMAZIONI GIÀ FORNITE DALL\'UTENTE:\n' + state.answers.map(function (a) { return '- ' + a.q + ' → ' + a.a; }).join('\n') + '\n';
 }
+/* ogni richiesta ha una parte fissa (contesto: istruzioni e testo ufficiale, riusata dalla cache del fornitore)
+   e una parte che cambia (prompt: la merce e le risposte dell'utente), messa in fondo */
+function merceBlock() { return 'MERCE DA CLASSIFICARE:\n«' + state.q + '»\n' + infoBlock(); }
 function promptVoci() {
-  return 'Sei un esperto di classificazione doganale dell\'Unione europea (Sistema Armonizzato, Nomenclatura Combinata, TARIC).\n\n' +
-    'MERCE DA CLASSIFICARE:\n«' + state.q + '»\n' + infoBlock() + '\n' +
-    'Compito: indica le voci del Sistema Armonizzato a 4 cifre in cui questa merce potrebbe rientrare, dalla più probabile alla meno probabile. ' +
-    'Includi anche le voci concorrenti realistiche (altro materiale, altra funzione, parti e accessori, assortimenti), perché la scelta finale verrà fatta in un secondo passaggio sul testo ufficiale. Da 1 a 5 voci, senza doppioni.\n\n' +
-    'Rispondi solo con un oggetto JSON in questa forma:\n' +
-    '{"merce":"riformulazione breve e precisa della merce, in italiano","voci":[{"voce":"8467","motivo":"massimo 10 parole"}],"non_classificabile":null}\n\n' +
-    'Se il testo non descrive una merce, restituisci "voci":[] e scrivi in "non_classificabile" una frase che dice all\'utente che cosa manca.';
+  return {
+    contesto: 'Sei un esperto di classificazione doganale dell\'Unione europea (Sistema Armonizzato, Nomenclatura Combinata, TARIC).\n\n' +
+      'Compito: indica le voci del Sistema Armonizzato a 4 cifre in cui la merce descritta alla fine potrebbe rientrare, dalla più probabile alla meno probabile. ' +
+      'Includi anche le voci concorrenti realistiche (altro materiale, altra funzione, parti e accessori, assortimenti), perché la scelta finale verrà fatta in un secondo passaggio sul testo ufficiale. Da 1 a 5 voci, senza doppioni.\n\n' +
+      'Rispondi solo con un oggetto JSON in questa forma:\n' +
+      '{"merce":"riformulazione breve e precisa della merce, in italiano","voci":[{"voce":"8467","motivo":"massimo 10 parole"}],"non_classificabile":null}\n\n' +
+      'Se il testo non descrive una merce, restituisci "voci":[] e scrivi in "non_classificabile" una frase che dice all\'utente che cosa manca.',
+    prompt: merceBlock()
+  };
 }
 function headingBlock(hi) {
   var base = LVL[hi], out = [];
@@ -184,9 +167,8 @@ function promptScelta(heads) {
     if (used + b.length > 150000 && blocks.length) { skipped.push(h); return; }
     used += b.length; blocks.push(b);
   });
-  return 'Sei un esperto di classificazione doganale dell\'Unione europea. Classifichi secondo le Regole generali per l\'interpretazione della Nomenclatura Combinata (da 1 a 6), ' +
-    'le note di sezione e di capitolo e la prassi consolidata (note esplicative, informazioni tariffarie vincolanti).\n\n' +
-    'MERCE DA CLASSIFICARE:\n«' + state.q + '»\n' + infoBlock() + '\n' +
+  var contesto = 'Sei un esperto di classificazione doganale dell\'Unione europea. Classifichi secondo le Regole generali per l\'interpretazione della Nomenclatura Combinata (da 1 a 6), ' +
+    'le note di sezione e di capitolo e la prassi consolidata (note esplicative, informazioni tariffarie vincolanti). La merce da classificare è descritta alla fine.\n\n' +
     'NOMENCLATURA UFFICIALE (TARIC dell\'UE, situazione al ' + DATA_IT + '; testo ufficiale in italiano' + (N_EN ? ', tranne alcune righe recenti rimaste in inglese' : '') + ').\n' +
     'Ogni riga: codice a 10 cifre, trattini che indicano il livello, descrizione. L\'asterisco dopo il codice indica un codice dichiarabile. ' +
     'Le righe che iniziano con puntini sono titoli intermedi senza codice proprio.\n\n' +
@@ -205,6 +187,7 @@ function promptScelta(heads) {
     '"alternative":[{"codice":"0000000000","descrizione_it":"...","quando":"scegli questa se ...","confidenza":0}],' +
     '"domande":[{"domanda":"...","opzioni":["...","..."],"perche":"quale distinzione risolve"}],"altre_voci":[]}\n' +
     '"confidenza" è un intero da 0 a 100.';
+  return { contesto: contesto, prompt: merceBlock() };
 }
 function normResult(r) {
   r = (r && typeof r === 'object') ? r : {};
@@ -241,13 +224,20 @@ var ERR = {
 };
 function errMsg(e) { return (e && e.message) || ERR[e && e.code] || ERR.upstream_error; }
 
-/* l'IA risponde tramite il server, che custodisce la chiave e applica il limite mensile */
+/* l'IA risponde tramite il server, che custodisce la chiave e conta le classificazioni del mese */
+function nuovaOperazione() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function creaIA() {
   return {
-    json: function (prompt, opts) {
+    /* p = { contesto, prompt } oppure solo il testo; opts: modelTier, schema, operazione, tipo, signal */
+    json: function (p, opts) {
       opts = opts || {};
-      return T.api('POST', '/api/ia', { prompt: prompt, livello: opts.modelTier === 'quick' ? 'rapido' : 'standard' }, { signal: opts.signal })
-        .then(function (r) { if (state.utente) state.utente.ia.usate++; return r.risultato; }, function (e) {
+      var corpo = typeof p === 'string' ? { prompt: p } : { prompt: p.prompt, contesto: p.contesto || '' };
+      corpo.livello = opts.modelTier === 'quick' ? 'rapido' : 'standard';
+      if (opts.schema) corpo.schema = opts.schema;
+      corpo.operazione = opts.operazione || '';
+      corpo.tipo = opts.tipo || 'classifica';
+      return T.api('POST', '/api/ia', corpo, { signal: opts.signal })
+        .then(function (r) { return r.risultato; }, function (e) {
           if (e && e.name === 'AbortError') throw { code: 'cancelled' };
           throw { code: (e && e.codice) || 'upstream_error', message: e && e.errore };
         });
@@ -255,14 +245,10 @@ function creaIA() {
   };
 }
 function impostaIA() {
-  var ia = state.utente && state.utente.ia, loc = state.utente && state.utente.locale;
+  var ia = state.utente && state.utente.ia;
   sampleFn = null; state.ai = 'no';
-  if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva: ' +
-    (loc && loc.editore ? 'scegli un servizio di intelligenza artificiale in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio di intelligenza artificiale.') +
+  if (!ia || !ia.disponibile) state.aiMotivo = 'La classificazione assistita non è attiva: scegli un servizio di intelligenza artificiale in Impostazioni.' +
     ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
-  else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata: chiedi a chi gestisce MAGIC HS. Puoi comunque aprire un codice scrivendone le cifre.';
-  else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' richieste all\'IA di questo mese. ' +
-    'Per averne altre chiedi a chi gestisce MAGIC HS. Nomenclatura e misure restano consultabili.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
 }
 function aggiornaIo() {
@@ -299,7 +285,7 @@ function classifica(soloScelta) {
   // a typed code opens that code directly, without the AI
   if (/^[\d\s.]+$/.test(state.q) && digits(state.q).length >= 2) {
     var r = resolve(state.q);
-    state.result = null; state.answers = []; state.heads = []; state.esempio = false; state.picks = {}; state.trad = {};
+    state.result = null; state.answers = []; state.heads = []; state.picks = {}; state.trad = {};
     state.sel = r; state.anima = true; renderAll(); return;
   }
   if (!sampleFn) { state.error = state.ai === 'wait' ? 'Attendi un istante: sto caricando il tuo profilo.' : state.aiMotivo; renderMsg(); return; }
@@ -308,15 +294,14 @@ function classifica(soloScelta) {
   ctl = new AbortController();
   var signal = ctl.signal;
   var heads = soloScelta ? state.heads.slice() : [];
-  state.esempio = false;
   if (!soloScelta) { state.answers = []; state.result = null; state.sel = null; state.picks = {}; state.trad = {}; renderEsito(); renderFornite(); }
   renderMsg();
   if (soloScelta) { var top = $('#q'); if (top.scrollIntoView) top.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 
-  var p = Promise.resolve();
+  var p = Promise.resolve(), op = nuovaOperazione();       // una classificazione: più richieste, conta una volta sola
   if (!heads.length) {
     setBusy(1, 'Individuo le voci candidate');
-    p = sampleFn.json(promptVoci(), { modelTier: 'quick', signal: signal }).then(function (r1) {
+    p = sampleFn.json(promptVoci(), { modelTier: 'quick', schema: 'voci', operazione: op, signal: signal }).then(function (r1) {
       r1 = (r1 && typeof r1 === 'object') ? r1 : {};
       (Array.isArray(r1.voci) ? r1.voci : []).forEach(function (v) {
         var h = digits(v && typeof v === 'object' ? v.voce : v).slice(0, 4);
@@ -328,27 +313,26 @@ function classifica(soloScelta) {
   }
   p.then(function () {
     setBusy(2, 'Confronto con il testo ufficiale delle voci ' + heads.join(', '));
-    return sampleFn.json(promptScelta(heads), { signal: signal });
+    return sampleFn.json(promptScelta(heads), { schema: 'scelta', operazione: op, signal: signal });
   }).then(function (r2) {
     var res = normResult(r2);
     var nuove = res.altre.filter(function (h) { return heads.indexOf(h) < 0; }).slice(0, 3);
     if (!nuove.length) return res;
     heads = heads.concat(nuove); state.heads = heads;
     setBusy(3, 'Aggiungo le voci ' + nuove.join(', ') + ' e ricontrollo');
-    return sampleFn.json(promptScelta(heads), { signal: signal }).then(normResult);
+    return sampleFn.json(promptScelta(heads), { schema: 'scelta', operazione: op, signal: signal }).then(normResult);
   }).then(function (res) {
     if (!res.best) throw { code: 'invalid_json' };
     state.result = res; state.picks = {}; state.extra = '';
     state.sel = { code: res.best.code, idx: byCode.has(res.best.code) ? byCode.get(res.best.code) : -1 };
     state.anima = true;
-    ricorda(state.q);
     salvaStorico();
-    clearBusy(); renderAll();
+    clearBusy(); renderAll(); aggiornaIo();
     var e = $('#esito'); if (e && e.scrollIntoView) e.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }).catch(function (e) {
     clearBusy();
     if (e && e.code === 'cancelled') { renderAll(); return; }
-    if (e && (e.code === 'quota_esaurita' || e.code === 'not_configured')) aggiornaIo();
+    aggiornaIo();          // classificazioni usate e motivo per cui l'IA non è disponibile
     state.error = (e && e.code === 'no_heads') ? e.message : errMsg(e);
     renderAll();
   });
@@ -365,9 +349,11 @@ function traduci() {
   var contesto = perc.filter(function (j) { return !INGL[j]; }).map(function (j) { return descOf(j).replace(/\n/g, ' '); }).join(' > ');
   var testo = rows.map(function (j, k) { return (k + 1) + '. ' + DESC[j].replace(/\n/g, ' '); }).join('\n');
   sampleFn.json('Traduci dall\'inglese all\'italiano, con la terminologia della Nomenclatura Combinata dell\'UE, queste ' + rows.length + ' descrizioni doganali. ' +
-    'Restituisci solo un array JSON di ' + rows.length + ' stringhe, nello stesso ordine, senza numerazione.\n\n' +
-    (contesto ? 'Contesto (voci superiori, già in italiano): ' + contesto + '\n\n' : '') + testo, { modelTier: 'quick', signal: c2.signal })
+    'Restituisci solo un oggetto JSON {"traduzioni": [...]} con ' + rows.length + ' stringhe, nello stesso ordine, senza numerazione.\n\n' +
+    (contesto ? 'Contesto (voci superiori, già in italiano): ' + contesto + '\n\n' : '') + testo,
+    { modelTier: 'quick', schema: 'traduzione', tipo: 'traduzione', operazione: nuovaOperazione(), signal: c2.signal })
     .then(function (a) {
+      if (a && !Array.isArray(a)) a = a.traduzioni;
       if (Array.isArray(a) && a.length === rows.length) rows.forEach(function (j, k) { state.trad[j] = str(a[k], 1500); });
       else state.warn = 'Traduzione non riuscita. Riprova.';
     })
@@ -819,8 +805,7 @@ function boxMisure(sel) {
     '<select class="campo" id="paese" aria-label="Paese">' + opt + '</select>' +
     '<div class="fila"><button class="chip" type="button" data-act="flusso" data-f="import" aria-pressed="' + (!exp) + '">Importazione</button>' +
     '<button class="chip" type="button" data-act="flusso" data-f="export" aria-pressed="' + exp + '">Esportazione</button></div></div>' +
-    '<div class="box s8"><div class="lab">' + T.icona('percento') + 'Misure TARIC al ' + dataIt(oggiNum()) + ' <span class="dx">dati ufficiali UE estratti il ' + esc(DATA_IT) + '</span></div>' +
-    '<p class="nota">Dazi e controlli dell\'Unione per il codice e il paese scelti. IVA, accise e misure nazionali non fanno parte del TARIC: per quelle usa AIDA.</p>' + links + '</div>' +
+    '<div class="box s8"><div class="lab">' + T.icona('percento') + 'Misure TARIC al ' + dataIt(oggiNum()) + '</div>' + links + '</div>' +
     '<div class="box"><div class="lab"><b>47</b> Calcolo delle imposizioni <span class="dx">' + (exp ? 'esportazione' : 'dazi all\'importazione') + '</span></div>' + h47 + '</div>' +
     '<div class="box"><div class="lab"><b>44</b> Documenti presentati, certificati e autorizzazioni <span class="dx">' + (n44 ? n44 + (n44 === 1 ? ' misura' : ' misure') + ' di controllo' : 'divieti, restrizioni e controlli') + '</span></div>' + h44 + '</div>' +
     '</div>';
@@ -842,7 +827,7 @@ function renderMsg() {
   if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>';
   var ia = state.utente && state.utente.ia;
   if (state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
-  if (state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Richieste all\'IA usate questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
+  if (state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Classificazioni con l\'IA questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
   $('#msg').innerHTML = h;
 }
 function renderFornite() {
@@ -853,18 +838,6 @@ function renderFornite() {
     return '<button class="chip" type="button" data-act="togli" data-k="' + k + '" title="Togli questo dettaglio">' + esc(a.a) + ' ×</button>';
   }).join('');
 }
-function renderEsempi() {
-  var rec = state.recenti;
-  var h = '';
-  if (rec.length) h += '<span class="et">Recenti</span>' + rec.slice(0, 5).map(function (t) { return '<button class="chip" type="button" data-act="prova" data-t="' + esc(t) + '">' + esc(t) + '</button>'; }).join('');
-  else h += '<span class="et">Prova con</span>' + ESEMPI.map(function (t) { return '<button class="chip" type="button" data-act="prova" data-t="' + esc(t) + '">' + esc(t) + '</button>'; }).join('');
-  $('#esempi').innerHTML = h;
-}
-function ricorda(t) {
-  state.recenti = [t].concat(state.recenti.filter(function (x) { return x !== t; })).slice(0, 8);
-  renderEsempi();
-}
-
 function celle(sel) {
   var i = sel.idx, c = sel.code, nc, ta, manca = false;
   if (i >= 0 && !isLeaf(i)) {
@@ -882,7 +855,7 @@ function celle(sel) {
 function ruolo(sel) {
   var r = state.result;
   if (!r) return { nome: 'Scelta manuale', cand: null };
-  if (r.best && r.best.code === sel.code) return { nome: state.esempio ? 'Esempio' : 'Proposta', cand: r.best, best: true };
+  if (r.best && r.best.code === sel.code) return { nome: 'Proposta', cand: r.best, best: true };
   for (var k = 0; k < r.alts.length; k++) if (r.alts[k].code === sel.code) return { nome: 'Alternativa', cand: r.alts[k] };
   return { nome: 'Scelta manuale', cand: null };
 }
@@ -905,7 +878,7 @@ function renderEsito() {
   /* --- box 33 --- */
   h += '<div class="foglio' + (trascorso < 1800 ? ' anima" style="--t:-' + trascorso + 'ms' : '') + '">';
   h += '<div class="box s8 principale"><div class="lab"><b>33</b> Codice delle merci' +
-    (state.esempio ? '<span class="dx">esempio dimostrativo: premi Classifica per la tua merce</span>' : (r && r.merce ? '<span class="dx">' + esc(r.merce) + '</span>' : '')) + '</div>';
+    (r && r.merce ? '<span class="dx">' + esc(r.merce) + '</span>' : '') + '</div>';
   h += '<div class="testa33">' + celle(sel) +
     '<div class="timbro">' + T.icona(role.best ? 'timbro' : role.nome === 'Alternativa' ? 'domanda' : 'matita') + '<span>' + esc(role.nome) + (cand ? '<small>confidenza ' + confLabel(cand.conf) + '</small>' : '') + '</span></div></div>';
   if (i < 0) h += '<p class="errore">Il codice ' + esc(grp(sel.code)) + ' non esiste nella nomenclatura incorporata (situazione al ' + DATA_IT + '). Può essere stato introdotto dopo quella data oppure essere sbagliato: verificalo su AIDA.</p>';
@@ -918,7 +891,6 @@ function renderEsito() {
     (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' : '') + '</div>';
   var fineCod = (D.fine && D.fine[sel.code]) || 0;
   if (i >= 0 && fineCod) h += '<p class="avviso">' + (fineCod < oggiNum() ? 'Questo codice ha cessato di valere il ' : 'Questo codice cessa di valere il ') + dataIt(fineCod) + '.</p>';
-  h += '<p class="nota">Dati TARIC al ' + DATA_IT + '. Prima di dichiarare controlla il codice su AIDA.</p>';
   h += '</div>';
 
   /* --- box 41 --- */
@@ -931,7 +903,7 @@ function renderEsito() {
   else if (!uc) h += '<p class="cosa">Nessuna</p><p class="nota">Si dichiara solo la massa netta.</p>';
   else { var us = UNITA_SUP[uc.trim()] || uc.trim(); h += '<p class="cosa">' + esc(us) + '</p><p class="nota">' + esc(UNITA_IT[us] || '') + '</p>'; }
   h += '<div class="lab" style="margin-top:6px">Stato del codice</div>';
-  h += i < 0 ? '<p class="nota">Non trovato.</p>' : isLeaf(i) ? '<p class="nota">Dichiarabile nella nomenclatura al ' + DATA_IT + '.</p>' : '<p class="nota">Voce intermedia con ' + kids(i).length + ' sottovoci.</p>';
+  h += i < 0 ? '<p class="nota">Non trovato.</p>' : isLeaf(i) ? '<p class="nota">Dichiarabile.</p>' : '<p class="nota">Voce intermedia con ' + kids(i).length + ' sottovoci.</p>';
   h += '</div>';
 
   /* --- path --- */
@@ -939,7 +911,7 @@ function renderEsito() {
     var p = pathOf(i);
     var inEN = p.filter(function (j) { return INGL[j]; });
     var daTradurre = inEN.some(function (j) { return !state.trad[j]; });
-    h += '<div class="box"><div class="lab">' + T.icona('albero') + 'Percorso nella nomenclatura <span class="dx">' + (inEN.length ? 'testo ufficiale UE: le righe con la sigla EN non hanno ancora il testo italiano' : 'testo ufficiale UE in italiano') + '</span></div><div class="perc">' +
+    h += '<div class="box"><div class="lab">' + T.icona('albero') + 'Percorso nella nomenclatura' + (inEN.length ? ' <span class="dx">le righe EN non hanno ancora il testo italiano</span>' : '') + '</div><div class="perc">' +
       p.map(function (j, k) { return rigaPerc(j, k === p.length - 1); }).join('') + '</div>';
     if (state.warn) h += '<p class="avviso">' + esc(state.warn) + '</p>';
     if (sampleFn && daTradurre) h += '<div class="fila"><button class="btn sm" type="button" data-act="traduci"' + (state.tradBusy ? ' disabled' : '') + '>' + T.icona('globo') + (state.tradBusy ? 'Traduco…' : 'Traduci le righe in inglese') + '</button><span class="nota">Traduzione automatica, non ufficiale.</span></div>';
@@ -954,7 +926,7 @@ function renderEsito() {
   /* --- alternatives and questions --- */
   if (r) {
     var tutte = [r.best].concat(r.alts);
-    h += '<div class="box s7"><div class="lab">' + T.icona('regole') + 'Voci a confronto <span class="dx">tocca una riga per aprirla</span></div><div class="lista">' + tutte.map(function (a, k) {
+    h += '<div class="box s7"><div class="lab">' + T.icona('regole') + 'Voci a confronto</div><div class="lista">' + tutte.map(function (a, k) {
       var ai = byCode.has(a.code) ? byCode.get(a.code) : -1;
       return '<button class="alt" type="button" data-act="alt" data-c="' + esc(a.code) + '" aria-pressed="' + (a.code === sel.code) + '">' +
         '<span class="cod">' + esc(grp(a.code)) + '</span><span class="it">' + esc(a.it || (ai >= 0 ? DESC[ai] : '')) + '</span>' +
@@ -972,10 +944,8 @@ function renderEsito() {
       }).join('');
     } else h += '<p class="nota">Con le informazioni date non servono altre domande.</p>';
     if (state.qmsg) h += '<p class="avviso">' + esc(state.qmsg) + '</p>';
-    if (!state.esempio) {
-      h += '<div class="fila"><input class="campo" id="extra" type="text" autocomplete="off" placeholder="Altro dettaglio utile (facoltativo)" value="' + esc(state.extra) + '">' +
-        '<button class="btn" type="button" data-act="riclassifica"' + (sampleFn ? '' : ' disabled') + '>' + T.icona('aggiorna') + 'Riclassifica</button></div>';
-    } else h += '<p class="nota">Nell\'uso reale rispondi e premi Riclassifica: la proposta si aggiorna.</p>';
+    h += '<div class="fila"><input class="campo" id="extra" type="text" autocomplete="off" placeholder="Altro dettaglio utile (facoltativo)" value="' + esc(state.extra) + '">' +
+      '<button class="btn" type="button" data-act="riclassifica"' + (sampleFn ? '' : ' disabled') + '>' + T.icona('aggiorna') + 'Riclassifica</button></div>';
     h += '</div>';
   }
   h += '</div>';
@@ -1089,8 +1059,7 @@ document.addEventListener('click', function (ev) {
   var t = ev.target.closest('[data-act]'); if (!t) return;
   var act = t.getAttribute('data-act'), i = parseInt(t.getAttribute('data-i'), 10);
   if (!act) return;
-  if ((act === 'prova' || act === 'togli' || act === 'riclassifica' || act === 'chiedi') && state.busy) return;
-  if (act === 'prova') { $('#q').value = t.getAttribute('data-t'); classifica(false); }
+  if ((act === 'togli' || act === 'riclassifica' || act === 'chiedi') && state.busy) return;
   else if (act === 'togli') { state.answers.splice(parseInt(t.getAttribute('data-k'), 10), 1); renderFornite(); classifica(true); }
   else if (act === 'copia') {
     var c = t.getAttribute('data-c'), done = function (ok) { t.textContent = ok ? 'Copiato' : c; setTimeout(function () { t.textContent = 'Copia codice'; }, 1600); };
@@ -1124,7 +1093,7 @@ document.addEventListener('click', function (ev) {
   else if (act === 'flusso') { state.flow = t.getAttribute('data-f'); renderEsito(); salvaPreferenze(); }
   else if (act === 'sez') { var s = t.getAttribute('data-k'); state.secOpen[s] = !state.secOpen[s]; renderNom(); }
   else if (act === 'toggle') { state.open[i] = !state.open[i]; renderNom(); }
-  else if (act === 'usa') { ev.stopPropagation(); state.sel = { code: CODE[i], idx: i }; state.result = null; state.esempio = false; state.answers = []; state.heads = []; state.trad = {}; state.anima = true; vista('classifica'); renderAll(); var es = $('#esito'); if (es.scrollIntoView) es.scrollIntoView({ block: 'start' }); }
+  else if (act === 'usa') { ev.stopPropagation(); state.sel = { code: CODE[i], idx: i }; state.result = null; state.answers = []; state.heads = []; state.trad = {}; state.anima = true; vista('classifica'); renderAll(); var es = $('#esito'); if (es.scrollIntoView) es.scrollIntoView({ block: 'start' }); }
   else if (act === 'apri') { ev.stopPropagation(); apriNellAlbero(i); }
 });
 document.addEventListener('change', function (ev) { if (ev.target && ev.target.id === 'paese') { state.country = ev.target.value; renderEsito(); salvaPreferenze(); } });
@@ -1154,7 +1123,7 @@ function ripristina(d) {
   state.answers = Array.isArray(d.answers) ? d.answers : [];
   state.heads = Array.isArray(d.heads) ? d.heads : [];
   state.result = (d.result && typeof d.result === 'object') ? d.result : null;
-  state.esempio = false; state.picks = {}; state.trad = {}; state.error = ''; state.warn = ''; state.extra = '';
+  state.picks = {}; state.trad = {}; state.error = ''; state.warn = ''; state.extra = '';
   var c = state.result && state.result.best ? digits(state.result.best.code) : digits(d.sel);
   state.sel = c ? { code: c, idx: byCode.has(c) ? byCode.get(c) : -1 } : null;
   state.anima = true;
@@ -1165,28 +1134,17 @@ function start() {
   var ora = new Date(), att = ora.getDate() < 10 ? new Date(ora.getFullYear(), ora.getMonth() - 1, 1) : ora;
   var atteso = att.getFullYear() + '-' + ('0' + (att.getMonth() + 1)).slice(-2);
   if (DATA_ISO && DATA_ISO.slice(0, 7) < atteso) { txt += ' · manca l\'aggiornamento di questo mese'; $('#dato').classList.add('tardi'); }
-  $('#dato').innerHTML = T.icona('calendario') + esc(txt); $('#dato2').textContent = N.toLocaleString('it-IT') + ' righe, ' + (m.dichiarabili || 0).toLocaleString('it-IT') + ' codici dichiarabili, situazione al ' + DATA_IT;
-  $('#nota-nom').textContent = 'Testo ufficiale UE in italiano' +
-    (N_EN ? '; le ' + N_EN.toLocaleString('it-IT') + ' righe create o modificate dopo il ' + IT_DATA + ' sono ancora in inglese (sigla EN)' : '') +
-    '. La ricerca ignora accenti e differenze tra singolare e plurale.';
-  $('#fonte').textContent = 'Nomenclatura e misure: Commissione europea, DG TAXUD, estrazione mensile TARIC con situazione al ' + DATA_IT + ', nella copia pubblicata dal progetto taric-opendata su GitHub. ' +
-    'Nomenclatura, certificati, aree geografiche, note e codici addizionali sono nel testo ufficiale italiano' +
-    (N_EN ? '; per la nomenclatura il testo italiano è quello dell\'estrazione del ' + IT_DATA + ', quindi le ' + N_EN.toLocaleString('it-IT') + ' righe create o modificate dopo restano in inglese (sigla EN)' : '') +
-    '. I nomi dei tipi di misura e delle sezioni sono tradotti dalla pagina. IVA, accise e misure nazionali non fanno parte del TARIC.';
+  $('#dato').innerHTML = T.icona('calendario') + esc(txt);
+  $('#fonte').textContent = 'Dati TARIC dell\'UE (DG TAXUD) al ' + DATA_IT + '.';
   if (!N) { state.error = 'Non riesco a caricare la nomenclatura. Ricarica la pagina.'; }
-  if (N && !state.recenti.length) {   // primo utilizzo: un esempio mostra come si legge il risultato
-    $('#q').value = ESEMPIO.q; state.q = ESEMPIO.q; state.result = ESEMPIO.result; state.esempio = true;
-    state.sel = { code: ESEMPIO.result.best.code, idx: byCode.has(ESEMPIO.result.best.code) ? byCode.get(ESEMPIO.result.best.code) : -1 };
-  }
   if (state.country && !RIF.aree[state.country]) state.country = '';
-  renderEsempi();
   vista(location.hash.replace('#', '') || 'classifica');
   renderAll();
   state.avviato = true;
 }
 window.TARIC_DEBUG = { misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
 
-/* funzioni usate dalle viste Profilo e Gestione */
+/* funzioni usate dalle viste Profilo e Impostazioni */
 T.app = {
   esiste: function (c) { return byCode.has(c); },
   descrizione: function (c) { var i = byCode.has(c) ? byCode.get(c) : -1; return i < 0 ? '' : descOf(i); },
@@ -1199,7 +1157,7 @@ T.app = {
   vista: vista,
   apriCodice: function (c) {
     state.sel = { code: c, idx: byCode.has(c) ? byCode.get(c) : -1 };
-    state.result = null; state.esempio = false; state.answers = []; state.heads = []; state.trad = {}; state.anima = true;
+    state.result = null; state.answers = []; state.heads = []; state.trad = {}; state.anima = true;
     vista('classifica'); renderAll(); var e = $('#esito'); if (e.scrollIntoView) e.scrollIntoView({ block: 'start' });
   },
   apriClassificazione: function (d) {
@@ -1228,9 +1186,10 @@ function chiuso(daSolo) {
   if (state.chiuso) return;
   state.chiuso = true;
   if (vivoT) { clearInterval(vivoT); vivoT = null; }
-  $('main').innerHTML = '<div class="foglio"><div class="box chiuso" role="status"><div class="lab">' + T.icona('spegni') + 'MAGIC HS è chiuso</div>' +
-    '<p class="cosa">' + (daSolo ? 'Il programma si è chiuso perché non lo usavi da un po\' o perché è arrivata una nuova versione.' : 'Puoi chiudere questa scheda del browser.') + '</p>' +
-    '<p class="nota">Per riaprirlo fai doppio clic su <b>Avvia MAGIC HS</b>, nella cartella condivisa di OneDrive o sul desktop. Storico e preferiti restano salvati su questo computer.</p></div></div>';
+  $('main').innerHTML = '<div class="foglio"><div class="box chiuso" role="status">' + (T.scena ? '<div class="scena">' + T.scena() + '</div>' : '') +
+    '<div class="lab">' + T.icona('spegni') + 'MAGIC HS è chiuso</div>' +
+    '<p class="cosa">' + (daSolo ? 'Si è chiuso perché non lo usavi da un po\' o perché è arrivata una nuova versione.' : 'Puoi chiudere questa scheda del browser.') + '</p>' +
+    '<p class="nota">Per riaprirlo: doppio clic su <b>Avvia MAGIC HS</b>.</p></div></div>';
   ['.schede', '#esci'].forEach(function (s) { var e = $(s); if (e) e.hidden = true; });
 }
 var vivoT = null;
@@ -1243,42 +1202,18 @@ function tieniVivo() {
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') controllaVivo(); });
   T.alOffline = controllaVivo;
 }
-/* nessuno ha ancora detto di gestire MAGIC HS per i colleghi */
-function proponiGestione() {
-  var v = $('#view-classifica');
-  if (!v || $('#gestisco-io')) return;
-  var d = document.createElement('div');
-  d.className = 'foglio'; d.id = 'gestisco-io';
-  d.innerHTML = '<div class="box"><div class="lab">' + T.icona('cartella') + 'Chi gestisce MAGIC HS?</div>' +
-    '<p class="nota">Nessuno pubblica ancora gli aggiornamenti per i colleghi. Se sei tu a gestire MAGIC HS (hai creato tu la cartella condivisa), premi il pulsante: da questo PC pubblicherai i dati di ogni mese, l\'intelligenza artificiale e le nuove versioni. Se sei un collega, ignora questo messaggio.</p>' +
-    '<div class="fila"><button class="btn pri" type="button" id="gestisco-io-si">' + T.icona('spunta') + 'Gestisco io MAGIC HS</button></div><div id="gestisco-io-esito"></div></div>';
-  v.insertBefore(d, v.firstChild);
-  $('#gestisco-io-si').addEventListener('click', function () {
-    this.disabled = true;
-    T.api('POST', '/api/locale/gestisco-io').then(function () { location.hash = '#gestione'; location.reload(); },
-      function (e) { $('#gestisco-io-esito').innerHTML = '<p class="errore">' + esc(e.errore || 'Non è stato possibile.') + '</p>'; $('#gestisco-io-si').disabled = false; });
-  });
-}
-
 T.api('GET', '/api/io').then(function (u) {
   state.utente = u;
   $('#chi-nome').textContent = u.nome;
   $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
   $('#chi-iniziali').parentNode.title = u.nome;
   tieniVivo();
-  if (u.locale.puo_gestire) proponiGestione();
-  if (u.ia && u.ia.nome) $('#ia-nome').textContent = ' (' + u.ia.nome.replace(/ \((.+)\)$/, ' di $1') + ')';
   $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
+  if (u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Impostazioni se c'è una versione nuova
   T.tema(u.preferenze.tema);
   state.country = u.preferenze.paese || '';
   state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
   impostaIA();
-  return Promise.all([
-    T.api('GET', '/api/storico?limite=30').then(function (r) {
-      var visti = {};
-      state.recenti = r.voci.map(function (v) { return v.testo; }).filter(function (t) { if (visti[t]) return false; visti[t] = 1; return true; }).slice(0, 8);
-    }, function () { /* niente recenti */ }),
-    T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ })
-  ]);
+  return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
 }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
 })();

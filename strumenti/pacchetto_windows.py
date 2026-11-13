@@ -1,12 +1,13 @@
 """Costruisce il programma per Windows di MAGIC HS (si può eseguire anche da Linux o macOS).
 
-    python strumenti/pacchetto_windows.py [--dati CARTELLA_VERSIONE] [--uscita dist]
+    python strumenti/pacchetto_windows.py [--uscita dist]
 
 Produce in dist/:
-  magic-hs-windows-<versione>.zip    Python per Windows con le librerie e MAGIC HS: è il file da caricare in
-                                     Gestione > Cartella condivisa > «Nuova versione del programma»
-  MAGIC-HS-cartella-<versione>.zip   la cartella «MAGIC HS» da mettere su SharePoint la prima volta (avvio,
-                                     istruzioni, programma e, con --dati, i dati TARIC di un mese)
+  MAGIC-HS-<versione>.zip            la cartella «MAGIC HS» da scaricare ed estrarre su ogni PC (avvio, istruzioni
+                                     e programma); i dati TARIC li scarica il programma al primo avvio
+  magic-hs-windows-<versione>.zip    Python per Windows con le librerie e MAGIC HS: è il file che i programmi già
+                                     installati scaricano da soli dalla pagina delle versioni. Contiene anche avvio e
+                                     istruzioni, che la versione 1.2 copiava nella vecchia cartella condivisa
 
 Python viene da python-build-standalone (https://github.com/astral-sh/python-build-standalone, licenza nel
 pacchetto); il file scaricato si controlla con l'impronta SHA-256 scritta qui sotto.
@@ -16,7 +17,6 @@ from __future__ import annotations
 import argparse
 import compileall
 import hashlib
-import io
 import os
 import re
 import shutil
@@ -126,7 +126,7 @@ def crea_pacchetto(py: Path, dest: Path) -> None:
                 aggiungi(z, "python/" + f.relative_to(py).as_posix(), f.read_bytes())
 
 
-def crea_cartella(pacchetto: Path, versione: str, dest: Path, dati: Path | None) -> None:
+def crea_cartella(pacchetto: Path, versione: str, dest: Path) -> None:
     base = "MAGIC HS/"
     with zipfile.ZipFile(dest, "w") as z:
         aggiungi(z, base + "Avvia MAGIC HS.cmd", testo_windows(RADICE / "windows" / "Avvia MAGIC HS.cmd"))
@@ -135,26 +135,11 @@ def crea_cartella(pacchetto: Path, versione: str, dest: Path, dati: Path | None)
         info = zipfile.ZipInfo(base + f"programma/magic-hs-{versione}.zip", DATA_ZIP)
         info.compress_type = zipfile.ZIP_STORED                # gia' compresso
         z.writestr(info, pacchetto.read_bytes())
-        if dati:
-            sys.path.insert(0, str(RADICE))
-            from taric.dati import RE_FILE, RE_VERSIONE
-            v = dati.name
-            if not RE_VERSIONE.match(v) or not (dati / "nomenclatura.js").is_file():
-                sys.exit(f"{dati} non è una cartella di dati TARIC (AAAA-MM-01 con nomenclatura.js)")
-            buf = io.BytesIO()
-            with zipfile.ZipFile(buf, "w") as zd:
-                for f in sorted(dati.rglob("*")):
-                    nome = f.relative_to(dati).as_posix()
-                    if f.is_file() and RE_FILE.match(nome):
-                        aggiungi(zd, nome, f.read_bytes())
-            aggiungi(z, base + f"dati/{v}.zip", buf.getvalue())
-            aggiungi(z, base + "dati/attiva.txt", f"{v}\n".encode())
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Programma per Windows di MAGIC HS")
     ap.add_argument("--uscita", default=str(RADICE / "dist"))
-    ap.add_argument("--dati", default="", help="cartella di una versione dei dati (…/versioni/AAAA-MM-01) da includere")
     ap.add_argument("--cache", default=str(Path.home() / ".cache" / "magic-hs"))
     a = ap.parse_args()
     versione = versione_programma()
@@ -167,8 +152,8 @@ def main() -> int:
     installa_librerie(py)
     pacchetto = uscita / f"magic-hs-windows-{versione}.zip"
     crea_pacchetto(py, pacchetto)
-    cartella = uscita / f"MAGIC-HS-cartella-{versione}.zip"
-    crea_cartella(pacchetto, versione, cartella, Path(a.dati) if a.dati else None)
+    cartella = uscita / f"MAGIC-HS-{versione}.zip"
+    crea_cartella(pacchetto, versione, cartella)
     shutil.rmtree(lavoro)
     for f in (pacchetto, cartella):
         print(f"{f.name}: {f.stat().st_size / 1048576:.1f} MB, sha256 {hashlib.sha256(f.read_bytes()).hexdigest()}")

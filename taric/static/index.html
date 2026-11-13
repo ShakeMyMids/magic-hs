@@ -9,7 +9,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
-<meta name="theme-color" content="#dfdad0">
+<meta name="theme-color" content="#e1e6eb">
 </head>
 <body>
 <div class="page">
@@ -20,7 +20,7 @@
       <a href="#classifica" id="tab-classifica" aria-current="page" data-ico="cerca">Classifica</a>
       <a href="#nomenclatura" id="tab-nomenclatura" data-ico="albero">Nomenclatura</a>
       <a href="#profilo" id="tab-profilo" data-ico="utente">Profilo</a>
-      <a href="#gestione" id="tab-gestione" data-ico="gestione" hidden>Gestione</a>
+      <a href="#gestione" id="tab-gestione" data-ico="gestione" hidden>Impostazioni</a>
     </nav>
     <div class="lato">
       <button class="tasto-ico" type="button" id="tema" aria-label="Cambia tema"></button>
@@ -34,11 +34,10 @@
     <section id="view-classifica" aria-labelledby="tab-classifica">
       <div class="foglio">
         <div class="box domanda">
-          <span class="dato" id="dato"></span>
-          <h2>Che merce devi classificare?</h2>
-          <p class="sotto-titolo">Descrivila a parole: ricevi la voce doganale a 10 cifre con le alternative, poi dazi e documenti richiesti per ogni paese.</p>
+          <div class="scena" data-scena></div>
+          <div class="titolo-riga"><h2>Che merce devi classificare?</h2><span class="dato" id="dato"></span></div>
           <label for="q" hidden>Descrizione della merce (casella 31 del DAU)</label>
-          <div class="cerca-merce" data-ico="cerca"><textarea id="q" rows="2" spellcheck="false" placeholder="Per esempio: scarpe da ginnastica con tomaia in pelle e suola in gomma, da uomo"></textarea></div>
+          <div class="cerca-merce" data-ico="cerca"><textarea id="q" rows="2" spellcheck="false" autocomplete="off" placeholder="Descrivi la merce da classificare"></textarea></div>
           <div class="avanza" id="avanza" hidden><i></i></div>
           <div class="fila">
             <button class="btn pri" id="vai" type="button" data-ico="bacchetta">Classifica</button>
@@ -47,7 +46,6 @@
           </div>
           <div id="msg"></div>
           <div class="fila" id="fornite" hidden></div>
-          <div class="fila" id="esempi"></div>
         </div>
       </div>
       <div id="esito" style="margin-top:16px"></div>
@@ -57,13 +55,12 @@
     <section id="view-nomenclatura" aria-labelledby="tab-nomenclatura" hidden>
       <div class="foglio">
         <div class="box">
-          <div class="lab" data-ico="albero">Nomenclatura TARIC <span class="dx" id="dato2"></span></div>
+          <div class="lab" data-ico="albero">Nomenclatura TARIC</div>
           <div class="fila">
             <label for="nq" hidden>Cerca nella nomenclatura</label>
-            <input class="campo" id="nq" type="search" autocomplete="off" spellcheck="false" placeholder="Codice (es. 8467 21) o parola (es. biciclette)">
+            <input class="campo" id="nq" type="search" autocomplete="off" spellcheck="false" placeholder="Codice o parola da cercare">
             <button class="btn" id="nq-x" type="button" data-ico="chiudi">Azzera</button>
           </div>
-          <p class="nota" id="nota-nom"></p>
         </div>
         <div class="box albero-box">
           <div class="albero" id="albero"></div>
@@ -78,12 +75,12 @@
   </main>
 
   <footer class="piede">
-    <p id="fonte"></p>
-    <p>Strumento non ufficiale, senza valore legale. La proposta di classificazione è generata da un modello di intelligenza artificiale<span id="ia-nome"></span>: prima di dichiarare verifica sempre il codice e le misure su AIDA o sul TARIC dell'UE.</p>
+    <p><span id="fonte"></span> Strumento non ufficiale, senza valore legale: prima di dichiarare verifica codice e misure su AIDA o sul TARIC dell'UE.</p>
   </footer>
 </div>
 
 <script src="/static/js/icone.js"></script>
+<script src="/static/js/disegni.js"></script>
 <script src="/static/js/comune.js"></script>
 <script src="{{DATI}}nomenclatura.js"></script>
 <script src="{{DATI}}rif.js"></script>

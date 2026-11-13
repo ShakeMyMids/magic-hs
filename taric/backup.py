@@ -1,7 +1,7 @@
 """Backup e ripristino del database del PC (storico, preferiti, preferenze, uso dell'IA, registro).
 
 Un backup e' un archivio .zip con dentro solo "taric.db", copiato con l'API di backup di SQLite:
-la copia e' coerente anche se MAGIC HS sta scrivendo. I dati TARIC non servono (arrivano dalla cartella condivisa).
+la copia e' coerente anche se MAGIC HS sta scrivendo. I dati TARIC non servono (si riscaricano da soli).
 Il programma ne fa uno al giorno in %LOCALAPPDATA%\\MAGIC HS\\dati\\backup; si rimette con «python -m taric ripristina».
 """
 from __future__ import annotations

@@ -1,0 +1,57 @@
+name: Dati TARIC
+# Prepara i dati TARIC del mese con gli stessi controlli del programma (strumenti/dati_mese.py) e li pubblica nella
+# pagina «dati» della pagina delle versioni (una pre-release: non è una versione del programma), come dati-AAAA-MM-01.zip.
+# Ogni PC li scarica da lì; se non ci sono ancora, li prepara da sé dalla fonte. Gira ogni giorno dall'1 al 12 del mese
+# finché il mese non è pubblicato, oppure a mano (Actions > Dati TARIC > Run workflow, con il mese).
+# Nota: GitHub sospende i flussi pianificati dei progetti pubblici dopo 60 giorni senza modifiche; in quel caso i PC
+# preparano i dati da soli finché il flusso non viene riattivato (Actions > Dati TARIC > Enable workflow).
+on:
+  schedule:
+    - cron: "23 5 1-12 * *"
+  workflow_dispatch:
+    inputs:
+      mese:
+        description: "Mese AAAA-MM (vuoto = quello corrente)"
+        type: string
+        default: ""
+permissions:
+  contents: read
+concurrency: dati-taric
+jobs:
+  dati:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - name: Prepara e pubblica i dati del mese
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MESE: ${{ inputs.mese }}
+        run: |
+          mese="${MESE:-$(TZ=Europe/Rome date +%Y-%m)}"
+          [[ "$mese" =~ ^[0-9]{4}-[0-9]{2}$ ]] || { echo "Mese non valido: $mese"; exit 1; }
+          nome="dati-$mese-01.zip"
+          if ! gh release view dati --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create dati --repo "$GITHUB_REPOSITORY" --prerelease --title "Dati TARIC" \
+              --notes "Dati TARIC del mese pronti per MAGIC HS (scaricati da soli dal programma). Fonte: Commissione europea, DG TAXUD."
+          fi
+          if gh release view dati --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx "$nome"; then
+            echo "I dati di $mese sono già pubblicati."
+            exit 0
+          fi
+          set +e
+          python -I strumenti/dati_mese.py "$mese" "dist/$nome"
+          esito=$?
+          set -e
+          if [ "$esito" = 2 ]; then echo "L'estrazione di $mese non è ancora disponibile: si riprova domani."; exit 0; fi
+          [ "$esito" = 0 ] || exit 1
+          gh release upload dati "dist/$nome" --repo "$GITHUB_REPOSITORY"
+          # si tengono gli ultimi tre mesi
+          gh release view dati --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
+            | grep -E '^dati-[0-9]{4}-[0-9]{2}-01\.zip$' | sort -r | tail -n +4 \
+            | while read -r vecchio; do gh release delete-asset dati "$vecchio" --repo "$GITHUB_REPOSITORY" -y; done

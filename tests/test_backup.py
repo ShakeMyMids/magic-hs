@@ -28,13 +28,13 @@ def classifica(c, testo: str) -> None:
     assert c.post("/api/storico", json={"testo": testo, "codice": "8467211000", "dati": {}}).status_code == 200
 
 
-def test_ripristino_rimette_il_database_e_salva_quello_di_prima(editore: PC, tmp_path: Path):
-    c = editore.entra()
+def test_ripristino_rimette_il_database_e_salva_quello_di_prima(pc: PC, tmp_path: Path):
+    c = pc.entra()
     classifica(c, "trapano")
-    b = Backup(editore.cfg.dati)
+    b = Backup(pc.cfg.dati)
     salvato = b.crea()
     classifica(c, "dopo il backup")
-    db = editore.cfg.dati / "taric.db"
+    db = pc.cfg.dati / "taric.db"
     assert "dopo il backup" in storico(db)
     esito = b.ripristina(salvato)
     assert esito.startswith("1 classificazioni nello storico") and "precedente" in esito
@@ -48,8 +48,8 @@ def test_ripristino_rimette_il_database_e_salva_quello_di_prima(editore: PC, tmp
     assert c.get("/api/storico").json()["voci"][0]["testo"] == "trapano"
 
 
-def test_ripristino_rifiuta_file_sbagliati(editore: PC, tmp_path: Path):
-    b = Backup(editore.cfg.dati)
+def test_ripristino_rifiuta_file_sbagliati(pc: PC, tmp_path: Path):
+    b = Backup(pc.cfg.dati)
     altro = tmp_path / "altro.zip"
     with zipfile.ZipFile(altro, "w") as z:
         z.writestr("taric.db", b"x")
@@ -70,11 +70,11 @@ def test_ripristino_rifiuta_file_sbagliati(editore: PC, tmp_path: Path):
     with pytest.raises(ErroreBackup, match="non trovato"):
         b.ripristina(tmp_path / "manca.zip")
     assert b.elenco() == []                     # nessun tentativo fallito tocca il database o i backup
-    assert not list(editore.cfg.dati.glob(".ripristino-*"))
+    assert not list(pc.cfg.dati.glob(".ripristino-*"))
 
 
-def test_backup_automatico_una_volta_al_giorno_e_pulizia(editore: PC):
-    b = Backup(editore.cfg.dati, copie=3)
+def test_backup_automatico_una_volta_al_giorno_e_pulizia(pc: PC):
+    b = Backup(pc.cfg.dati, copie=3)
     assert b.da_fare()
     for _ in range(5):
         f = b.crea()
@@ -83,14 +83,14 @@ def test_backup_automatico_una_volta_al_giorno_e_pulizia(editore: PC):
     ieri = time.time() - 24 * 3600
     os.utime(f, (ieri, ieri))
     assert b.da_fare()
-    assert not Backup(editore.cfg.dati, copie=0).da_fare()
+    assert not Backup(pc.cfg.dati, copie=0).da_fare()
     assert oct(f.stat().st_mode & 0o777) == "0o600"
 
 
-def test_riga_di_comando(editore: PC, capsys: pytest.CaptureFixture[str]):
-    c = editore.entra()
+def test_riga_di_comando(pc: PC, capsys: pytest.CaptureFixture[str]):
+    c = pc.entra()
     classifica(c, "trapano")
-    cartella = editore.cartella                  # come %LOCALAPPDATA%\MAGIC HS: dentro c'e' dati\taric.db
+    cartella = pc.cartella                  # come %LOCALAPPDATA%\MAGIC HS: dentro c'e' dati\taric.db
     assert main(["--cartella", str(cartella), "backup"]) == 0
     salvato = capsys.readouterr().out.strip().split(": ", 1)[1]
     assert Path(salvato).is_file()

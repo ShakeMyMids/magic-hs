@@ -37,12 +37,10 @@
 
     h += usoIA(io);
 
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utente') + 'Il tuo nome' +
-      '<span class="dx">' + (io.locale.editore ? 'gestisci MAGIC HS' : '') + '</span></div>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utente') + 'Il tuo nome</div>' +
       '<form class="modulo" data-p="salva-account"><div class="due">' +
       '<label>Nome e cognome<input class="campo" name="nome" required minlength="2" maxlength="100" value="' + esc(io.nome) + '"></label>' +
       '<label>Azienda<input class="campo" name="azienda" maxlength="150" value="' + esc(io.azienda) + '"></label></div>' +
-      '<p class="nota">Storico, preferiti e preferenze restano su questo computer, nella tua cartella di Windows. Il tuo nome utente di Windows è <b>' + esc(io.locale.utente || '?') + '</b>: serve a chi gestisce MAGIC HS se deve darti il permesso di pubblicare.</p>' +
       '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div></div>';
 
 
@@ -52,11 +50,11 @@
       paesi.map(function (x) { return '<option value="' + esc(x[1]) + '"' + (x[1] === p.paese ? ' selected' : '') + '>' + esc(x[0]) + '</option>'; }).join('') + '</select></label>' +
       '<label>Flusso predefinito<select class="campo" data-p="pref" name="flusso"><option value="import"' + (p.flusso !== 'export' ? ' selected' : '') + '>Importazione</option><option value="export"' + (p.flusso === 'export' ? ' selected' : '') + '>Esportazione</option></select></label>' +
       '<label>Tema<select class="campo" data-p="pref" name="tema"><option value="auto"' + (p.tema === 'auto' ? ' selected' : '') + '>Come il dispositivo</option><option value="chiaro"' + (p.tema === 'chiaro' ? ' selected' : '') + '>Chiaro</option><option value="scuro"' + (p.tema === 'scuro' ? ' selected' : '') + '>Scuro</option></select></label>' +
-      '</div><p class="nota">Il paese e il flusso si aggiornano anche quando li cambi nel risultato di una classificazione.</p></div></div></div>';
+      '</div></div></div></div>';
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Storico delle classificazioni<span class="dx">' + st.totale + ' salvate</span></div>';
     if (!st.caricato) h += '<p class="vuoto">Carico…</p>';
-    else if (!st.storico.length) h += '<p class="vuoto">Ancora nessuna classificazione: quelle che fai nella scheda Classifica vengono salvate qui.</p>';
+    else if (!st.storico.length) h += '<p class="vuoto">' + T.icona('nave') + 'Ancora nessuna classificazione.</p>';
     else {
       h += '<div class="fila"><input class="campo" type="search" data-p="filtro" placeholder="Filtra per descrizione o codice" value="' + esc(st.filtro) + '"></div><div class="elenco" id="elenco-storico">' + righeStorico() + '</div>';
       h += '<div class="fila">' + (st.finito ? '' : '<button class="btn sm" type="button" data-p="altre">Mostra le precedenti</button>') +
@@ -66,7 +64,7 @@
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('stella') + 'Voci preferite<span class="dx">' + st.preferiti.length + '</span></div>';
     if (!st.caricato) h += '<p class="vuoto">Carico…</p>';
-    else if (!st.preferiti.length) h += '<p class="vuoto">Nessuna voce preferita. Nel risultato di una classificazione premi «Aggiungi ai preferiti».</p>';
+    else if (!st.preferiti.length) h += '<p class="vuoto">' + T.icona('container') + 'Nessuna voce preferita.</p>';
     else h += '<div class="elenco">' + st.preferiti.map(rigaPreferito).join('') + '</div>';
     h += '</div></div>';
 
@@ -76,14 +74,13 @@
   /* ------------------------------------------------------------------ uso dell'IA */
   function usoIA(io) {
     var ia = io.ia, h = '<div class="foglio"><div class="box piano"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita</div>';
-    if (!ia.configurata) h += '<p class="nota">Non è attiva: ' + (io.locale.editore ? 'scegli un servizio in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio di intelligenza artificiale.') +
-      ' Nomenclatura e misure sono consultabili senza limiti.</p>';
-    else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + ' richieste a ' + esc(meseIt(ia.mese)) + '</p><p class="nota">Senza limite mensile. Una classificazione usa di solito 2 o 3 richieste.</p>';
+    if (!ia.configurata) h += '<p class="nota">Non è attiva: scegli un servizio in Impostazioni, «Intelligenza artificiale».</p>';
+    else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + (ia.usate === 1 ? ' classificazione' : ' classificazioni') + ' a ' + esc(meseIt(ia.mese)) + '</p>';
     else {
       var perc = ia.limite ? Math.min(100, Math.round(ia.usate / ia.limite * 100)) : 100;
-      h += '<p class="cosa">' + ia.usate + ' di ' + ia.limite + ' richieste all\'IA usate a ' + esc(meseIt(ia.mese)) + '</p>' +
+      h += '<p class="cosa">' + ia.usate + ' di ' + ia.limite + ' classificazioni con l\'IA a ' + esc(meseIt(ia.mese)) + '</p>' +
         '<div class="metro' + (perc >= 100 ? ' pieno' : '') + '"><i style="width:' + perc + '%"></i></div>' +
-        '<p class="nota">Una classificazione usa di solito 2 o 3 richieste e il conteggio riparte il primo del mese. Per averne di più chiedi a chi gestisce MAGIC HS.</p>';
+        '<p class="nota">Il conteggio riparte il primo del mese.</p>';
     }
     return h + '</div></div>';
   }
