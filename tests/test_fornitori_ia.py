@@ -1,6 +1,6 @@
 """Test dei fornitori IA: scelta da configurazione, formato delle chiamate a Gemini e ai servizi compatibili OpenAI,
 traduzione degli errori (limite giornaliero del piano gratuito, chiave non valida, paese non supportato...).
-Il servizio lo sceglie chi gestisce MAGIC HS e arriva dalla cartella condivisa (impostazioni.json)."""
+Il servizio lo sceglie ognuno sul suo PC, in Impostazioni."""
 from __future__ import annotations
 
 import json
@@ -8,7 +8,7 @@ import json
 import httpx
 import pytest
 
-from conftest import PC, FintoClaude, imposta_ia
+from conftest import PC, FintoClaude
 from taric.config import carica
 
 
@@ -26,10 +26,9 @@ def cfg(tmp, **v):
 
 
 def pc_con_ia(ambiente, **ia: str):
-    """Chi gestisce MAGIC HS con il servizio IA indicato; restituisce (PC, client già entrato)."""
-    tmp, cond, mp = ambiente
-    imposta_ia(cond, **ia)
-    pc = PC(tmp, cond, "mrossi", mp, versioni=("2026-11-01",))
+    """Un PC con il servizio IA indicato, salvato dalla pagina Impostazioni; restituisce (PC, client già entrato)."""
+    tmp, mp = ambiente
+    pc = PC(tmp, mp, versioni=("2026-11-01",), ia=ia)
     return pc, pc.entra()
 
 

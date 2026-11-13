@@ -1,17 +1,22 @@
-"""Nuove versioni del programma dalla pagina delle versioni di GitHub, per chi gestisce MAGIC HS.
+"""Nuove versioni del programma dalla pagina delle versioni di GitHub, installate da sole su ogni PC.
 
-Solo il PC di chi pubblica chiede a GitHub l'ultima versione (al massimo ogni sei ore, oppure quando lo chiede dal
-pannello). Se è più recente di quella pubblicata nella cartella condivisa, Gestione mostra «Aggiorna per tutti»:
-il pacchetto magic-hs-windows-<versione>.zip si scarica, si controlla (dimensione, impronta SHA-256 indicata da
-GitHub, struttura e versione in condivisa.versione_pacchetto) e si pubblica come se fosse stato caricato a mano.
+Il programma chiede a GitHub l'ultima versione (al massimo ogni sei ore, oppure quando lo si chiede da Impostazioni).
+Se e' piu' recente di quella in uso, scarica magic-hs-windows-<versione>.zip, lo controlla (dimensione, impronta SHA-256
+indicata da GitHub, struttura e versione) e lo estrae in %LOCALAPPDATA%\\MAGIC HS\\programma\\<versione>, scrivendo
+la versione in attuale.txt: «Avvia MAGIC HS.cmd» la usa dalla volta successiva. Non serve scrivere nella cartella da cui
+si avvia MAGIC HS, che puo' anche essere in sola lettura.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
+import secrets
+import shutil
 import threading
 import time
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -22,12 +27,74 @@ from . import __version__
 log = logging.getLogger("taric.aggiornamenti")
 
 RE_TAG = re.compile(r"^v?(\d{1,4}(?:\.\d{1,4}){1,3})$")
+RE_VERSIONE_PROGRAMMA = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.\-]{0,39}$")
+MAX_ESTRATTO = 1024 * 1024 * 1024
 MAX_PACCHETTO = 400 * 1024 * 1024
 OGNI = 6 * 3600                 # secondi tra un controllo automatico e l'altro
 
 
 class ErroreAggiornamento(Exception):
     pass
+
+
+def versione_pacchetto(archivio: Path) -> str:
+    """Versione di un pacchetto del programma per Windows; ErroreAggiornamento se il file non è un pacchetto valido."""
+    try:
+        with zipfile.ZipFile(archivio) as z:
+            nomi = set(z.namelist())
+            if "python/pythonw.exe" not in nomi or "python/Lib/site-packages/taric/__init__.py" not in nomi:
+                raise ErroreAggiornamento("non è un pacchetto di MAGIC HS per Windows")
+            testo = z.read("python/Lib/site-packages/taric/__init__.py").decode("utf-8", "replace")
+            if z.testzip() is not None:
+                raise ErroreAggiornamento("archivio danneggiato")
+    except (zipfile.BadZipFile, OSError) as e:
+        raise ErroreAggiornamento(f"archivio non leggibile ({e})")
+    m = re.search(r'^__version__\s*=\s*"([^"]+)"', testo, re.M)
+    if not m or not RE_VERSIONE_PROGRAMMA.match(m.group(1)):
+        raise ErroreAggiornamento("versione del programma non trovata nel pacchetto")
+    return m.group(1)
+
+
+def estrai_pacchetto(archivio: Path, dest: Path) -> None:
+    """Estrae il pacchetto (solo la cartella python/, senza percorsi fuori da dest) in dest, che non deve esistere."""
+    dest.mkdir(parents=True)
+    radice = dest.resolve()
+    with zipfile.ZipFile(archivio) as z:
+        membri = [i for i in z.infolist() if not i.is_dir() and i.filename.startswith("python/")]
+        if sum(i.file_size for i in membri) > MAX_ESTRATTO:
+            raise ErroreAggiornamento("pacchetto troppo grande una volta estratto")
+        for i in membri:
+            nome = i.filename.replace("\\", "/")
+            f = (dest / nome).resolve()
+            if ".." in nome.split("/") or ":" in nome or not str(f).startswith(str(radice) + os.sep):
+                raise ErroreAggiornamento("percorso non valido nel pacchetto")
+            f.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(i) as sorgente, open(f, "wb") as uscita:
+                shutil.copyfileobj(sorgente, uscita, 1 << 20)
+
+
+def installa_pacchetto(archivio: Path, programmi: Path) -> str:
+    """Installa un pacchetto controllato in programmi/<versione> e lo indica in attuale.txt per il prossimo avvio."""
+    versione = versione_pacchetto(archivio)
+    dest = programmi / versione
+    if not (dest / "python" / "pythonw.exe").is_file():
+        tmp = programmi / f"{versione}.{secrets.token_hex(3)}.tmp"
+        try:
+            estrai_pacchetto(archivio, tmp)
+            if dest.exists():
+                shutil.rmtree(dest, ignore_errors=True)
+            os.replace(tmp, dest)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    segna_attuale(programmi, versione)
+    return versione
+
+
+def segna_attuale(programmi: Path, versione: str) -> None:
+    """Scrive in attuale.txt la versione che «Avvia MAGIC HS.cmd» usera' dalla prossima volta."""
+    nuovo = programmi / f"attuale.{secrets.token_hex(3)}.tmp"
+    nuovo.write_bytes(f"{versione}\r\n".encode())        # a capo di Windows, per «set /p» dell'avvio
+    os.replace(nuovo, programmi / "attuale.txt")
 
 
 def chiave(versione: str) -> tuple[int, ...] | None:
@@ -92,6 +159,19 @@ class Aggiornamenti:
                 "sha256": digest[7:].lower() if digest.startswith("sha256:") else "",
                 "pagina": str(d.get("html_url") or ""), "data": str(d.get("published_at") or "")}
 
+    def installa(self, info: dict[str, Any], programmi: Path, lavoro: Path) -> str:
+        """Scarica, controlla e installa la versione indicata da ultima(); restituisce la versione installata."""
+        lavoro.mkdir(parents=True, exist_ok=True)
+        programmi.mkdir(parents=True, exist_ok=True)
+        dest = lavoro / f"programma-{secrets.token_hex(6)}.zip"
+        try:
+            self.scarica(info, dest)
+            if versione_pacchetto(dest) != info["versione"]:
+                raise ErroreAggiornamento("il pacchetto non contiene la versione attesa")
+            return installa_pacchetto(dest, programmi)
+        finally:
+            dest.unlink(missing_ok=True)
+
     def scarica(self, info: dict[str, Any], dest: Path) -> None:
         """Scarica il pacchetto indicato da ultima() e ne controlla dimensione e impronta."""
         h = hashlib.sha256()
@@ -116,4 +196,4 @@ class Aggiornamenti:
             raise ErroreAggiornamento("il pacchetto scaricato non corrisponde a quello pubblicato")
 
 
-__all__ = ["Aggiornamenti", "ErroreAggiornamento", "chiave", "piu_recente"]
+__all__ = ["Aggiornamenti", "ErroreAggiornamento", "chiave", "installa_pacchetto", "piu_recente", "segna_attuale", "versione_pacchetto"]

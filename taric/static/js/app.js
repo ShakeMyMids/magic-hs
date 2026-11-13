@@ -224,7 +224,7 @@ var ERR = {
 };
 function errMsg(e) { return (e && e.message) || ERR[e && e.code] || ERR.upstream_error; }
 
-/* l'IA risponde tramite il server, che custodisce la chiave e applica il limite mensile */
+/* l'IA risponde tramite il server, che custodisce la chiave e conta le classificazioni del mese */
 function nuovaOperazione() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function creaIA() {
   return {
@@ -245,14 +245,10 @@ function creaIA() {
   };
 }
 function impostaIA() {
-  var ia = state.utente && state.utente.ia, loc = state.utente && state.utente.locale;
+  var ia = state.utente && state.utente.ia;
   sampleFn = null; state.ai = 'no';
-  if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva: ' +
-    (loc && loc.editore ? 'scegli un servizio di intelligenza artificiale in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio di intelligenza artificiale.') +
+  if (!ia || !ia.disponibile) state.aiMotivo = 'La classificazione assistita non è attiva: scegli un servizio di intelligenza artificiale in Impostazioni.' +
     ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
-  else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata: chiedi a chi gestisce MAGIC HS. Puoi comunque aprire un codice scrivendone le cifre.';
-  else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' classificazioni con l\'IA di questo mese. ' +
-    'Per averne altre chiedi a chi gestisce MAGIC HS. Nomenclatura e misure restano consultabili.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
 }
 function aggiornaIo() {
@@ -1148,7 +1144,7 @@ function start() {
 }
 window.TARIC_DEBUG = { misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
 
-/* funzioni usate dalle viste Profilo e Gestione */
+/* funzioni usate dalle viste Profilo e Impostazioni */
 T.app = {
   esiste: function (c) { return byCode.has(c); },
   descrizione: function (c) { var i = byCode.has(c) ? byCode.get(c) : -1; return i < 0 ? '' : descOf(i); },
@@ -1206,32 +1202,14 @@ function tieniVivo() {
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') controllaVivo(); });
   T.alOffline = controllaVivo;
 }
-/* nessuno ha ancora detto di gestire MAGIC HS per i colleghi */
-function proponiGestione() {
-  var v = $('#view-classifica');
-  if (!v || $('#gestisco-io')) return;
-  var d = document.createElement('div');
-  d.className = 'foglio'; d.id = 'gestisco-io';
-  d.innerHTML = '<div class="box"><div class="lab">' + T.icona('cartella') + 'Chi gestisce MAGIC HS?</div>' +
-    '<p class="nota">Nessuno pubblica ancora gli aggiornamenti per i colleghi. Se gestisci tu MAGIC HS premi il pulsante; altrimenti ignora questo messaggio.</p>' +
-    '<div class="fila"><button class="btn pri" type="button" id="gestisco-io-si">' + T.icona('spunta') + 'Gestisco io MAGIC HS</button></div><div id="gestisco-io-esito"></div></div>';
-  v.insertBefore(d, v.firstChild);
-  $('#gestisco-io-si').addEventListener('click', function () {
-    this.disabled = true;
-    T.api('POST', '/api/locale/gestisco-io').then(function () { location.hash = '#gestione'; location.reload(); },
-      function (e) { $('#gestisco-io-esito').innerHTML = '<p class="errore">' + esc(e.errore || 'Non è stato possibile.') + '</p>'; $('#gestisco-io-si').disabled = false; });
-  });
-}
-
 T.api('GET', '/api/io').then(function (u) {
   state.utente = u;
   $('#chi-nome').textContent = u.nome;
   $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
   $('#chi-iniziali').parentNode.title = u.nome;
   tieniVivo();
-  if (u.locale.puo_gestire) proponiGestione();
   $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
-  if (u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Gestione
+  if (u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Impostazioni se c'è una versione nuova
   T.tema(u.preferenze.tema);
   state.country = u.preferenze.paese || '';
   state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';

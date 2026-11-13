@@ -1,8 +1,10 @@
 """Programma per Windows: avvia MAGIC HS sul PC, lo apre nel browser e si chiude da solo quando non serve più.
 
-Lo lancia «Avvia MAGIC HS.cmd» dalla cartella condivisa (OneDrive), dopo aver copiato il programma sul PC:
+Lo lancia «Avvia MAGIC HS.cmd» dalla cartella in cui si e' estratto MAGIC HS, dopo aver copiato il programma sul PC:
 
-    pythonw.exe -I -m taric.programma --condivisa "<cartella condivisa>"
+    pythonw.exe -I -m taric.programma --avvio "<cartella di Avvia MAGIC HS.cmd>"
+
+Le nuove versioni le scarica il programma stesso da GitHub in %LOCALAPPDATA%\\MAGIC HS\\programma (aggiornamenti.py).
 
 - Una sola copia per utente di Windows: se è già aperta, apre solo il browser; se è aperta una versione diversa,
   le chiede di chiudersi e prende il suo posto.
@@ -11,7 +13,7 @@ Lo lancia «Avvia MAGIC HS.cmd» dalla cartella condivisa (OneDrive), dopo aver 
 - Si chiude dopo un periodo senza richieste (la pagina aperta ne manda una ogni due minuti).
 - Registro in %LOCALAPPDATA%\\MAGIC HS\\registro.txt; gli errori d'avvio compaiono in una finestra di Windows.
 
-Dati del PC (storico, preferiti, uso dell'IA, dati TARIC ricevuti) in %LOCALAPPDATA%\\MAGIC HS\\dati.
+Dati del PC (storico, preferiti, servizio IA, dati TARIC) in %LOCALAPPDATA%\\MAGIC HS\\dati.
 """
 from __future__ import annotations
 
@@ -171,8 +173,17 @@ def apri_porta(preferita: int) -> socket.socket:
     raise OSError("nessuna porta libera su 127.0.0.1")
 
 
-def pulisci_versioni(cartella: Path) -> None:
-    """Toglie dal PC le versioni del programma che non servono più (tiene quella in uso e la precedente)."""
+def _prima_riga(f: Path) -> str:
+    try:
+        return f.read_text(encoding="utf-8-sig").strip().splitlines()[0].strip()
+    except (OSError, IndexError, UnicodeDecodeError):
+        return ""
+
+
+def pulisci_versioni(cartella: Path, avvio: Path | None = None) -> None:
+    """Toglie dal PC le versioni del programma che non servono più. Tiene quella in uso, quella indicata in attuale.txt
+    (scaricata per il prossimo avvio) e quella della cartella di «Avvia MAGIC HS.cmd»: se l'avvio non la trovasse
+    la copierebbe di nuovo e la userebbe al posto della più recente."""
     radice = cartella / "programma"
     try:
         in_uso = Path(sys.executable).resolve().parents[1]
@@ -182,14 +193,17 @@ def pulisci_versioni(cartella: Path) -> None:
         return                                   # non e' il programma installato dall'avvio (prove, sviluppo)
     for d in radice.glob("*.tmp"):
         shutil.rmtree(d, ignore_errors=True)
-    altre = sorted((d for d in radice.iterdir() if d.is_dir() and d.resolve() != in_uso), key=lambda d: d.stat().st_mtime, reverse=True)
-    for d in altre[1:]:
-        shutil.rmtree(d, ignore_errors=True)
+    tenere = {in_uso.name, _prima_riga(radice / "attuale.txt")}
+    if avvio is not None:
+        tenere.add(_prima_riga(avvio / "programma" / "versione.txt"))
+    for d in radice.iterdir():
+        if d.is_dir() and d.name not in tenere:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m taric.programma", description="MAGIC HS sul PC")
-    ap.add_argument("--condivisa", required=True, help="cartella condivisa (SharePoint sincronizzato con OneDrive) con programma, dati e impostazioni")
+    ap.add_argument("--avvio", "--condivisa", dest="avvio", default="", help="cartella di «Avvia MAGIC HS.cmd» (--condivisa: avvii fino alla 1.2)")
     ap.add_argument("--cartella", default="", help="cartella dei dati di questo utente (predefinita: %%LOCALAPPDATA%%\\MAGIC HS)")
     ap.add_argument("--porta", type=int, default=0, help="porta preferita (predefinita: l'ultima usata o 8765)")
     ap.add_argument("--inattivita", type=int, default=INATTIVITA, help="secondi senza richieste prima di chiudersi")
@@ -219,10 +233,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def avvia(a: argparse.Namespace, cartella: Path) -> int:
-    condivisa = Path(a.condivisa)
-    if not condivisa.is_dir():
-        avviso(f"Non trovo la cartella condivisa:\n{condivisa}\n\nControlla che OneDrive sia attivo e la cartella sincronizzata.")
-        return 1
     istanza_file = Istanza(cartella / "istanza.json")
     blocco = Blocco(cartella / "istanza.lock")
 
@@ -245,24 +255,25 @@ def avvia(a: argparse.Namespace, cartella: Path) -> int:
         time.sleep(0.3)
 
     try:
-        return _servi(a, cartella, condivisa, istanza_file)
+        return _servi(a, cartella, istanza_file)
     finally:
         blocco.lascia()
 
 
-def _servi(a: argparse.Namespace, cartella: Path, condivisa: Path, istanza_file: Istanza) -> int:
+def _servi(a: argparse.Namespace, cartella: Path, istanza_file: Istanza) -> int:
     import uvicorn
 
     from .app import crea_app
     from .config import carica
 
-    pulisci_versioni(cartella)
+    pulisci_versioni(cartella, Path(a.avvio) if a.avvio else None)
     precedente = istanza_file.leggi() or {}
     sock = apri_porta(a.porta or int(precedente.get("porta") or PORTA_PREFERITA))
     porta = sock.getsockname()[1]
     chiave, istanza = secrets.token_urlsafe(32), secrets.token_hex(8)
     os.environ["TARIC_CONFIG"] = str(cartella / "taric.env")       # facoltativo, per configurazioni particolari
-    cfg = carica({"TARIC_DATI": str(cartella / "dati"), "TARIC_CONDIVISA": str(condivisa), "TARIC_PORTA": str(porta)})
+    cfg = carica({"TARIC_DATI": str(cartella / "dati"), "TARIC_PORTA": str(porta), "TARIC_PROGRAMMI": str(cartella / "programma"),
+                  **({"TARIC_AVVIO": a.avvio} if a.avvio else {})})
     app = crea_app(cfg, chiave_ingresso=chiave, istanza=istanza)
     # connessioni tenute aperte a lungo: con un solo utente costano poco ed evitano che il browser riusi una
     # connessione proprio mentre il server la chiude
@@ -274,7 +285,7 @@ def _servi(a: argparse.Namespace, cartella: Path, condivisa: Path, istanza_file:
     app.state.ferma = ferma
     info = {"porta": porta, "chiave": chiave, "istanza": istanza, "versione": __version__, "pid": os.getpid()}
     istanza_file.scrivi(info)
-    log.info("MAGIC HS %s su http://127.0.0.1:%s (cartella condivisa %s)", __version__, porta, condivisa)
+    log.info("MAGIC HS %s su http://127.0.0.1:%s (avviato da %s)", __version__, porta, a.avvio or "riga di comando")
 
     def quando_pronto() -> None:
         for _ in range(600):

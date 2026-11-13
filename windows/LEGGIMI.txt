@@ -2,53 +2,34 @@ MAGIC HS - classificazione doganale con la nomenclatura TARIC dell'UE
 ====================================================================
 
 COME SI APRE
-Fai doppio clic su «Avvia MAGIC HS». La prima volta, e a ogni nuova versione, il programma si copia
-su questo computer (ci vuole circa un minuto); poi si apre da solo nel browser.
+Fai doppio clic su «Avvia MAGIC HS». La prima volta il programma si copia su questo computer e scarica
+i dati TARIC del mese (ci vuole circa un minuto); poi si apre da solo nel browser.
 Per averlo a portata di mano crea un collegamento sul desktop: tasto destro su «Avvia MAGIC HS» >
 Mostra altre opzioni > Invia a > Desktop (crea collegamento).
+
+AGGIORNAMENTI
+Non devi fare nulla. MAGIC HS scarica da solo le nuove versioni e i dati TARIC di ogni mese dalla sua
+pagina su GitHub. Una versione nuova si usa dalla volta successiva che apri MAGIC HS. Questa cartella
+non va aggiornata.
+
+INTELLIGENZA ARTIFICIALE
+È facoltativa. In Impostazioni > Intelligenza artificiale scegli il servizio e inserisci la tua chiave:
+resta su questo computer, protetta da Windows. Senza costi puoi usare Ollama, che fa girare il modello
+sul tuo PC. Anche senza IA restano nomenclatura, misure, ricerca per codice, storico e preferiti.
 
 COME SI CHIUDE
 Con il pulsante di spegnimento in alto a destra nella pagina. Se chiudi solo il browser, il programma
 si chiude da solo dopo mezz'ora.
 
 DOVE RESTANO I TUOI DATI
-Storico, preferiti e preferenze restano su questo computer, nella cartella %LOCALAPPDATA%\MAGIC HS
-(scrivila nella barra degli indirizzi di Esplora file). Lì c'è anche registro.txt, utile se qualcosa
-non funziona.
+Storico, preferiti, preferenze e servizio IA restano su questo computer, nella cartella
+%LOCALAPPDATA%\MAGIC HS (scrivila nella barra degli indirizzi di Esplora file). Lì c'è anche
+registro.txt, utile se qualcosa non funziona.
 
 SE NON SI APRE
-- Controlla che OneDrive sia attivo e che la cartella sia sincronizzata (icona con la spunta verde).
 - Fai di nuovo doppio clic su «Avvia MAGIC HS» dopo un minuto.
-- Se compare un avviso di Windows sul file scaricato, chiedi a chi gestisce MAGIC HS.
+- Se compare un avviso di Windows sul file scaricato: tasto destro sul file .zip scaricato > Proprietà >
+  spunta «Annulla blocco», poi estrai di nuovo la cartella.
+- Se i dati TARIC non arrivano (succede dietro alcuni proxy aziendali), in Impostazioni > Dati TARIC
+  puoi caricare a mano l'estrazione del mese.
 - Se il computer aziendale blocca i programmi copiati nella cartella dell'utente, serve l'IT.
-
-------------------------------------------------------------------------------------------
-PER CHI GESTISCE MAGIC HS (chi può modificare questa cartella)
-
-La prima volta apri MAGIC HS dal tuo PC e premi «Gestisco io MAGIC HS»: da quel momento pubblichi tu
-per tutti. Altre persone si aggiungono in Gestione > Cartella condivisa > Chi può pubblicare.
-
-La cartella contiene:
-  Avvia MAGIC HS.cmd   l'avvio, per tutti
-  programma\           il programma per Windows (versione.txt dice quale usare)
-  dati\                i dati TARIC del mese (attiva.txt dice quale usare)
-  impostazioni.json    chi pubblica e il servizio di intelligenza artificiale (si cambiano dal programma)
-
-Non modificare i file a mano: si gestisce tutto dal programma, scheda Gestione.
-- Dati TARIC: a ogni inizio mese, quando apri MAGIC HS sul tuo PC, scarica la nuova estrazione,
-  la controlla e la pubblica qui da solo. I colleghi la ricevono da OneDrive.
-- Intelligenza artificiale: Gestione > Intelligenza artificiale. La chiave è cifrata in questa cartella,
-  ma il programma di ogni collega la può usare: usane una dedicata, con un tetto di spesa.
-- Nuova versione del programma: quando esce, la scheda Gestione ha un puntino arancio. In Gestione >
-  Cartella condivisa premi «Aggiorna per tutti»: arrivano anche questo file e l'avvio aggiornati.
-- Colleghi: solo il permesso di LETTURA. Chi può modificare questa cartella può cambiare il programma
-  che parte sui PC di tutti: la modifica va data solo a chi pubblica. Per questo la cartella sta in
-  una raccolta documenti di SharePoint (o nei file di un canale di Teams), non nel tuo OneDrive:
-  OneDrive chiede il permesso di modifica per «Aggiungi collegamento a I miei file».
-  In SharePoint i colleghi sono visitatori del sito (Lettura), chi pubblica è membro (Modifica).
-  In Teams i membri del canale hanno la modifica: su questa cartella scegli Gestisci accesso,
-  interrompi l'ereditarietà e lascia ai colleghi solo «Può visualizzare».
-  Ogni collega apre la cartella sul sito di SharePoint, preme «Sincronizza» e poi apre
-  «Avvia MAGIC HS» dalla cartella sincronizzata in Esplora file.
-  La raccolta non deve chiedere l'estrazione dei file (check-out) né colonne obbligatorie: altrimenti
-  OneDrive la sincronizza in sola lettura anche per chi pubblica.

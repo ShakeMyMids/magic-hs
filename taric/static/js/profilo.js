@@ -37,12 +37,10 @@
 
     h += usoIA(io);
 
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utente') + 'Il tuo nome' +
-      '<span class="dx">' + (io.locale.editore ? 'gestisci MAGIC HS' : '') + '</span></div>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utente') + 'Il tuo nome</div>' +
       '<form class="modulo" data-p="salva-account"><div class="due">' +
       '<label>Nome e cognome<input class="campo" name="nome" required minlength="2" maxlength="100" value="' + esc(io.nome) + '"></label>' +
       '<label>Azienda<input class="campo" name="azienda" maxlength="150" value="' + esc(io.azienda) + '"></label></div>' +
-      '<p class="nota">Nome utente di Windows: <b>' + esc(io.locale.utente || '?') + '</b></p>' +
       '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div></div>';
 
 
@@ -76,8 +74,8 @@
   /* ------------------------------------------------------------------ uso dell'IA */
   function usoIA(io) {
     var ia = io.ia, h = '<div class="foglio"><div class="box piano"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita</div>';
-    if (!ia.configurata) h += '<p class="nota">Non è attiva: ' + (io.locale.editore ? 'scegli un servizio in Gestione, «Intelligenza artificiale».' : 'chi gestisce MAGIC HS non ha ancora scelto un servizio.') + '</p>';
-    else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + (ia.usate === 1 ? ' classificazione' : ' classificazioni') + ' a ' + esc(meseIt(ia.mese)) + '</p><p class="nota">Senza limite mensile.</p>';
+    if (!ia.configurata) h += '<p class="nota">Non è attiva: scegli un servizio in Impostazioni, «Intelligenza artificiale».</p>';
+    else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + (ia.usate === 1 ? ' classificazione' : ' classificazioni') + ' a ' + esc(meseIt(ia.mese)) + '</p>';
     else {
       var perc = ia.limite ? Math.min(100, Math.round(ia.usate / ia.limite * 100)) : 100;
       h += '<p class="cosa">' + ia.usate + ' di ' + ia.limite + ' classificazioni con l\'IA a ' + esc(meseIt(ia.mese)) + '</p>' +

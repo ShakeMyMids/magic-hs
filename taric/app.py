@@ -1,8 +1,8 @@
-"""Applicazione MAGIC HS sul PC (FastAPI): pagine, profilo, storico, preferiti, IA, dati TARIC e cartella condivisa.
+"""Applicazione MAGIC HS sul PC (FastAPI): pagine, profilo, storico, preferiti, IA, dati TARIC e impostazioni.
 
-La avvia programma.py su 127.0.0.1. C'e' un solo utente, che entra con la chiave dell'avvio (chiave_ingresso);
-versioni del programma, dati TARIC e impostazioni dell'IA arrivano dalla cartella condivisa (condivisa.py).
-Chi e' nell'elenco degli editori e puo' scrivere nella cartella pubblica per tutti (pannello Gestione).
+La avvia programma.py su 127.0.0.1. C'e' un solo utente, che entra con la chiave dell'avvio (chiave_ingresso) e decide
+tutto da se': servizio IA (chiave protetta da Windows, segreti.py), dati TARIC (pronti da GitHub o preparati qui,
+dati.py), nuove versioni del programma (da GitHub, installate da sole: aggiornamenti.py).
 """
 from __future__ import annotations
 
@@ -24,19 +24,17 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Upload
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from . import __version__
 from . import sicurezza as S
-from .aggiornamenti import Aggiornamenti, ErroreAggiornamento, piu_recente
+from .aggiornamenti import Aggiornamenti, ErroreAggiornamento, piu_recente, segna_attuale
 from .backup import Backup
-from .condivisa import (RE_UTENTE, Condivisa, ErroreCondivisa, chiave_ia, con_chiave_cifrata, editori, ia_da_impostazioni, utente_windows,
-                        versione_pacchetto)
 from .config import Config
 from .dati import GestoreDati
 from .db import Database, iso
 from .ia import ErroreIA, ServizioIA, mese_corrente
+from .segreti import ia_della_vecchia_cartella, proteggi, svela
 
 log = logging.getLogger("taric")
 STATIC = Path(__file__).with_name("static")
@@ -50,13 +48,13 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
 
 MESSAGGI_IA = {
     "not_configured": "La classificazione assistita non è attiva: manca la chiave del servizio di intelligenza artificiale.",
-    "quota_esaurita": "Hai esaurito le richieste all'IA di questo mese. Chiedi a chi gestisce MAGIC HS di aumentare il limite.",
+    "quota_esaurita": "La classificazione assistita è spenta.",
     "rate_limited": "Troppe richieste in questo momento. Riprova tra un minuto.",
-    "limite_giornaliero": "Il servizio di intelligenza artificiale ha raggiunto il suo limite di oggi (succede con i piani gratuiti). Riprova domani o avvisa chi gestisce MAGIC HS.",
+    "limite_giornaliero": "Il servizio di intelligenza artificiale ha raggiunto il suo limite di oggi (succede con i piani gratuiti). Riprova domani.",
     "overloaded": "Il servizio di intelligenza artificiale è sovraccarico. Riprova tra qualche minuto.",
-    "credito_esaurito": "Il servizio di intelligenza artificiale richiede la fatturazione attiva o ha esaurito il credito. Avvisa chi gestisce MAGIC HS.",
-    "regione_non_supportata": "Il servizio di intelligenza artificiale non è disponibile dal tuo paese senza fatturazione attiva. Avvisa chi gestisce MAGIC HS.",
-    "server_misconfigured": "MAGIC HS non riesce a usare il servizio di intelligenza artificiale (chiave o modello non validi). Avvisa chi gestisce MAGIC HS.",
+    "credito_esaurito": "Il servizio di intelligenza artificiale richiede la fatturazione attiva o ha esaurito il credito: controlla nella console del servizio.",
+    "regione_non_supportata": "Il servizio di intelligenza artificiale non è disponibile dal tuo paese senza fatturazione attiva.",
+    "server_misconfigured": "MAGIC HS non riesce a usare il servizio di intelligenza artificiale: controlla chiave e modello in Impostazioni.",
     "refused": "L'IA non ha elaborato questa richiesta. Prova a descrivere la merce in un altro modo.",
     "empty_completion": "L'IA non ha restituito una risposta. Prova a riformulare la descrizione.",
     "invalid_json": "La risposta non era leggibile. Riprova.",
@@ -113,120 +111,109 @@ class Versione(BaseModel):
 
 
 class ImpostazioniIA(BaseModel):
-    """Servizio IA per tutti i colleghi, salvato nella cartella condivisa."""
+    """Servizio IA scelto su questo PC (la chiave si salva protetta da Windows)."""
     fornitore: Literal["", "gemini", "anthropic", "openai"] = ""
     chiave: Optional[str] = Field(default=None, max_length=500)       # None = tiene quella salvata
     url: str = Field(default="", max_length=300)
     modello: str = Field(default="", max_length=120)
     modello_rapido: str = Field(default="", max_length=120)
-    quota: Optional[int] = Field(default=None, ge=0, le=100000)       # richieste al mese per persona; None = senza limite
 
 
 class ChiaveIstanza(BaseModel):
     chiave: str = Field(max_length=200)
 
 
-class Editori(BaseModel):
-    editori: list[str] = Field(min_length=1, max_length=50)
-
-
 # ------------------------------------------------------------------ applicazione
-def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
-             chiave_ingresso: str = "", istanza: str = "", client_aggiornamenti: httpx.Client | None = None) -> FastAPI:
-    """Crea l'applicazione del PC (vedi programma.py): un solo utente, che entra con la chiave dell'avvio
-    (chiave_ingresso), e versioni, dati e impostazioni dalla cartella condivisa (cfg.condivisa)."""
+def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True, chiave_ingresso: str = "",
+             istanza: str = "", client_aggiornamenti: httpx.Client | None = None, client_dati: httpx.Client | None = None) -> FastAPI:
+    """Crea l'applicazione del PC (vedi programma.py): un solo utente, che entra con la chiave dell'avvio (chiave_ingresso)."""
     db = Database(cfg.dati / "taric.db")
     ia = ServizioIA(cfg, db, client_ia)
-    dati = GestoreDati(cfg, db)
+    dati = GestoreDati(cfg, db, client_dati)
     copie = Backup(cfg.dati, cfg.backup_copie)
     agg = Aggiornamenti(cfg.aggiornamenti_url, client_aggiornamenti)
-    condivisa = Condivisa(cfg.condivisa) if cfg.condivisa else None
-    utente_pc = utente_windows()
-    # pubblica per tutti solo chi e' nell'elenco degli editori e puo' scrivere nella cartella
-    ruolo_pc: dict[str, Any] = {"editore": False, "puo_gestire": False, "editori": [], "scrivibile": None}
+    programma: dict[str, str] = {"pronta": "", "errore": ""}      # versione nuova gia' installata per il prossimo avvio
+    installazione = threading.Lock()                               # pianificatore e pagina Impostazioni non installano insieme
 
-    def editore() -> bool:
-        return bool(ruolo_pc["editore"])
+    # ------------------------------------------------------------------ servizio IA di questo PC
+    def ia_salvata() -> dict[str, Any]:
+        with db.connessione() as c:
+            v = db.impostazioni(c)["ia"]
+        return v if isinstance(v, dict) else {}
 
-    def scrivibile() -> bool:
-        """Prova di scrittura nella cartella, una volta sola: ogni prova crea e cancella un file su OneDrive."""
-        if ruolo_pc["scrivibile"] is None:
-            ruolo_pc["scrivibile"] = bool(condivisa and condivisa.scrivibile())
-        return bool(ruolo_pc["scrivibile"])
-
-    # ------------------------------------------------------------------ cartella condivisa
-    def applica_impostazioni() -> None:
-        """Servizio IA e limite mensile scelti dall'editore (impostazioni.json della cartella condivisa)."""
-        imp = condivisa.impostazioni() if condivisa else {}
-        if not imp:
+    def applica_ia() -> None:
+        """Usa il servizio IA salvato su questo PC (finche' non se ne salva uno restano le variabili TARIC_*, per le prove)."""
+        v = ia_salvata()
+        if not v.get("impostato"):
             return
-        ia_imp = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
-        if editore() and condivisa is not None and ia_imp.get("chiave"):     # cartella di prima: la chiave era in chiaro
+        cfg.imposta_ia({"TARIC_IA_FORNITORE": v.get("fornitore") or "nessuno", "TARIC_IA_CHIAVE": svela(str(v.get("chiave") or ""), cfg.dati),
+                        "TARIC_IA_URL": v.get("url") or "", "TARIC_IA_MODELLO": v.get("modello") or "",
+                        "TARIC_IA_MODELLO_RAPIDO": v.get("modello_rapido") or ""})
+
+    def salva_ia(fornitore: str, chiave: str, url: str, modello: str, modello_rapido: str, autore: str) -> None:
+        valore = {"fornitore": fornitore, "chiave": proteggi(chiave, cfg.dati) if fornitore else "", "url": url if fornitore else "",
+                  "modello": modello if fornitore else "", "modello_rapido": modello_rapido if fornitore else "",
+                  "impostato": True, "aggiornate": iso(), "da": autore}
+        with db.transazione() as c:
+            db.salva_impostazioni(c, {"ia": valore})
+        applica_ia()
+
+    def importa_vecchia_cartella() -> None:
+        """Una volta sola: il servizio IA scelto nella vecchia cartella condivisa (versioni fino alla 1.2) diventa quello del PC."""
+        if ia_salvata().get("impostato") or cfg.avvio is None:
+            return
+        v = ia_della_vecchia_cartella(cfg.avvio)
+        if v is None:
+            return
+        salva_ia(v["fornitore"], v["chiave"], v["url"], v["modello"], v["modello_rapido"], "cartella condivisa")
+        with db.transazione() as c:
+            db.evento(c, "impostazioni_ia", dettagli=f"{v['fornitore']}: importato dalla cartella condivisa")
+        log.info("servizio IA importato dalla vecchia cartella condivisa")
+
+    # ------------------------------------------------------------------ nuove versioni del programma (da GitHub)
+    def aggiorna_programma(forza: bool = False) -> dict[str, Any]:
+        """Se su GitHub c'e' una versione piu' recente, la installa per il prossimo avvio (al massimo un controllo ogni sei ore)."""
+        if cfg.programmi is None:
+            return {"errore": "aggiornamenti spenti"}
+        info = agg.ultima(forza)
+        v = info.get("versione", "")
+        if not v or not piu_recente(v, __version__) or programma["pronta"] == v:
+            return info
+        with installazione:
+            if programma["pronta"] == v:
+                return info
             try:
-                condivisa.salva_impostazioni(con_chiave_cifrata(imp, chiave_ia(imp)))
-                log.info("chiave del servizio IA cifrata in impostazioni.json")
-            except OSError:
-                log.exception("cifratura della chiave del servizio IA")
-        cfg.imposta_ia(ia_da_impostazioni(imp))
-        quota = imp.get("quota", 50)
-        if quota is not None and not (isinstance(quota, int) and quota >= 0):
-            quota = 50
-        with db.transazione() as c:
-            if db.impostazioni(c)["quota_predefinita"] != quota:
-                db.salva_impostazioni(c, {"quota_predefinita": quota})
+                if (cfg.programmi / v / "python" / "pythonw.exe").is_file():      # gia' scaricata in un avvio precedente
+                    segna_attuale(cfg.programmi, v)
+                    programma["pronta"] = v
+                else:
+                    programma["pronta"] = agg.installa(info, cfg.programmi, dati.lavoro)
+                    with db.transazione() as c:
+                        db.evento(c, "programma_pubblicato", dettagli=f"{v} da GitHub, pronta per il prossimo avvio")
+                programma["errore"] = ""
+            except (ErroreAggiornamento, OSError) as e:
+                programma["errore"] = str(e)
+                log.warning("aggiornamento del programma non riuscito: %s", e)
+        return info
 
-    def pubblica(v: str) -> None:
-        if condivisa is not None:
-            condivisa.pubblica_dati(v, dati.versioni / v)
-
-    def aggiorna_ruolo() -> None:
-        """Rilegge l'elenco degli editori: chi viene aggiunto o tolto cambia ruolo entro un giro del pianificatore."""
-        if condivisa is None:
-            return
-        elenco = editori(condivisa.impostazioni())
-        e = utente_pc in elenco and scrivibile()
-        ruolo_pc.update(editore=e, editori=elenco, puo_gestire=not elenco and scrivibile())
-        cfg.scarica_dati = e                    # i dati arrivano dalla cartella: li scarica dalla fonte solo chi pubblica
-        dati.dopo_installazione = pubblica if e else None
-        with db.transazione() as c:
-            c.execute("UPDATE utenti SET ruolo = ? WHERE email = ? AND ruolo != ?",
-                      ("amministratore" if e else "utente", EMAIL_LOCALE, "amministratore" if e else "utente"))
-
-    def allinea_dati() -> None:
-        """L'editore pubblica la versione dei dati installata sul suo PC se e' piu' recente di quella nella cartella;
-        tutti gli altri (e l'editore, se qualcuno ha pubblicato dopo di lui) installano quella della cartella."""
-        if condivisa is None or not condivisa.raggiungibile() or not dati._lock.acquire(blocking=False):
-            return
-        try:
-            att, pubb = dati.attiva(), condivisa.dati_pubblicati()
-            if editore() and att and (not pubb or att > pubb or (att == pubb and not (condivisa.dati / f"{att}.zip").is_file())):
-                condivisa.pubblica_dati(att, dati.versioni / att)
-            elif condivisa.ricevi_dati(dati.versioni, dati.imposta_attiva, att):
-                dati._pota()
-        except (OSError, ErroreCondivisa):
-            log.exception("allineamento dei dati con la cartella condivisa")
-        finally:
-            dati._lock.release()
-
-    cfg.scarica_dati = False
     with db.transazione() as c:
         nome = (os.environ.get("USERNAME") or os.environ.get("USER") or "").strip()[:100]
         c.execute("INSERT INTO utenti(email, nome, ruolo, stato, email_confermata, creato, aggiornato) "
-                  "VALUES (?, ?, 'utente', 'attivo', 1, ?, ?) ON CONFLICT(email) DO UPDATE SET stato = 'attivo'",
+                  "VALUES (?, ?, 'amministratore', 'attivo', 1, ?, ?) ON CONFLICT(email) DO UPDATE SET stato = 'attivo', ruolo = 'amministratore', quota_ia = NULL",
                   (EMAIL_LOCALE, nome if len(nome) >= 2 else "Utente", iso(), iso()))
-    aggiorna_ruolo()
-    applica_impostazioni()
-    allinea_dati()
+    importa_vecchia_cartella()
+    applica_ia()
 
     @asynccontextmanager
     async def vita(_app: FastAPI) -> AsyncIterator[None]:
         if pianificatore:
-            dati.avvia_pianificatore(copie, ogni_ciclo=[aggiorna_ruolo, applica_impostazioni, allinea_dati], attesa=600)
+            dati.avvia_pianificatore(copie, ogni_ciclo=[aggiorna_programma], attesa=600)
         yield
         dati.ferma()
 
     app = FastAPI(title="MAGIC HS", docs_url=None, redoc_url=None, openapi_url=None, lifespan=vita)
-    app.state.cfg, app.state.db, app.state.dati, app.state.ia, app.state.condivisa = cfg, db, dati, ia, condivisa
+    app.state.cfg, app.state.db, app.state.dati, app.state.ia = cfg, db, dati, ia
+    app.state.aggiorna_programma = aggiorna_programma
     app.state.ultimo_contatto = time.monotonic()      # il programma si chiude da solo dopo un periodo senza richieste
     app.state.ferma = lambda: None                    # lo imposta programma.py
 
@@ -243,7 +230,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     def richiede_admin(u: sqlite3.Row = Depends(richiede_utente)) -> sqlite3.Row:
         if u["ruolo"] != "amministratore":
-            raise Errore(403, "Questa funzione è riservata a chi gestisce MAGIC HS.", "vietato")
+            raise Errore(403, "Funzione non disponibile.", "vietato")
         return u
 
     def json_ok(**kw: Any) -> dict[str, Any]:
@@ -318,7 +305,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     # ------------------------------------------------------------------ stato (pagina d'attesa dei dati)
     @app.get("/api/stato")
     def stato() -> dict[str, Any]:
-        return {"dati_pronti": dati.attiva() is not None, "aggiornamento": (dati.in_corso or {}).get("fase"), "editore": editore()}
+        return {"dati_pronti": dati.attiva() is not None, "aggiornamento": (dati.in_corso or {}).get("fase")}
 
     # ------------------------------------------------------------------ ingresso e chiusura
     @app.get("/entra", include_in_schema=False)
@@ -351,38 +338,6 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         app.state.ferma()
         return json_ok()
 
-    @app.post("/api/locale/sincronizza")
-    def locale_sincronizza(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
-        """Controlla subito la cartella condivisa (pagina d'attesa dei dati)."""
-        aggiorna_ruolo()
-        applica_impostazioni()
-        allinea_dati()
-        return json_ok(dati=dati.attiva())
-
-    @app.post("/api/locale/gestisco-io")
-    def locale_gestisco_io(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
-        """Il primo editore: chi ha creato la cartella lo dice una volta dal suo PC."""
-        if condivisa is None or not condivisa.raggiungibile():
-            raise Errore(409, "Non trovo la cartella condivisa.", "condivisa")
-        imp = condivisa.impostazioni()
-        if editori(imp):
-            raise Errore(409, "MAGIC HS ha già chi lo gestisce: chiedigli di aggiungerti in Gestione, «Cartella condivisa».", "editori")
-        if not scrivibile():
-            raise Errore(409, "Da questo PC non puoi scrivere nella cartella condivisa: serve il permesso di modifica.", "condivisa")
-        if not RE_UTENTE.match(utente_pc):
-            raise Errore(409, "Non riesco a leggere il tuo nome utente di Windows.", "utente")
-        try:
-            condivisa.salva_impostazioni({**imp, "editori": [utente_pc]})
-        except OSError as e:
-            raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
-        aggiorna_ruolo()
-        allinea_dati()
-        if dati.da_fare():                             # cartella senza i dati del mese: si scaricano subito
-            threading.Thread(target=dati.controlla_mese, name="taric-primo-mese", daemon=True).start()
-        with db.transazione() as c:
-            db.evento(c, "editori", autore_id=u["id"], dettagli=utente_pc)
-        return json_ok(editore=editore())
-
     # ------------------------------------------------------------------ profilo
     def descrivi_utente(c: sqlite3.Connection, u: sqlite3.Row) -> dict[str, Any]:
         lim = ia.limite(c, u)
@@ -395,7 +350,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 "ia": {"disponibile": ia.disponibile and lim != 0, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
                        "usate": ia.usate(c, u["id"]), "mese": mese_corrente()},
                 "dati": {"versione": dati.attiva(), "aggiornamento": (dati.in_corso or {}).get("fase")},
-                "locale": {"editore": editore(), "versione": __version__, "utente": utente_pc, "puo_gestire": bool(ruolo_pc["puo_gestire"])}}
+                "programma": {"versione": __version__, "pronta": programma["pronta"]}}
 
     @app.get("/api/io")
     def io(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
@@ -495,7 +450,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         except ErroreIA as e:
             return JSONResponse({"errore": MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"]), "codice": e.codice}, status_code=e.stato_http)
 
-    # ------------------------------------------------------------------ gestione (chi pubblica per i colleghi)
+    # ------------------------------------------------------------------ impostazioni del PC
     @app.get("/api/admin/riepilogo")
     def admin_riepilogo(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso}
@@ -556,42 +511,28 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             dati.imposta_attiva(body.versione)
         except ValueError:
             raise Errore(404, "Versione non disponibile.", "non_trovato")
-        if editore() and condivisa is not None:
-            try:
-                condivisa.pubblica_dati(body.versione, dati.versioni / body.versione)
-            except (OSError, ErroreCondivisa) as e:
-                raise Errore(409, f"Versione in uso su questo PC, ma non riesco a pubblicarla nella cartella condivisa: {e}", "condivisa")
         with db.transazione() as c:
             db.evento(c, "dati_versione_attivata", autore_id=a["id"], dettagli=body.versione)
         return json_ok()
 
-    def serve_editore() -> Condivisa:
-        if condivisa is None or not editore():
-            raise Errore(409, "Da questo PC non si può scrivere nella cartella condivisa.", "condivisa")
-        return condivisa
-
     @app.get("/api/admin/locale")
     def admin_locale(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        imp = condivisa.impostazioni() if condivisa else {}
-        ia_imp = imp.get("ia") if isinstance(imp.get("ia"), dict) else {}
-        chiave = chiave_ia(imp)
-        return {"condivisa": str(cfg.condivisa or ""), "raggiungibile": bool(condivisa and condivisa.raggiungibile()),
-                "editore": editore(), "scrivibile": scrivibile(), "utente": utente_pc, "editori": editori(imp),
-                "programma": {"in_uso": __version__, "pubblicato": condivisa.versione_programma() if condivisa else ""},
-                "dati": {"in_uso": dati.attiva() or "", "pubblicati": condivisa.dati_pubblicati() if condivisa else ""},
-                "ia": {"fornitore": str(ia_imp.get("fornitore") or ""), "url": str(ia_imp.get("url") or ""),
-                       "modello": str(ia_imp.get("modello") or ""), "modello_rapido": str(ia_imp.get("modello_rapido") or ""),
-                       "chiave": ("…" + chiave[-4:]) if len(chiave) > 8 else ("impostata" if chiave else "")},
+        v = ia_salvata()
+        chiave = svela(str(v.get("chiave") or ""), cfg.dati)
+        with db.connessione() as c:
+            uso = {**ia.uso_mese(c), "mese": mese_corrente()}
+        return {"ia": {"fornitore": str(v.get("fornitore") or ""), "url": str(v.get("url") or ""), "modello": str(v.get("modello") or ""),
+                       "modello_rapido": str(v.get("modello_rapido") or ""),
+                       "chiave": ("…" + chiave[-4:]) if len(chiave) > 8 else ("impostata" if chiave else ""),
+                       "chiave_illeggibile": bool(v.get("chiave")) and not chiave},
                 "attiva": ia.disponibile, "ia_nome": cfg.ia_nome, "fornitore_attivo": cfg.ia_fornitore,
                 "modelli_in_uso": {"rapido": cfg.modello_rapido, "principale": cfg.modello} if ia.disponibile else None,
-                "uso": uso_mese(),
-                "quota": imp.get("quota", 50) if imp else 50, "aggiornate": imp.get("aggiornate", ""), "da": imp.get("da", "")}
+                "uso": uso, "aggiornate": v.get("aggiornate", ""),
+                "programma": {"in_uso": __version__, "pronta": programma["pronta"], "errore": programma["errore"]}}
 
     @app.put("/api/admin/locale/ia")
     def admin_locale_ia(body: ImpostazioniIA, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        cond = serve_editore()
-        imp = cond.impostazioni()
-        chiave = chiave_ia(imp) if body.chiave is None else body.chiave.strip()
+        chiave = svela(str(ia_salvata().get("chiave") or ""), cfg.dati) if body.chiave is None else body.chiave.strip()
         url = body.url.strip().rstrip("/")
         if url and not re.match(r"^https?://[^\s/]+(/\S*)?$", url):
             raise Errore(422, "Indirizzo del servizio non valido: deve iniziare con https://.", "url")
@@ -601,37 +542,13 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             raise Errore(422, "Indica il modello (per Azure OpenAI: il nome della distribuzione).", "modello")
         if body.fornitore in ("gemini", "anthropic") and not chiave:
             raise Errore(422, "Inserisci la chiave del servizio.", "chiave")
-        nuove = con_chiave_cifrata({**imp, "ia": {"fornitore": body.fornitore, "url": url if body.fornitore else "",
-                                                   "modello": body.modello.strip() if body.fornitore else "",
-                                                   "modello_rapido": body.modello_rapido.strip() if body.fornitore else ""},
-                                    "quota": body.quota, "aggiornate": iso(), "da": a["nome"]}, chiave if body.fornitore else "")
         try:
-            cond.salva_impostazioni(nuove)
+            salva_ia(body.fornitore, chiave, url, body.modello.strip(), body.modello_rapido.strip(), a["nome"])
         except OSError as e:
-            raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
-        applica_impostazioni()
+            raise Errore(500, f"Non riesco a proteggere la chiave su questo PC: {e}", "chiave")
         with db.transazione() as c:
             db.evento(c, "impostazioni_ia", autore_id=a["id"], dettagli=body.fornitore or "nessuna")
         return json_ok(attiva=ia.disponibile, ia_nome=cfg.ia_nome)
-
-    @app.put("/api/admin/locale/editori")
-    def admin_locale_editori(body: Editori, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        cond = serve_editore()
-        elenco: list[str] = []
-        for x in body.editori:
-            n = x.strip().lower()
-            if not RE_UTENTE.match(n):
-                raise Errore(422, f"Nome utente di Windows non valido: «{x.strip()[:64]}».", "editori")
-            if n not in elenco:
-                elenco.append(n)
-        try:
-            cond.salva_impostazioni({**cond.impostazioni(), "editori": elenco})
-        except OSError as e:
-            raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
-        aggiorna_ruolo()
-        with db.transazione() as c:
-            db.evento(c, "editori", autore_id=a["id"], dettagli=", ".join(elenco))
-        return json_ok(editori=elenco, editore=editore())
 
     @app.post("/api/admin/locale/ia/modelli")
     def admin_locale_modelli(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
@@ -653,72 +570,12 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             }.get(e.codice) or MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
             raise Errore(e.stato_http, messaggio, e.codice)
 
-    def uso_mese() -> dict[str, Any]:
-        with db.connessione() as c:
-            return {**ia.uso_mese(c), "mese": mese_corrente()}
-
-    def versione_di_riferimento() -> str:
-        """La versione con cui confrontare quella di GitHub: quella pubblicata per i colleghi (o, se manca, quella in uso)."""
-        return (condivisa.versione_programma() if condivisa else "") or __version__
-
     @app.get("/api/admin/locale/aggiornamento")
     def admin_aggiornamento(forza: bool = False, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        """C'e' una versione del programma piu' recente di quella pubblicata? (GitHub, al massimo ogni sei ore)"""
-        info = agg.ultima(forza)
-        rif = versione_di_riferimento()
-        return {"disponibile": "versione" in info and piu_recente(info["versione"], rif), "versione": info.get("versione", ""),
-                "data": info.get("data", ""), "pagina": info.get("pagina", ""), "errore": info.get("errore", ""),
-                "pubblicata": rif, "in_uso": __version__}
-
-    @app.post("/api/admin/locale/aggiorna-programma")
-    def admin_aggiorna_programma(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        """Scarica da GitHub l'ultima versione e la pubblica per tutti nella cartella condivisa."""
-        cond = serve_editore()
-        info = agg.ultima(forza=True)
-        if "versione" not in info:
-            raise Errore(502, f"Non riesco a controllare le versioni: {info.get('errore') or 'errore sconosciuto'}.", "aggiornamento")
-        if not piu_recente(info["versione"], versione_di_riferimento()):
-            raise Errore(409, f"Nella cartella condivisa c'è già la versione {versione_di_riferimento()}.", "aggiornato")
-        dest = dati.lavoro / f"programma-{secrets.token_hex(6)}.zip"
-        try:
-            agg.scarica(info, dest)
-            if versione_pacchetto(dest) != info["versione"]:
-                raise ErroreAggiornamento("il pacchetto non contiene la versione attesa")
-            versione = cond.pubblica_programma(dest)
-        except ErroreAggiornamento as e:
-            raise Errore(502, f"Aggiornamento non riuscito: {e}.", "aggiornamento")
-        except ErroreCondivisa as e:
-            raise Errore(422, f"Il pacchetto non va bene: {e}.", "pacchetto")
-        except OSError as e:
-            raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
-        finally:
-            dest.unlink(missing_ok=True)
-        with db.transazione() as c:
-            db.evento(c, "programma_pubblicato", autore_id=a["id"], dettagli=f"{versione} da GitHub")
-        return json_ok(versione=versione)
-
-    @app.post("/api/admin/locale/programma")
-    async def admin_locale_programma(file: UploadFile = File(...), a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
-        cond = serve_editore()
-        dest = dati.lavoro / f"programma-{secrets.token_hex(6)}.zip"
-        try:
-            totale = 0
-            with open(dest, "wb") as f:
-                while blocco := await file.read(1 << 20):
-                    totale += len(blocco)
-                    if totale > 400 * 1024 * 1024:
-                        raise Errore(413, "File troppo grande (massimo 400 MB).", "troppo_grande")
-                    f.write(blocco)
-            versione = await run_in_threadpool(cond.pubblica_programma, dest)
-        except ErroreCondivisa as e:
-            raise Errore(422, f"Il file non va bene: {e}.", "pacchetto")
-        except OSError as e:
-            raise Errore(409, f"Non riesco a scrivere nella cartella condivisa: {e}", "condivisa")
-        finally:
-            dest.unlink(missing_ok=True)
-        with db.transazione() as c:
-            db.evento(c, "programma_pubblicato", autore_id=a["id"], dettagli=versione)
-        return json_ok(versione=versione)
+        """Ultima versione su GitHub; se e' piu' recente la installa per il prossimo avvio."""
+        info = aggiorna_programma(forza)
+        return {"in_uso": __version__, "ultima": info.get("versione", ""), "data": info.get("data", ""), "pagina": info.get("pagina", ""),
+                "pronta": programma["pronta"], "errore": programma["errore"] or info.get("errore", "")}
 
     return app
 

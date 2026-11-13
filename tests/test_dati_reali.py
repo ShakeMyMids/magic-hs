@@ -17,9 +17,9 @@ pytestmark = pytest.mark.skipif(not ZIP or not Path(ZIP).is_file(), reason="TARI
 
 @pytest.fixture
 def pc(ambiente) -> PC:
-    """Chi gestisce MAGIC HS, ancora senza dati."""
-    tmp, cond, mp = ambiente
-    return PC(tmp, cond, "mrossi", mp)
+    """Un PC ancora senza dati."""
+    tmp, mp = ambiente
+    return PC(tmp, mp)
 
 
 def test_caricamento_manuale_installa_la_versione(pc: PC):

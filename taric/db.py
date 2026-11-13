@@ -145,7 +145,9 @@ SCHEMA = [
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
-    # classificazioni con l'IA al mese per persona, scelte da chi gestisce MAGIC HS (impostazioni.json): 0 = IA spenta, None = senza limite
+    # servizio IA di questo PC: fornitore, url, modello, modello_rapido, chiave (protetta, segreti.proteggi), impostato, aggiornate
+    "ia": {},
+    # limite mensile di classificazioni per chi non e' amministratore (sul PC l'utente lo e' sempre: nessun limite)
     "quota_predefinita": 50,
 }
 

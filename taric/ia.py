@@ -1,7 +1,7 @@
-"""Chiamate all'intelligenza artificiale, con limite mensile di classificazioni per persona scelto da chi gestisce
-MAGIC HS. La chiave resta nel programma; il browser manda solo il testo della richiesta.
+"""Chiamate all'intelligenza artificiale del servizio scelto su questo PC, con il conteggio delle classificazioni del
+mese. La chiave resta nel programma; il browser manda solo il testo della richiesta.
 
-Fornitori supportati (scelti in Gestione, vedi config._ia):
+Fornitori supportati (scelti in Impostazioni, vedi config._ia):
   gemini     API di Google Gemini (generateContent)
   anthropic  API Messages di Anthropic (Claude)
   openai     qualsiasi servizio compatibile con OpenAI Chat Completions: Azure OpenAI, Groq, Mistral, OpenRouter,
@@ -189,8 +189,8 @@ class ServizioIA:
 
     # ------------------------------------------------------------------ limite mensile (in classificazioni)
     def limite(self, c: sqlite3.Connection, utente: sqlite3.Row) -> int | None:
-        """Classificazioni al mese consentite; None = senza limite mensile. Chi pubblica (amministratore) non ha limite;
-        per gli altri vale il limite scelto da chi gestisce MAGIC HS (0 = IA spenta)."""
+        """Classificazioni al mese consentite; None = senza limite. L'utente del PC (amministratore) non ha limite: il
+        limite per persona (0 = IA spenta) resta per i database delle versioni precedenti."""
         if utente["quota_ia"] is not None:
             return int(utente["quota_ia"])
         if utente["ruolo"] == "amministratore":
@@ -210,7 +210,7 @@ class ServizioIA:
 
     @staticmethod
     def uso_mese(c: sqlite3.Connection, mese: str | None = None) -> dict[str, int]:
-        """Uso del mese su questo PC: classificazioni, richieste e token (per Gestione)."""
+        """Uso del mese su questo PC: classificazioni, richieste e token (per Impostazioni)."""
         r = c.execute("SELECT COUNT(*) AS richieste, COALESCE(SUM(token_in), 0) AS token_in, COALESCE(SUM(token_cache), 0) AS token_cache, "
                       "COALESCE(SUM(token_out), 0) AS token_out FROM uso_ia WHERE mese = ?", (mese or mese_corrente(),)).fetchone()
         utenti = [x[0] for x in c.execute("SELECT DISTINCT utente_id FROM uso_ia WHERE mese = ? AND utente_id IS NOT NULL", (mese or mese_corrente(),))]
@@ -223,7 +223,7 @@ class ServizioIA:
         return f(modello, contesto, prompt, token_massimi, schema)
 
     def prova(self) -> dict[str, Any]:
-        """Breve richiesta di prova al servizio configurato (pannello Gestione); non consuma la quota."""
+        """Breve richiesta di prova al servizio configurato (pagina Impostazioni); non conta come classificazione."""
         if not self.disponibile:
             raise ErroreIA("not_configured", 503)
         inizio = adesso()
@@ -411,7 +411,7 @@ class ServizioIA:
                         rifiutata=scelta.get("finish_reason") == "content_filter", troncata=scelta.get("finish_reason") == "length",
                         token_cache=int((uso.get("prompt_tokens_details") or {}).get("cached_tokens") or 0))
 
-    # ------------------------------------------------------------------ elenco dei modelli (suggerimenti in Gestione)
+    # ------------------------------------------------------------------ elenco dei modelli (suggerimenti in Impostazioni)
     def modelli(self) -> list[str]:
         if not self.disponibile:
             raise ErroreIA("not_configured", 503)

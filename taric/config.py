@@ -1,9 +1,9 @@
 """Configurazione di MAGIC HS sul PC.
 
-La imposta programma.py (cartella dei dati, porta, cartella condivisa). Per casi particolari si possono aggiungere
+La imposta programma.py (cartella dei dati, porta, cartella dei programmi). Per casi particolari si possono aggiungere
 variabili d'ambiente TARIC_* o un file indicato da TARIC_CONFIG (programma.py usa ``taric.env`` nella cartella
 dell'utente, se esiste): per esempio TARIC_FONTE_URL o TARIC_FUSO. Le variabili d'ambiente hanno la precedenza sul file.
-Il servizio IA lo sceglie chi gestisce MAGIC HS e arriva dalla cartella condivisa (condivisa.ia_da_impostazioni).
+Il servizio IA lo sceglie ognuno in Impostazioni: e' salvato nel database del PC (app.applica_ia).
 """
 from __future__ import annotations
 
@@ -49,9 +49,11 @@ class Config:
     aggiornamento_automatico: bool = True
     fuso: str = "Europe/Rome"
     backup_copie: int = 7                  # backup automatici del database da tenere (0 = nessun backup automatico)
-    condivisa: Path | None = None          # cartella condivisa da cui il programma riceve versioni, dati e impostazioni
-    scarica_dati: bool = False             # scarica da solo i dati TARIC dalla fonte: solo sul PC di chi pubblica
+    avvio: Path | None = None              # cartella di «Avvia MAGIC HS.cmd» (per importare le impostazioni della vecchia cartella condivisa)
+    programmi: Path | None = None          # %LOCALAPPDATA%\\MAGIC HS\\programma: dove si installano le nuove versioni (None = nessun aggiornamento)
+    scarica_dati: bool = True              # prende da solo i dati TARIC del mese
     aggiornamenti_url: str = "https://api.github.com/repos/ShakeMyMids/magic-hs/releases/latest"   # "" = niente controllo
+    dati_url: str = "https://api.github.com/repos/ShakeMyMids/magic-hs/releases/tags/dati"        # dati pronti; "" = sempre in locale
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -65,7 +67,7 @@ class Config:
         return {"gemini": "Gemini (Google)", "anthropic": "Claude (Anthropic)"}.get(self.ia_fornitore, self.modello or "")
 
     def imposta_ia(self, valori: dict[str, str]) -> None:
-        """Cambia il servizio IA mentre il programma è in funzione (impostazioni della cartella condivisa)."""
+        """Cambia il servizio IA mentre il programma è in funzione (scelta in Impostazioni)."""
         self.ia_fornitore, self.ia_chiave, self.ia_url, self.modello_rapido, self.modello = _ia(valori)
 
 
@@ -112,9 +114,12 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         ia_fornitore=ia[0], ia_chiave=ia[1], ia_url=ia[2], modello_rapido=ia[3], modello=ia[4],
         fonte_url=v.get("TARIC_FONTE_URL", Config.fonte_url),
         aggiornamento_automatico=_bool(v.get("TARIC_AGGIORNAMENTO_AUTOMATICO"), True),
+        scarica_dati=_bool(v.get("TARIC_SCARICA_DATI"), True),
         fuso=v.get("TARIC_FUSO", "Europe/Rome"),
         backup_copie=max(0, int(v.get("TARIC_BACKUP_COPIE", "7") or 7)),
-        condivisa=Path(v["TARIC_CONDIVISA"]) if v.get("TARIC_CONDIVISA") else None,
+        avvio=Path(v["TARIC_AVVIO"]) if v.get("TARIC_AVVIO") else None,
+        programmi=Path(v["TARIC_PROGRAMMI"]) if v.get("TARIC_PROGRAMMI") else None,
         aggiornamenti_url=v.get("TARIC_AGGIORNAMENTI_URL", Config.aggiornamenti_url).strip(),
+        dati_url=v.get("TARIC_DATI_URL", Config.dati_url).strip(),
         extra=v,
     )

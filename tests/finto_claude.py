@@ -1,15 +1,19 @@
 """Finti servizi esterni per le prove dell'interfaccia (nessuna chiamata reale):
 - IA: risponde nei formati di Anthropic (/v1/messages), Gemini (/v1beta/models/<modello>:generateContent) e compatibile
   OpenAI (/v1/chat/completions); accetta solo la chiave «chiave-finta».
-- GitHub: /github/releases/latest con la versione 9.9.9 e il suo pacchetto per Windows (finto ma valido).
-Uso: python tests/finto_claude.py 9100, poi il programma con TARIC_AGGIORNAMENTI_URL=http://127.0.0.1:9100/github/releases/latest
-e in Gestione > Intelligenza artificiale «compatibile OpenAI» con indirizzo http://127.0.0.1:9100/v1 (vedi tests/e2e_locale.js)."""
+- GitHub: /github/releases/latest con la versione 9.9.9 e il suo pacchetto per Windows (finto ma valido), e la pagina
+  /github/releases/tags/dati con i dati pronti indicati sulla riga di comando (archivi dati-AAAA-MM-01.zip, per esempio
+  fatti con strumenti/dati_mese.py).
+Uso: python tests/finto_claude.py 9100 [dati-AAAA-MM-01.zip ...], poi il programma con
+TARIC_AGGIORNAMENTI_URL=http://127.0.0.1:9100/github/releases/latest e TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati;
+in Impostazioni > Intelligenza artificiale «compatibile OpenAI» con indirizzo http://127.0.0.1:9100/v1 (vedi tests/e2e_locale.js)."""
 import hashlib
 import io
 import json
 import sys
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 
 def pacchetto(versione: str) -> bytes:
@@ -24,6 +28,7 @@ def pacchetto(versione: str) -> bytes:
 
 NUOVA = "9.9.9"
 PACCHETTO = pacchetto(NUOVA)
+DATI: dict[str, bytes] = {}            # nome dell'archivio -> contenuto
 
 
 def rispondi(prompt: str) -> object:
@@ -54,7 +59,18 @@ class Gestore(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         base = f"http://127.0.0.1:{self.server.server_port}/github"
         nome = f"magic-hs-windows-{NUOVA}.zip"
-        if self.path == "/github/releases/latest":
+        if self.path == "/github/releases/tags/dati":
+            self._json(200, {"tag_name": "dati", "prerelease": True, "assets": [
+                {"name": n, "size": len(b), "digest": "sha256:" + hashlib.sha256(b).hexdigest(), "browser_download_url": base + "/dati/" + n}
+                for n, b in DATI.items()]})
+        elif self.path.startswith("/github/dati/") and self.path[13:] in DATI:
+            b = DATI[self.path[13:]]
+            self.send_response(200)
+            self.send_header("content-type", "application/octet-stream")
+            self.send_header("content-length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+        elif self.path == "/github/releases/latest":
             self._json(200, {"tag_name": "v" + NUOVA, "draft": False, "prerelease": False, "published_at": "2026-11-20T10:00:00Z",
                              "html_url": base + "/releases/v" + NUOVA,
                              "assets": [{"name": nome, "size": len(PACCHETTO), "browser_download_url": base + "/" + nome,
@@ -109,4 +125,6 @@ class Gestore(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    for f in sys.argv[2:]:
+        DATI[Path(f).name] = Path(f).read_bytes()
     ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1] if len(sys.argv) > 1 else 9100)), Gestore).serve_forever()
