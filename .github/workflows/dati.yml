@@ -1,8 +1,7 @@
 name: Dati TARIC
 # Prepara i dati TARIC del mese con gli stessi controlli del sito (strumenti/dati_mese.py) e li pubblica nella
 # pagina «dati» della pagina delle versioni (una pre-release: non è una versione di MAGIC HS), come dati-AAAA-MM-01.zip.
-# Il sito su Render e i PC rimasti al programma per Windows 1.4.0 li scaricano da lì (se non ci sono ancora, li preparano
-# da sé dalla fonte). Gira ogni giorno dall'1 al 12 del mese finché il mese non è pubblicato, oppure a mano (Actions > Dati TARIC >
+# Il sito su Render li scarica da lì (se non ci sono ancora, li prepara da sé dalla fonte). Gira ogni giorno dall'1 al 12 del mese finché il mese non è pubblicato, oppure a mano (Actions > Dati TARIC >
 # Run workflow, con il mese).
 # Nota: GitHub sospende i flussi pianificati dei progetti pubblici dopo 60 giorni senza attività; a ogni giro il flusso
 # si riattiva da solo per evitarlo. Se fosse sospeso: Actions > Dati TARIC > Enable workflow.

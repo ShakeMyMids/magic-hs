@@ -88,10 +88,6 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
 - **Fuori dal TARIC**: IVA, accise e misure nazionali; per quelle resta AIDA.
 - GitHub sospende i flussi pianificati dei progetti senza attività da 60 giorni. *Dati TARIC* si riattiva da solo a ogni giro; se fosse sospeso: *Actions → Dati TARIC → Enable workflow*. Intanto il server prepara i dati da sé.
 
-## Programma per Windows (ritirato)
-
-MAGIC HS era anche un programma per Windows: l'ultima versione, la **1.4.0**, resta nella [pagina delle versioni](https://github.com/ShakeMyMids/magic-hs/releases) e continua a ricevere i dati TARIC del mese, ma non avrà altri aggiornamenti. Mostra l'avviso «MAGIC HS diventa un sito»: chi lo usa salva storico e preferiti con *Profilo → I tuoi dati → Esporta* e li porta nel sito con *Profilo → I tuoi dati → Importa*. Il codice del programma è nella storia di git fino a `v1.4.0`.
-
 ## Sicurezza in breve
 
 - **Accesso**: solo account approvati; password con argon2; tentativi limitati; link per la password monouso e a scadenza, preparati dall'amministratore.

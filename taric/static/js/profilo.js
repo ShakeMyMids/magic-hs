@@ -1,5 +1,5 @@
 /* MAGIC HS - vista Profilo: account e password, preferenze, uso dell'IA, storico, preferiti, esportazione e
-   importazione degli stessi dati (anche quelli esportati dal vecchio programma per Windows). */
+   importazione degli stessi dati. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
@@ -77,7 +77,7 @@
     h += '</div></div>';
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'I tuoi dati</div>' +
-      '<p class="nota">Storico, preferiti e preferenze sono nel tuo account: li ritrovi da qualsiasi PC. Con «Importa» porti qui quelli esportati dal programma per Windows.</p>' +
+      '<p class="nota">Storico, preferiti e preferenze sono nel tuo account: li ritrovi da qualsiasi PC. «Esporta» ne salva una copia in un file, «Importa» la riporta qui.</p>' +
       '<div class="fila"><button class="btn sm" type="button" data-p="esporta">' + T.icona('scarica') + 'Esporta</button>' +
       '<button class="btn sm" type="button" data-p="scegli-file">' + T.icona('carica') + 'Importa</button>' +
       '<input type="file" accept=".json,application/json" data-p="importa" hidden aria-label="File esportato da MAGIC HS"></div>' + riga('dati') + '</div></div>';

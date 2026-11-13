@@ -6,7 +6,7 @@ interfaccia in JavaScript senza framework (`taric/static/`), su **Render** (`ren
 `MAGIC_HS_AMMINISTRATORI` entrano subito come amministratori); un solo servizio IA a pagamento dalle variabili del server
 (`GEMINI_API_KEY`), con limite mensile di classificazioni per persona (`quota_predefinita`, `utenti.quota_ia`) e tetto per
 tutti (`tetto_mese`). Dati TARIC del mese dalla pre-release `dati` di GitHub. Le versioni precedenti sono nella storia di
-git: programma per Windows fino a `v1.4.0` (la sua pagina resta: i PC rimasti lo usano ancora, con i dati di `dati`), sito
+git: programma per Windows fino al tag `v1.4.0`, sito
 con posta e pagamenti fino a `v1.2.1`, cartella condivisa fino a `v1.2.2`, sito statico su GitHub Pages mai unito (PR #6).
 Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 
@@ -14,7 +14,7 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 
 - `taric/app.py`: pagine e API. Accesso: `/accedi`, `/api/registrazione` (modulo firmato, trappola `sito_web`),
   `/api/accedi`, `/api/esci`, `/api/io/password`, `/api/reimposta-password` (link dell'amministratore). Comuni: profilo,
-  storico, preferiti, IA, esporta/importa (stesso formato del vecchio programma). Gestione sotto `/api/admin/`: `utenti`,
+  storico, preferiti, IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
   `ia`, `impostazioni`, `backup`, dati TARIC, registro. `/api/salute` per Render. Gli errori si restituiscono come
   `{"errore": "<messaggio italiano>", "codice": "<codice>"}`.
 - `taric/config.py`: configurazione dalle variabili d'ambiente (`TARIC_*`, `GEMINI_API_KEY`, `MAGIC_HS_*`,
@@ -65,8 +65,6 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 - I file `data/` sono dati non fidati generati: il server li serve solo con nomi validati (`dati.RE_FILE`).
 - Dentro una `db.transazione()` un'eccezione annulla tutto.
 - Non mettere chiavi o file di `dati/` nel repository.
-- Niente nuove versioni (release) su GitHub oltre alla pre-release `dati`: i PC rimasti al programma 1.4.0 controllano
-  `releases/latest` e, senza il pacchetto per Windows, mostrerebbero un errore in Impostazioni.
 
 ## Prove
 

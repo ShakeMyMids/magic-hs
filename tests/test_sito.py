@@ -29,17 +29,13 @@ def test_pagine_del_sito(sito: Sito):
     assert c.get("/api/io").status_code == 401 and c.get("/api/io").json()["errore"] == "Sessione scaduta: accedi di nuovo."
     assert c.get("/api/salute").json()["ok"] is True
     assert c.get("/data/2026-11-01/nomenclatura.js").status_code == 401
-    # niente funzioni del programma per Windows sul sito
-    for metodo, url in (("GET", "/entra?k=x"), ("GET", "/api/locale/ping"), ("POST", "/api/locale/chiudi"), ("GET", "/api/admin/locale"),
-                        ("PUT", "/api/admin/locale/ia"), ("GET", "/api/admin/locale/aggiornamento")):
-        assert c.request(metodo, url, json={}).status_code in (404, 405), url
     assert "Strict-Transport-Security" in r.headers
 
 
 def test_registrazione_e_approvazione(sito: Sito):
     capo = sito.capo()                                        # email di MAGIC_HS_AMMINISTRATORI: entra subito
     io_ = capo.get("/api/io").json()
-    assert io_["ruolo"] == "amministratore" and io_["email"] == CAPO and io_["server"] is True and "programma" not in io_
+    assert io_["ruolo"] == "amministratore" and io_["email"] == CAPO
     assert io_["ia"]["limite"] is None and io_["ia"]["configurata"]
     assert "/data/2026-11-01/" in capo.get("/").text
 
@@ -210,20 +206,20 @@ def test_storico_e_preferiti_separati(sito: Sito):
     assert luca.get("/api/storico").json()["totale"] == 1
 
 
-# file esportato dal programma per Windows 1.4.0 (Profilo › I tuoi dati › Esporta): stesso formato del sito
-DAL_PROGRAMMA = {"formato": "magic-hs", "versione": 1, "esportato": "2026-11-12T10:00:00+00:00",
+# file di Profilo › I tuoi dati › Esporta
+ESPORTATO = {"formato": "magic-hs", "versione": 1, "esportato": "2026-11-12T10:00:00+00:00",
                  "profilo": {"nome": "Luca", "azienda": ""}, "preferenze": {"paese": "CN", "flusso": "import", "tema": "auto"},
                  "preferiti": [{"codice": "6403999610", "nota": "cliente X", "quando": "2026-11-10T09:00:00+00:00"}],
                  "storico": [{"quando": "2026-11-11T09:00:00+00:00", "testo": "scarpe", "codice": "6403999610", "dati": {"result": 2}},
                              {"quando": "2026-11-10T09:00:00+00:00", "testo": "trapano", "codice": "8467211000", "dati": {"result": 1}}]}
 
 
-def test_esporta_e_importa_anche_dal_programma(sito: Sito):
+def test_esporta_e_importa(sito: Sito):
     capo = sito.capo()
     luca = sito.collega(capo)
-    r = luca.post("/api/io/importa", json=DAL_PROGRAMMA).json()
+    r = luca.post("/api/io/importa", json=ESPORTATO).json()
     assert (r["storico"], r["preferiti"]) == (2, 1) and luca.get("/api/preferiti").json()["voci"][0]["nota"] == "cliente X"
-    assert luca.post("/api/io/importa", json=DAL_PROGRAMMA).json()["storico"] == 0          # niente doppioni
+    assert luca.post("/api/io/importa", json=ESPORTATO).json()["storico"] == 0          # niente doppioni
     assert [v["testo"] for v in luca.get("/api/storico").json()["voci"]] == ["scarpe", "trapano"]
     r = capo.post("/api/io/importa", json=luca.get("/api/io/esporta").json()).json()    # da un account all'altro
     assert (r["storico"], r["preferiti"]) == (2, 1)

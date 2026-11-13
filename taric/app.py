@@ -547,7 +547,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             pref = json.loads(u["preferenze"] or "{}")
         except ValueError:
             pref = {}
-        return {"id": u["id"], "nome": u["nome"], "email": u["email"], "azienda": u["azienda"], "ruolo": u["ruolo"], "server": True,
+        return {"id": u["id"], "nome": u["nome"], "email": u["email"], "azienda": u["azienda"], "ruolo": u["ruolo"],
                 "preferenze": {"paese": pref.get("paese", ""), "flusso": pref.get("flusso", "import"), "tema": pref.get("tema", "auto")},
                 "ia": {"disponibile": ia.disponibile and lim != 0 and not tetto, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
                        "usate": ia.usate(c, u["id"]), "mese": mese_corrente(), "tetto": tetto},
@@ -642,7 +642,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             c.execute("DELETE FROM preferiti WHERE utente_id = ? AND codice = ?", (u["id"], codice))
         return json_ok()
 
-    # ------------------------------------------------------------------ esporta e importa (lo stesso formato del vecchio programma per Windows)
+    # ------------------------------------------------------------------ esporta e importa
     @app.get("/api/io/esporta")
     def esporta(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
         with db.connessione() as c:
