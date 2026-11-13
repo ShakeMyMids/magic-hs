@@ -110,7 +110,9 @@ var state = {
   trad: {},            // row index -> italian text
   tradBusy: false,
   qmsg: '', open: {}, secOpen: {}, flash: -1,
-  anima: false
+  anima: false,
+  calc: { valore: '', kg: '', qta: '', iva: '22' },   // calcolo degli importi (casella 47)
+  calcDazi: null
 };
 var ctl = null, tick = null, sampleFn = null;
 
@@ -704,6 +706,113 @@ function unitaSupplementare(i) {
   return trovata;
 }
 
+/* ---------- calcolo degli importi: dazio in euro e IVA stimata (casella 47) ----------
+   Si calcolano le espressioni semplici: percentuali, importi per massa (DTN = 100 kg, KGM, TNE, GRM) o per unità di
+   quantità, somme con «+», minimi (MIN) e massimi (MAX). Componenti agricole (EA, ADSZ...), qualificatori dell'unità
+   (per esempio DTN E, peso netto sgocciolato) e dazi con condizioni restano «non calcolabili qui»: meglio nessun numero
+   che uno sbagliato. */
+var MASSA = { DTN: 0.01, KGM: 1, TNE: 0.001, GRM: 1000 };          // quante unità per kg
+var QUANTITA = { MIL: 0.001, CEN: 0.01 };                          // per 1000 e per 100 pezzi
+var NON_CALCOLABILI = { EA: 1, EAR: 1, ADSZ: 1, ADSZR: 1, ADFM: 1, ADFMR: 1 };
+function numeroIt(s) {
+  s = String(s === undefined || s === null ? '' : s).trim().replace(/\s/g, '');
+  if (!s) return NaN;
+  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+  var v = Number(s);
+  return isFinite(v) && v >= 0 ? v : NaN;
+}
+/* {importo} oppure {manca: 'valore'|'kg'|'qta'} oppure {no: motivo} */
+function calcolaDazio(str, c) {
+  var t = String(str || '').replace(/\+/g, ' + ').trim().split(/\s+/), parti = { base: [], MIN: [], MAX: [] }, dove = 'base', i = 0;
+  if (!t[0]) return { no: 'nessun dazio indicato' };
+  if (/^Cond:/.test(str)) return { no: 'dipende dalle condizioni o dai documenti' };
+  while (i < t.length) {
+    var x = t[i];
+    if (x === '+') { i++; continue; }
+    if (x === 'MIN' || x === 'MAX') { dove = x; i++; continue; }
+    if (x === 'NIHIL') { parti[dove].push({ v: 0, tipo: '%' }); i++; continue; }
+    if (NON_CALCOLABILI[x]) return { no: 'contiene un elemento agricolo o un dazio addizionale variabile' };
+    if (!isNum(x)) return { no: 'espressione non prevista' };
+    var v = num(x), nx = t[i + 1];
+    if (nx === '%') { parti[dove].push({ v: v, tipo: '%' }); i += 2; continue; }
+    if (nx !== 'EUR' && nx !== 'EUC') return { no: 'espressione non prevista' };
+    var u = t[i + 2], q = t[i + 3];
+    if (!u || !/^[A-Z]{3}$/.test(u) || PAROLE[u]) return { no: 'importo per spedizione, non per merce' };
+    if (q && /^[A-Z]$/.test(q)) return { no: 'dipende da ' + unita(u, q) };
+    parti[dove].push({ v: v, tipo: 'eur', u: u });
+    i += 3;
+  }
+  var manca = '';
+  function somma(lista) {
+    return lista.reduce(function (s, p) {
+      if (p.tipo === '%') { if (isNaN(c.valore)) { manca = manca || 'valore'; return s; } return s + c.valore * p.v / 100; }
+      if (MASSA[p.u]) { if (isNaN(c.kg)) { manca = manca || 'kg'; return s; } return s + p.v * c.kg * MASSA[p.u]; }
+      if (isNaN(c.qta) || c.unitaQta !== p.u) { manca = manca || 'qta'; return s; }
+      return s + p.v * c.qta * (QUANTITA[p.u] || 1);
+    }, 0);
+  }
+  var tot = somma(parti.base);
+  if (parti.MIN.length) tot = Math.max(tot, somma(parti.MIN));
+  if (parti.MAX.length) tot = Math.min(tot, somma(parti.MAX));
+  return manca ? { manca: manca } : { importo: Math.round(tot * 100) / 100 };
+}
+/* l'unità di quantità che servirebbe (pezzi, paia, litri...), se una delle espressioni ne usa una */
+function unitaQuantita(stringhe) {
+  for (var k = 0; k < stringhe.length; k++) {
+    var m = /\b(?:EUR|EUC) ([A-Z]{3})\b(?! [A-Z]\b)/g, x;
+    while ((x = m.exec(stringhe[k] || ''))) if (!MASSA[x[1]] && !PAROLE[x[1]]) return x[1];
+  }
+  return '';
+}
+var EURO = (function () { try { return new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }); } catch (e) { return null; } })();
+function euro(v) { return (EURO ? EURO.format(v) : nIt(v, 2, 2)) + ' €'; }        // 2.376,00 € (anche le migliaia)
+function aggiornaCalcolo() {
+  var el = $('#calc-esito'), D = state.calcDazi;
+  if (!el || !D) return;
+  var c = { valore: numeroIt(state.calc.valore), kg: numeroIt(state.calc.kg), qta: numeroIt(state.calc.qta), unitaQta: D.unitaQta };
+  if (isNaN(c.valore)) { el.innerHTML = '<p class="nota">Scrivi il valore in dogana delle merci per vedere dazio, IVA e totale.</p>'; return; }
+  var MANCA = { valore: 'scrivi il valore in dogana', kg: 'scrivi la massa netta', qta: 'scrivi la quantità' };
+  function riga(nome, misura) {
+    if (!misura) return null;
+    var r = calcolaDazio(misura.duty, c);
+    return { nome: nome, dazio: fmtDazio(misura.duty), r: r };
+  }
+  var righe = [riga('Dazio paesi terzi', D.base)];
+  if (D.pref) righe.push(riga('Con la preferenza ' + nomeArea(D.pref.o) + ' (serve la prova dell\'origine)', D.pref));
+  var extra = D.extra.map(function (m) { return { m: m, r: calcolaDazio(m.duty, c) }; });
+  var ex = extra.filter(function (x) { return x.r.importo !== undefined; }).sort(function (a, b) { return b.r.importo - a.r.importo; })[0];
+  var h = '<table class="tab calc-tab"><tbody>', applicato = null, totale = 0, ok = true;
+  righe.forEach(function (x) {
+    var val = x.r.importo !== undefined ? euro(x.r.importo) : (x.r.manca ? MANCA[x.r.manca] : 'non calcolabile qui: ' + x.r.no);
+    h += '<tr><td>' + esc(x.nome) + '<span class="piccolo">' + esc(x.dazio) + '</span></td><td class="n">' + esc(val) + '</td></tr>';
+  });
+  var rb = righe[0].r, rp = righe[1] && righe[1].r, conPref = !!(rp && rp.importo !== undefined);   // con la preferenza, se si può
+  applicato = conPref ? rp.importo : (rb.importo !== undefined ? rb.importo : null);
+  if (applicato === null) ok = false;
+  if (extra.length) {
+    var testo = ex ? euro(ex.r.importo) : 'non calcolabile qui';
+    h += '<tr><td>Antidumping e dazi addizionali' + (extra.length > 1 && ex ? '<span class="piccolo">variano secondo il produttore (codice addizionale): calcolato il più alto, ' + esc(fmtDazio(ex.m.duty)) + '</span>' : (ex ? '<span class="piccolo">' + esc(fmtDazio(ex.m.duty)) + '</span>' : '')) +
+      '</td><td class="n">' + esc(testo) + '</td></tr>';
+    if (!ex) ok = false;
+  }
+  var dazi = (applicato || 0) + (ex ? ex.r.importo : 0), aliquota = Number(state.calc.iva || 22);
+  var iva = Math.round((c.valore + dazi) * aliquota) / 100;
+  totale = dazi + iva;
+  h += '<tr><td>IVA ' + aliquota + ' %<span class="piccolo">su valore e dazi; senza spese fino a destinazione e accise</span></td><td class="n">' + esc(ok ? euro(iva) : '–') + '</td></tr>';
+  h += '<tr class="evid"><td><b>Totale stimato da pagare</b>' + (conPref ? '<span class="piccolo">con la preferenza</span>' : '') + '</td><td class="n"><b>' + esc(ok ? euro(totale) : '–') + '</b></td></tr></tbody></table>';
+  if (!ok) h += '<p class="nota">Il totale manca finché un dazio non è calcolabile: completa i dati o controlla le misure qui sotto.</p>';
+  el.innerHTML = h;
+}
+function boxCalcolo(D) {
+  var v = function (k) { return esc(state.calc[k] || ''); };
+  return '<div class="calcolo"><div class="lab">' + T.icona('percento') + 'Calcolo degli importi<span class="dx">stima</span></div><div class="calc-campi">' +
+    '<label>Valore in dogana (EUR)<input class="campo calc" data-c="valore" inputmode="decimal" autocomplete="off" value="' + v('valore') + '" placeholder="per esempio 12.500,00"></label>' +
+    '<label>Massa netta (kg)<input class="campo calc" data-c="kg" inputmode="decimal" autocomplete="off" value="' + v('kg') + '"></label>' +
+    (D.unitaQta ? '<label>Quantità (' + esc(unita(D.unitaQta, '')) + ')<input class="campo calc" data-c="qta" inputmode="decimal" autocomplete="off" value="' + v('qta') + '"></label>' : '') +
+    '<label>IVA<select class="campo calc" data-c="iva">' + [22, 10, 5, 4].map(function (a) { return '<option value="' + a + '"' + (String(state.calc.iva || 22) === String(a) ? ' selected' : '') + '>' + a + ' %</option>'; }).join('') + '</select></label>' +
+    '</div><div id="calc-esito"></div></div>';
+}
+
 /* ---------- rendering of measures ---------- */
 function nomeArea(o) { return o === '1011' ? 'tutti i paesi (erga omnes)' : (RIF.aree[o] || o); }
 function fmtContingente(o) { o = String(o); return o.length === 6 ? o.slice(0, 2) + '.' + o.slice(2) : o; }
@@ -869,6 +978,13 @@ function boxMisure(sel) {
         '<div class="tile"><span class="tv">' + esc(t1) + '</span><span class="tk">Dazio paesi terzi</span></div>' +
         '<div class="tile"><span class="tv">' + esc(t2) + '</span><span class="tk">Preferenza' + (c && pref.length ? ' ' + esc(nomeArea(pref[0].o)) : '') + '</span></div>' +
         '<div class="tile"><span class="tv">' + esc(t3) + '</span><span class="tk">Antidumping e dazi addizionali</span></div></div>';
+      if (dichiarabile && base.length === 1) {
+        var dovuti = c ? extra.filter(sempreDovuto) : [];
+        var D = { base: base[0], pref: c && pref.length ? pref[0] : null, extra: dovuti };
+        D.unitaQta = unitaQuantita([D.base.duty, D.pref ? D.pref.duty : ''].concat(dovuti.map(function (m) { return m.duty; })));
+        state.calcDazi = D;
+        h47 += boxCalcolo(D);
+      } else state.calcDazi = null;
     }
     CATEGORIE.forEach(function (K) {
       var list = cat[K.id];
@@ -985,6 +1101,7 @@ function renderEsito() {
   if (cand && cand.why) h += '<p class="perche"><b>Perché.</b> ' + esc(cand.why) + '</p>';
   if (cand && !role.best && cand.when) h += '<p class="perche"><b>Quando.</b> ' + esc(cand.when) + '</p>';
   h += '<div class="fila"><button class="btn sm" type="button" data-act="copia" data-c="' + esc(sel.code) + '">' + T.icona('copia') + 'Copia codice</button>' +
+    '<button class="btn sm" type="button" data-act="stampa">' + T.icona('documento') + 'Stampa o PDF</button>' +
     (i >= 0 ? '<button class="btn sm" type="button" data-act="apri" data-i="' + i + '">' + T.icona('libro') + 'Vedi nella nomenclatura</button>' : '') +
     (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' : '') + '</div>';
   var fineCod = (D.fine && D.fine[sel.code]) || 0;
@@ -1050,6 +1167,7 @@ function renderEsito() {
 
   h += boxMisure(sel);
   el.innerHTML = h;
+  aggiornaCalcolo();
 }
 
 /* ---------- nomenclature browser ---------- */
@@ -1257,6 +1375,7 @@ document.addEventListener('click', function (ev) {
     state.qmsg = ''; state.answers = state.answers.concat(add); renderFornite(); classifica(true);
   }
   else if (act === 'traduci') traduci();
+  else if (act === 'stampa') window.print();
   else if (act === 'preferito') {
     var pc = t.getAttribute('data-c'), cera = state.preferiti[pc];
     if (cera) delete state.preferiti[pc]; else state.preferiti[pc] = { nota: '' };
@@ -1290,9 +1409,13 @@ document.addEventListener('click', function (ev) {
   }
   else if (act === 'apri') { ev.stopPropagation(); apriNellAlbero(i); }
 });
-document.addEventListener('change', function (ev) { if (ev.target && ev.target.id === 'paese') { state.country = ev.target.value; renderEsito(); salvaPreferenze(); } });
+document.addEventListener('change', function (ev) {
+  if (ev.target && ev.target.id === 'paese') { state.country = ev.target.value; renderEsito(); salvaPreferenze(); }
+  if (ev.target && ev.target.classList && ev.target.classList.contains('calc')) { state.calc[ev.target.getAttribute('data-c')] = ev.target.value; aggiornaCalcolo(); }
+});
 document.addEventListener('input', function (ev) {
   var t = ev.target;
+  if (t && t.classList && t.classList.contains('calc')) { state.calc[t.getAttribute('data-c')] = t.value; aggiornaCalcolo(); return; }
   if (!t || !t.classList || !t.classList.contains('filtro')) return;
   var q = t.value.trim().toLowerCase(), box = t.parentNode.querySelector('.righe');
   if (!box) return;
@@ -1345,7 +1468,7 @@ function start() {
   renderAll();
   state.avviato = true;
 }
-window.TARIC_DEBUG = { cerca: function (q) { return cerca(q).map(function (i) { return CODE[i]; }); }, misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
+window.TARIC_DEBUG = { cerca: function (q) { return cerca(q).map(function (i) { return CODE[i]; }); }, calcola: calcolaDazio, unitaQuantita: unitaQuantita, misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
 
 /* funzioni usate dalle viste Profilo e Gestione */
 T.app = {
@@ -1399,6 +1522,16 @@ function controllaCambi() {
     if (nuovo) tab.title = n === 1 ? 'Un preferito è cambiato con i dati del mese' : n + ' preferiti sono cambiati con i dati del mese'; else tab.removeAttribute('title');
   }, function () { /* niente avvisi */ });
 }
+
+/* stampa (o PDF) della scheda del codice: intestazione con data e dati usati, dettagli aperti */
+var chiusiPrimaStampa = [];
+window.addEventListener('beforeprint', function () {
+  var sel = state.sel, s = $('#stampa-testa');
+  if (s) s.textContent = 'MAGIC HS · ' + (sel ? 'codice ' + grp(sel.code) + ' · ' : '') + (state.country ? (state.flow === 'export' ? 'destinazione ' : 'origine ') + nomeArea(state.country) + ' · ' : '') +
+    'dati TARIC al ' + DATA_IT + ' · stampata il ' + dataIt(oggiNum()) + ' · strumento non ufficiale: verifica su AIDA o sul TARIC dell\'UE';
+  chiusiPrimaStampa = Array.prototype.filter.call(document.querySelectorAll('#esito details:not([open])'), function (d) { d.open = true; return true; });
+});
+window.addEventListener('afterprint', function () { chiusiPrimaStampa.forEach(function (d) { d.open = false; }); chiusiPrimaStampa = []; });
 
 /* esce dall'account */
 $('#esci').addEventListener('click', function () {

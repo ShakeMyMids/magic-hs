@@ -90,6 +90,23 @@ async function accedi(p, email, password) {
   await capo.fill('#q', '8712'); await capo.press('#q', 'Enter');
   await capo.waitForSelector('#esito >> text=Sottovoci');
   ok(true, 'codice digitato: si apre con le sottovoci');
+
+  // calcolo degli importi e scheda stampabile
+  const casi = [['10.200 % + 93.100 EUR DTN', { valore: 1000, kg: 500 }, 567.5], ['0.000 % + 25.850 EUR DTN MAX 17.900 %', { valore: 1000, kg: 1000 }, 179],
+    ['6.700 % MAX 35.150 EUR DTN', { valore: 10000, kg: 100 }, 35.15], ['27.000 EUR HLT', { qta: 10, unitaQta: 'HLT' }, 270]];
+  let giusti = 0;
+  for (const [s, c, atteso] of casi) {
+    const r = await capo.evaluate(([s, c]) => window.TARIC_DEBUG.calcola(s, Object.assign({ valore: NaN, kg: NaN, qta: NaN, unitaQta: '' }, c)), [s, c]);
+    if (Math.abs((r.importo ?? -1) - atteso) < 0.005) giusti++;
+  }
+  const nc = await capo.evaluate(() => window.TARIC_DEBUG.calcola('6.900 % + EAR', { valore: 100, kg: 1, qta: NaN, unitaQta: '' }));
+  ok(giusti === casi.length && nc.no, 'calcolo dei dazi: percentuali, per massa e quantità, minimi e massimi; il resto «non calcolabile»');
+  await capo.fill('#q', '6403999610'); await capo.press('#q', 'Enter'); await capo.waitForSelector('.calcolo');
+  await capo.fill('.calc[data-c="valore"]', '10.000,00');
+  await capo.waitForSelector('#calc-esito >> text=Totale stimato da pagare');
+  const calcolo = (await capo.textContent('#calc-esito')).replace(/\s+/g, ' ');
+  ok(/800,00 €/.test(calcolo) && /2\.376,00 €/.test(calcolo) && /3\.176,00 €/.test(calcolo), 'calcolo nella scheda: dazio 8 %, IVA 22 %, totale');
+  ok(await capo.isVisible('[data-act="stampa"]'), 'scheda del codice: Stampa o PDF');
   await capo.fill('#q', 'qwzxj'); await capo.waitForSelector('#risultati >> text=Nessun risultato');
   await capo.press('#q', 'Enter');                                       // la ricerca vuota arriva all'amministratore
   ok(await capo.isVisible('#risultati [data-act="chiedi"]'), "nessun risultato: proposta di classificare con l'IA");
