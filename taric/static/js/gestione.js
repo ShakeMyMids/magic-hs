@@ -27,6 +27,7 @@
   function errore(e) { return (e && e.errore) || 'Operazione non riuscita.'; }
 
   vista.gestione = { mostra: function () { disegna(); carica(); } };
+  document.addEventListener('taric:ia', function () { st.modelli = []; msg('ia', ''); if (!el.hidden) carica(); });   // collegata dalla guida
 
   function carica() {
     var chiamate = [T.api('GET', '/api/admin/riepilogo').then(function (r) { st.riep = r; })];
@@ -134,7 +135,11 @@
     var L = st.loc;
     if (!L) return '<p class="vuoto">Carico…</p>';
     var ia = L.ia, f = ia.fornitore, def = PREDEFINITI[f] || ['', ''];
-    var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scintille') + 'Intelligenza artificiale' +
+    var h = '';
+    if (!L.attiva && T.guidaGemini) h += '<div class="foglio"><div class="box invito"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita gratis</div>' +
+      '<p class="nota">Ti servono una chiave gratuita di Google Gemini e un paio di minuti.</p>' +
+      '<div class="fila"><button class="btn pri" type="button" data-g="guida-gemini">' + T.icona('libro') + 'Guida passo passo</button></div></div></div>';
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scintille') + 'Intelligenza artificiale' +
       '<span class="dx"><span class="st ' + (L.attiva ? 'ok' : 'sospeso') + '">' + (L.attiva ? 'attiva' : 'spenta') + '</span></span></div>';
     if (L.attiva && L.modelli_in_uso) h += '<p class="nota">In uso: ' + esc(L.modelli_in_uso.principale) +
       (L.modelli_in_uso.rapido && L.modelli_in_uso.rapido !== L.modelli_in_uso.principale ? ', e ' + esc(L.modelli_in_uso.rapido) + ' per la ricerca delle voci' : '') + '.</p>';
@@ -168,7 +173,8 @@
         '<p class="nota"><b>Senza costi</b>: con Ollama il modello gira sul tuo PC (indirizzo http://localhost:11434/v1, servizio «compatibile OpenAI»), avviato con OLLAMA_ORIGINS=' + esc(location.origin) + ' perché accetti le richieste di questo sito. Senza IA restano nomenclatura, misure, storico e preferiti.</p>'
         : '<p class="nota"><b>La chiave resta su questo PC</b>, protetta da Windows: solo il tuo utente la può leggere.</p>' +
         '<p class="nota"><b>Senza costi</b>: con Ollama il modello gira sul tuo PC (indirizzo http://localhost:11434/v1, servizio «compatibile OpenAI»). Senza IA restano nomenclatura, misure, storico e preferiti.</p>') +
-      '<p class="nota"><b>Azure OpenAI</b>: indirizzo https://&lt;risorsa&gt;.openai.azure.com/openai/v1 e nome della distribuzione come modello.</p></div></div>';
+      '<p class="nota"><b>Azure OpenAI</b>: indirizzo https://&lt;risorsa&gt;.openai.azure.com/openai/v1 e nome della distribuzione come modello.</p>' +
+      (T.guidaGemini ? '<p class="nota"><b>Google Gemini</b>: <button class="link" type="button" data-g="guida-gemini">guida alla chiave gratuita</button>.</p>' : '') + '</div></div>';
     return h;
   }
   function meseIt(m) {
@@ -211,11 +217,19 @@
         modello_rapido: String(d.get('modello_rapido') || '').trim()
       };
       if (d.has('chiave')) corpo2.chiave = String(d.get('chiave') || '');
+      // festa quando un servizio nuovo (o una chiave nuova) risponde alla prova
+      var nuovo = !(st.loc && st.loc.attiva) || corpo2.chiave !== undefined || corpo2.fornitore !== (st.loc && st.loc.fornitore_attivo);
+      var salva = f.querySelector('button[type="submit"]');
+      if (salva) salva.disabled = true;
       T.api('PUT', '/api/admin/locale/ia', corpo2).then(function (r) {
         st.cambiaChiave = false;
-        msg('ia', r.attiva ? 'Salvato: ' + r.ia_nome + '. Premi Prova per controllare che risponda.' : 'Salvato: classificazione assistita spenta.', true);
-        return app().aggiornaIo();
-      }, function (e) { msg('ia', errore(e)); }).then(carica);
+        if (!r.attiva) { msg('ia', 'Salvato: classificazione assistita spenta.', true); return; }
+        msg('ia', 'Salvato: provo ' + r.ia_nome + '…', true); disegna();
+        return T.api('POST', '/api/admin/locale/ia/prova').then(function (p) {      // si prova subito che risponda
+          msg('ia', 'Salvato: ' + r.ia_nome + ' risponde (' + p.modello + ').', true);
+          if (nuovo && T.festaIA) T.festaIA({ nome: r.ia_nome, secondi: p.secondi });
+        }, function (e) { msg('ia', 'Salvato, ma la prova non è riuscita: ' + errore(e)); });
+      }, function (e) { msg('ia', errore(e)); }).then(function () { return app().aggiornaIo(); }).then(carica);
     } else if (g === 'carica') {
       msg('carica', 'Caricamento in corso…', true); disegna();
       T.api('POST', '/api/admin/dati/carica', d).then(function (r) { msg('carica', 'Archivio caricato: installazione di ' + r.mese + ' avviata.', true); },
@@ -238,6 +252,7 @@
     var g = b.getAttribute('data-g'), id = b.getAttribute('data-id'), v = b.getAttribute('data-v');
     if (g === 'sotto') { st.sotto = v; st.registro = null; disegna(); carica(); }
     else if (g === 'cambia-chiave') { st.cambiaChiave = true; disegna(); }
+    else if (g === 'guida-gemini') { if (T.guidaGemini) T.guidaGemini(); }
     else if (g === 'controlla-versioni') { b.disabled = true; msg('programma', ''); st.agg = null; disegna(); controllaVersioni(true); }
     else if (g === 'modelli-ia') {
       b.disabled = true; msg('ia', 'Leggo l\'elenco dei modelli…', true); disegna();

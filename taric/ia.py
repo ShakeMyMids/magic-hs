@@ -222,19 +222,21 @@ class ServizioIA:
         f = {"gemini": self._gemini, "anthropic": self._anthropic, "openai": self._openai}[self.cfg.ia_fornitore]
         return f(modello, contesto, prompt, token_massimi, schema)
 
-    def prova(self) -> dict[str, Any]:
-        """Breve richiesta di prova al servizio configurato (pagina Impostazioni); non conta come classificazione."""
+    def prova(self, livello: str = "rapido") -> dict[str, Any]:
+        """Breve richiesta di prova al servizio configurato (pagina Impostazioni), con il modello rapido o con quello
+        principale; non conta come classificazione."""
         if not self.disponibile:
             raise ErroreIA("not_configured", 503)
+        modello = self.cfg.modello if livello == "standard" else self.cfg.modello_rapido
         inizio = adesso()
-        r = self._chiama(self.cfg.modello_rapido, "", 'Rispondi con questo oggetto JSON: {"ok": true}', 1024, "prova")
+        r = self._chiama(modello, "", 'Rispondi con questo oggetto JSON: {"ok": true}', 1024, "prova")
         if r.rifiutata:
             raise ErroreIA("refused", 422)
         valore = estrai_json(r.testo) if r.testo.strip() else None
         if valore is None:
             raise ErroreIA("empty_completion", 502)
         return {"risposta": valore, "secondi": round((adesso() - inizio).total_seconds(), 1),
-                "modello": self.cfg.modello_rapido, "token_in": r.token_in, "token_out": r.token_out}
+                "modello": modello, "token_in": r.token_in, "token_out": r.token_out}
 
     def chiedi(self, utente: sqlite3.Row, prompt: str, livello: str, contesto: str = "", schema: str | None = None,
                operazione: str = "", tipo: str = "classifica") -> dict[str, Any]:

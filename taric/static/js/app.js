@@ -251,6 +251,11 @@ function impostaIA() {
     ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
 }
+/* IA non attiva: la guida alla chiave gratuita di Gemini (js/attiva-ia.js) */
+function pulsanteGuida() {
+  var ia = state.utente && state.utente.ia;
+  return ia && !ia.configurata && T.guidaGemini ? '<div class="fila"><button class="btn sm" type="button" data-act="guida-ia">' + T.icona('scintille') + 'Attivala gratis con Google Gemini</button></div>' : '';
+}
 function aggiornaIo() {
   return T.api('GET', '/api/io').then(function (u) { state.utente = u; impostaIA(); renderMsg(); return u; }, function () { return state.utente; });
 }
@@ -824,9 +829,9 @@ function renderStato() {
 }
 function renderMsg() {
   var h = '';
-  if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>';
+  if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>' + (state.error === state.aiMotivo ? pulsanteGuida() : '');
   var ia = state.utente && state.utente.ia;
-  if (state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
+  if (state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>' + pulsanteGuida();
   if (state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Classificazioni con l\'IA questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
   $('#msg').innerHTML = h;
 }
@@ -1077,6 +1082,7 @@ document.addEventListener('click', function (ev) {
     state.qmsg = ''; state.answers = state.answers.concat(add); renderFornite(); classifica(true);
   }
   else if (act === 'traduci') traduci();
+  else if (act === 'guida-ia') { if (T.guidaGemini) T.guidaGemini(); }
   else if (act === 'preferito') {
     var pc = t.getAttribute('data-c'), cera = state.preferiti[pc];
     if (cera) delete state.preferiti[pc]; else state.preferiti[pc] = { nota: '' };

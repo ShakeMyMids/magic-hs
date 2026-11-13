@@ -107,7 +107,7 @@ class Gestore(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         corpo = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
         chiave = self.headers.get("x-api-key") or self.headers.get("x-goog-api-key") or (self.headers.get("authorization") or "").replace("Bearer ", "")
-        if chiave != "chiave-finta":
+        if not chiave.startswith("chiave-finta"):         # «chiave-finta», anche con un seguito (guida di Gemini)
             self._json(401, {"error": {"message": "API key not valid"}})
             return
         if ":generateContent" in self.path:

@@ -62,6 +62,9 @@ e pagamenti (storia di git fino al tag `v1.2.1`), né la cartella condivisa con 
   viceversa). `T.web` vale nel sito: nasconde ciò che riguarda il programma (Chiudi, scheda Programma, Registro).
   `sw.js` (completato da `sito.py`): prima la rete per le pagine, prima la copia salvata per `dati/<versione>/`.
   `strumenti/sito.py` rende relativi i percorsi, mette la CSP nella pagina e i dati degli ultimi mesi in `dati/`;
+  `js/attiva-ia.js` (sito e programma): guida alla chiave gratuita di Gemini (`T.guidaGemini`, salva e prova i due
+  modelli con `/api/admin/locale/ia/prova?livello=standard`) e festa dell'IA collegata (`T.festaIA`, scena `T.festa()`
+  di `disegni.js`, animazioni `.festa` in `app.css` con lo stato finale uguale a quello senza animazioni);
   `.github/workflows/sito.yml` lo pubblica su GitHub Pages (anche dopo ogni mese nuovo di `dati.yml`).
 - `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/`), `locale.html` (aperta senza la chiave
   dell'avvio), `attesa.html` con `js/attesa.js` (dati non ancora pronti), `js/comune.js` (chiamate API, tema, logo),

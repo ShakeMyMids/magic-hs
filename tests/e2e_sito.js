@@ -1,6 +1,7 @@
 // Prova nel browser della versione sito: niente programma sul PC, tutto nel browser. IA finta su un altro indirizzo
 // (chiamate dal browser con CORS, come i servizi veri), storico e preferiti che restano dopo il ricaricamento,
-// esporta e importa, i tre fornitori, uso senza rete (service worker), telefono e tema scuro.
+// esporta e importa, i tre fornitori, la guida alla chiave di Gemini con la festa finale, uso senza rete (service
+// worker), telefono e tema scuro. Le chiamate a Gemini della guida vanno al servizio finto.
 // Uso: python strumenti/sito.py --uscita P/magic-hs dati-AAAA-MM-01.zip
 //      python tests/finto_claude.py 9100 &      python -m http.server 8800 --bind 127.0.0.1 --directory P &
 //      node tests/e2e_sito.js http://localhost:8800/magic-hs/ cartella-schermate
@@ -24,6 +25,10 @@ async function classifica(p, testo) {
 (async () => {
   const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light', acceptDownloads: true });
+  await ctx.route('https://generativelanguage.googleapis.com/**', async (route) => {     // Gemini della guida: servizio finto
+    const r = await route.fetch({ url: route.request().url().replace('https://generativelanguage.googleapis.com', IA) });
+    await route.fulfill({ response: r });
+  });
   const p = await ctx.newPage();
   p.on('pageerror', e => errori.push('errore JS: ' + e.message));
   p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errori.push('console: ' + m.text()); });
@@ -42,24 +47,50 @@ async function classifica(p, testo) {
   ok(true, 'senza IA: dove sceglierla');
   await p.screenshot({ path: out + '/1-classifica.png' });
 
+  // guida alla chiave gratuita di Gemini, dalla Classifica
+  await p.click('[data-act="guida-ia"]');
+  await p.waitForSelector('.finestra.guida');
+  ok(await p.isVisible('.finestra.guida a[href="https://aistudio.google.com/apikey"]') && await p.isVisible('text=termini dell\'API Gemini'), 'guida con il collegamento ad AI Studio e i termini per l\'Europa');
+  await p.fill('.guida input[name=chiave]', 'corta');
+  await p.click('.guida button[type=submit]');
+  await p.waitForSelector('text=La chiave sembra incompleta');
+  await p.fill('.guida input[name=chiave]', 'chiave-sbagliata-1234567890');
+  await p.click('.guida button[type=submit]');
+  await p.waitForSelector('text=Google non accetta questa chiave', { timeout: 20000 });
+  ok(true, 'chiavi sbagliate: messaggi chiari');
+  await p.screenshot({ path: out + '/1b-guida.png' });
+  await p.fill('.guida input[name=chiave]', 'chiave-finta-gemini-1234567890');
+  await p.click('.guida button[type=submit]');
+  await p.waitForSelector('.finestra.festa >> text=Intelligenza artificiale collegata', { timeout: 20000 });
+  ok(!(await p.$('.finestra.guida')), 'guida chiusa, festa per l\'IA collegata');
+  await p.waitForTimeout(5200);
+  await p.screenshot({ path: out + '/1c-festa.png' });
+  await p.click('.festa [data-f="classifica"]');
+  await p.waitForFunction(() => document.activeElement && document.activeElement.id === 'q');
+  ok(!(await p.$('.velo')) && !(await p.isVisible('[data-act="guida-ia"]')), 'dalla festa alla Classifica, senza più l\'avviso');
+  await classifica(p, 'trapano a percussione con Gemini');
+  ok(true, 'classificazione con la chiave della guida');
+
   // impostazioni: servizio compatibile OpenAI su un altro indirizzo
   await p.click('#tab-gestione');
   await p.waitForSelector('form[data-g="ia-locale"]');
   ok((await p.$$('.sotto button')).length === 2 && !(await p.isVisible('text=Registro')), 'solo IA e dati TARIC nelle impostazioni');
+  ok(await p.isVisible('text=In uso: gemini-3.7-flash'), 'Gemini collegato dalla guida');
   ok(await p.isVisible('text=La chiave resta in questo browser'), 'nota sulla chiave nel browser');
   await p.selectOption('select[name=fornitore]', 'openai');
   await p.fill('input[name=url]', IA + '/v1');
   await p.fill('input[name=modello]', 'finto-modello');
   await p.fill('input[name=chiave]', 'chiave-sbagliata-1234');
   await p.click('form[data-g="ia-locale"] button[type=submit]');
-  await p.waitForSelector('text=Salvato: ');
-  await p.click('button[data-g="prova-ia"]');
-  await p.waitForSelector('text=Il servizio rifiuta la chiave', { timeout: 15000 });
-  ok(true, 'chiave sbagliata: messaggio chiaro');
+  await p.waitForSelector('text=la prova non è riuscita', { timeout: 20000 });
+  ok(await p.isVisible('text=Il servizio rifiuta la chiave') && !(await p.$('.festa')), 'chiave sbagliata: prova automatica, messaggio chiaro, niente festa');
   await p.click('button[data-g="cambia-chiave"]');
   await p.fill('input[name=chiave]', 'chiave-finta');
   await p.click('form[data-g="ia-locale"] button[type=submit]');
-  await p.waitForSelector('text=Salvato: ');
+  await p.waitForSelector('.finestra.festa', { timeout: 20000 });
+  await p.click('.festa [data-f="chiudi"]');
+  await p.waitForSelector('text=risponde (finto-modello)', { timeout: 10000 });
+  ok(true, 'chiave nuova: prova riuscita e festa');
   ok(await p.isVisible('text=Chiave salvata: …inta'), 'chiave mascherata');
   await p.click('button[data-g="prova-ia"]');
   await p.waitForSelector('text=Il servizio risponde', { timeout: 15000 });
@@ -82,7 +113,7 @@ async function classifica(p, testo) {
   await p.waitForSelector('button[data-act="preferito"][aria-pressed="true"]');
   await p.click('#tab-profilo');
   await p.waitForSelector('.voce >> text=trapano a percussione elettrico', { timeout: 8000 });
-  ok(await p.isVisible('text=1 classificazione a'), 'uso del mese nel profilo');
+  ok(await p.isVisible('text=2 classificazioni a'), 'uso del mese nel profilo');
   // tutto resta dopo il ricaricamento
   await ricarica(p);
   await p.click('#tab-profilo');
@@ -95,13 +126,13 @@ async function classifica(p, testo) {
   const file = out + '/esportazione.json';
   await scarico.saveAs(file);
   const esportato = JSON.parse(fs.readFileSync(file, 'utf8'));
-  ok(esportato.formato === 'magic-hs' && esportato.storico.length === 1 && esportato.preferiti.length === 1 && esportato.profilo.nome === 'Mario Rossi', 'esportazione');
+  ok(esportato.formato === 'magic-hs' && esportato.storico.length === 2 && esportato.preferiti.length === 1 && esportato.profilo.nome === 'Mario Rossi', 'esportazione');
   await p.click('button[data-p="svuota"]');
   await p.waitForSelector('text=Ancora nessuna classificazione.');
   await p.click('button[data-p="togli-preferito"]');
   await p.waitForSelector('text=Nessuna voce preferita.');
   await p.setInputFiles('input[data-p="importa"]', file);
-  await p.waitForSelector('text=Importate 1 classificazione e 1 preferito.');
+  await p.waitForSelector('text=Importate 2 classificazioni e 1 preferito.');
   await p.waitForSelector('.voce >> text=trapano a percussione elettrico');
   ok((await p.$$('[data-p="togli-preferito"]')).length === 1, 'importazione di storico e preferiti');
   await p.setInputFiles('input[data-p="importa"]', file);

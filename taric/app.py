@@ -600,9 +600,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             raise Errore(e.stato_http, "Non riesco a leggere l'elenco dei modelli: controlla chiave e indirizzo, oppure scrivi il nome a mano.", e.codice)
 
     @app.post("/api/admin/locale/ia/prova")
-    def admin_locale_prova(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+    def admin_locale_prova(livello: Literal["rapido", "standard"] = "rapido", a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         try:
-            return json_ok(**ia.prova())
+            return json_ok(**ia.prova(livello))
         except ErroreIA as e:
             messaggio = {
                 "not_configured": "Nessun servizio IA impostato: scegline uno e salva.",

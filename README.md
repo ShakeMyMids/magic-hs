@@ -101,7 +101,11 @@ Da Linux, macOS o Windows: `python strumenti/pacchetto_windows.py` crea in `dist
 
 ## Intelligenza artificiale
 
-Ognuno la sceglie sul suo PC, in *Impostazioni → Intelligenza artificiale*. Senza IA restano nomenclatura, misure, ricerca per codice, storico e preferiti.
+Ognuno la sceglie per sé, in *Impostazioni → Intelligenza artificiale*. Senza IA restano nomenclatura, misure, ricerca per codice, storico e preferiti.
+
+**Guida alla chiave gratuita di Gemini**: quando l'IA non è attiva, in Classifica e in Impostazioni c'è il pulsante *Attivala gratis con Google Gemini* / *Guida passo passo*: spiega come creare la chiave in [Google AI Studio](https://aistudio.google.com/apikey) e la si incolla lì. *Collega* la salva e prova subito il modello rapido e quello principale. Il piano gratuito ha limiti di richieste al minuto e al giorno; nell'Unione europea, in Svizzera e nel Regno Unito i [termini dell'API Gemini](https://ai.google.dev/gemini-api/terms) chiedono il piano a pagamento a chi rende disponibile un'applicazione a quelle persone: per l'uso in azienda va chiesto a chi segue contratti e privacy (la guida lo dice).
+
+Quando un servizio nuovo (o una chiave nuova) risponde alla prova, MAGIC HS lo festeggia: la gru carica sulla nave il container dell'IA, timbro «IA attiva» e sirena (con il «movimento ridotto» del sistema si vede subito la scena finale). *Salva* prova sempre il servizio da solo.
 
 | Servizio | Note |
 |---|---|

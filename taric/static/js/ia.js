@@ -272,14 +272,14 @@
   };
   function conUso(e, r) { e.uso = r; return e; }
 
-  /* breve richiesta di prova (pagina Impostazioni); non conta come classificazione */
-  Servizio.prototype.prova = function (cfg) {
+  /* breve richiesta di prova (pagina Impostazioni), con il modello rapido o con il principale; non conta come classificazione */
+  Servizio.prototype.prova = function (cfg, livello) {
     if (!cfg.disponibile) return Promise.reject(errore('not_configured', 503));
-    var inizio = Date.now();
-    return this.chiama(cfg, cfg.modello_rapido, '', 'Rispondi con questo oggetto JSON: {"ok": true}', 1024, 'prova').then(function (r) {
+    var inizio = Date.now(), modello = livello === 'standard' ? cfg.modello : cfg.modello_rapido;
+    return this.chiama(cfg, modello, '', 'Rispondi con questo oggetto JSON: {"ok": true}', 1024, 'prova').then(function (r) {
       if (r.rifiutata) throw errore('refused', 422);
       if (!String(r.testo).trim()) throw errore('empty_completion', 502);
-      return { risposta: estraiJson(r.testo), secondi: Math.round((Date.now() - inizio) / 100) / 10, modello: cfg.modello_rapido, token_in: r.tin, token_out: r.tout };
+      return { risposta: estraiJson(r.testo), secondi: Math.round((Date.now() - inizio) / 100) / 10, modello: modello, token_in: r.tin, token_out: r.tout };
     });
   };
 

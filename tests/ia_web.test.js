@@ -138,6 +138,9 @@ test('prova ed elenco dei modelli', async () => {
   let x = servizio([{ corpo: { choices: [{ message: { content: '{"ok": true}' } }], usage: { prompt_tokens: 3, completion_tokens: 2 } } }]);
   const r = await x.s.prova(OPENAI);
   assert.deepStrictEqual([r.risposta, r.modello], [{ ok: true }, 'gpt-classifica']);
+  x = servizio([{ corpo: { content: [{ type: 'text', text: '{"ok": true}' }], usage: {} } }]);
+  assert.strictEqual((await x.s.prova(CLAUDE, 'standard')).modello, 'claude-sonnet-5-5');
+  assert.strictEqual(x.chiamate[0].corpo.model, 'claude-sonnet-5-5');
   x = servizio([{ corpo: { models: [{ name: 'models/gemini-3.7-flash', supportedGenerationMethods: ['generateContent'] },
                                     { name: 'models/text-embedding-9', supportedGenerationMethods: ['embedContent'] }] } }]);
   assert.deepStrictEqual(await x.s.modelli(GEMINI), ['gemini-3.7-flash']);

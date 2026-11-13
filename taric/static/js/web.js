@@ -271,7 +271,7 @@
       });
     }
     if (percorso === '/api/admin/locale/ia/prova' && metodo === 'POST') {
-      return servizio.prova(iaCfg()).then(function (r) { r.ok = true; return r; }, function (e) { throw erroreIA(e, MESSAGGI_PROVA); });
+      return servizio.prova(iaCfg(), q.get('livello') === 'standard' ? 'standard' : 'rapido').then(function (r) { r.ok = true; return r; }, function (e) { throw erroreIA(e, MESSAGGI_PROVA); });
     }
     if (percorso === '/api/admin/dati' && metodo === 'GET') {
       return { attiva: DATI, versioni: versioni.map(function (x) { var i = infoVersione(x) || {}; return Object.assign({}, i, { versione: x, attiva: x === DATI }); }),
