@@ -795,8 +795,7 @@ function boxMisure(sel) {
     '<select class="campo" id="paese" aria-label="Paese">' + opt + '</select>' +
     '<div class="fila"><button class="chip" type="button" data-act="flusso" data-f="import" aria-pressed="' + (!exp) + '">Importazione</button>' +
     '<button class="chip" type="button" data-act="flusso" data-f="export" aria-pressed="' + exp + '">Esportazione</button></div></div>' +
-    '<div class="box s8"><div class="lab">' + T.icona('percento') + 'Misure TARIC al ' + dataIt(oggiNum()) + ' <span class="dx">dati ufficiali UE estratti il ' + esc(DATA_IT) + '</span></div>' +
-    '<p class="nota">Dazi e controlli dell\'Unione per il codice e il paese scelti. IVA, accise e misure nazionali non fanno parte del TARIC: per quelle usa AIDA.</p>' + links + '</div>' +
+    '<div class="box s8"><div class="lab">' + T.icona('percento') + 'Misure TARIC al ' + dataIt(oggiNum()) + '</div>' + links + '</div>' +
     '<div class="box"><div class="lab"><b>47</b> Calcolo delle imposizioni <span class="dx">' + (exp ? 'esportazione' : 'dazi all\'importazione') + '</span></div>' + h47 + '</div>' +
     '<div class="box"><div class="lab"><b>44</b> Documenti presentati, certificati e autorizzazioni <span class="dx">' + (n44 ? n44 + (n44 === 1 ? ' misura' : ' misure') + ' di controllo' : 'divieti, restrizioni e controlli') + '</span></div>' + h44 + '</div>' +
     '</div>';
@@ -882,7 +881,6 @@ function renderEsito() {
     (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' : '') + '</div>';
   var fineCod = (D.fine && D.fine[sel.code]) || 0;
   if (i >= 0 && fineCod) h += '<p class="avviso">' + (fineCod < oggiNum() ? 'Questo codice ha cessato di valere il ' : 'Questo codice cessa di valere il ') + dataIt(fineCod) + '.</p>';
-  h += '<p class="nota">Dati TARIC al ' + DATA_IT + '. Prima di dichiarare controlla il codice su AIDA.</p>';
   h += '</div>';
 
   /* --- box 41 --- */
@@ -895,7 +893,7 @@ function renderEsito() {
   else if (!uc) h += '<p class="cosa">Nessuna</p><p class="nota">Si dichiara solo la massa netta.</p>';
   else { var us = UNITA_SUP[uc.trim()] || uc.trim(); h += '<p class="cosa">' + esc(us) + '</p><p class="nota">' + esc(UNITA_IT[us] || '') + '</p>'; }
   h += '<div class="lab" style="margin-top:6px">Stato del codice</div>';
-  h += i < 0 ? '<p class="nota">Non trovato.</p>' : isLeaf(i) ? '<p class="nota">Dichiarabile nella nomenclatura al ' + DATA_IT + '.</p>' : '<p class="nota">Voce intermedia con ' + kids(i).length + ' sottovoci.</p>';
+  h += i < 0 ? '<p class="nota">Non trovato.</p>' : isLeaf(i) ? '<p class="nota">Dichiarabile.</p>' : '<p class="nota">Voce intermedia con ' + kids(i).length + ' sottovoci.</p>';
   h += '</div>';
 
   /* --- path --- */
@@ -903,7 +901,7 @@ function renderEsito() {
     var p = pathOf(i);
     var inEN = p.filter(function (j) { return INGL[j]; });
     var daTradurre = inEN.some(function (j) { return !state.trad[j]; });
-    h += '<div class="box"><div class="lab">' + T.icona('albero') + 'Percorso nella nomenclatura <span class="dx">' + (inEN.length ? 'testo ufficiale UE: le righe con la sigla EN non hanno ancora il testo italiano' : 'testo ufficiale UE in italiano') + '</span></div><div class="perc">' +
+    h += '<div class="box"><div class="lab">' + T.icona('albero') + 'Percorso nella nomenclatura' + (inEN.length ? ' <span class="dx">le righe EN non hanno ancora il testo italiano</span>' : '') + '</div><div class="perc">' +
       p.map(function (j, k) { return rigaPerc(j, k === p.length - 1); }).join('') + '</div>';
     if (state.warn) h += '<p class="avviso">' + esc(state.warn) + '</p>';
     if (sampleFn && daTradurre) h += '<div class="fila"><button class="btn sm" type="button" data-act="traduci"' + (state.tradBusy ? ' disabled' : '') + '>' + T.icona('globo') + (state.tradBusy ? 'Traduco…' : 'Traduci le righe in inglese') + '</button><span class="nota">Traduzione automatica, non ufficiale.</span></div>';
@@ -918,7 +916,7 @@ function renderEsito() {
   /* --- alternatives and questions --- */
   if (r) {
     var tutte = [r.best].concat(r.alts);
-    h += '<div class="box s7"><div class="lab">' + T.icona('regole') + 'Voci a confronto <span class="dx">tocca una riga per aprirla</span></div><div class="lista">' + tutte.map(function (a, k) {
+    h += '<div class="box s7"><div class="lab">' + T.icona('regole') + 'Voci a confronto</div><div class="lista">' + tutte.map(function (a, k) {
       var ai = byCode.has(a.code) ? byCode.get(a.code) : -1;
       return '<button class="alt" type="button" data-act="alt" data-c="' + esc(a.code) + '" aria-pressed="' + (a.code === sel.code) + '">' +
         '<span class="cod">' + esc(grp(a.code)) + '</span><span class="it">' + esc(a.it || (ai >= 0 ? DESC[ai] : '')) + '</span>' +
@@ -1126,14 +1124,8 @@ function start() {
   var ora = new Date(), att = ora.getDate() < 10 ? new Date(ora.getFullYear(), ora.getMonth() - 1, 1) : ora;
   var atteso = att.getFullYear() + '-' + ('0' + (att.getMonth() + 1)).slice(-2);
   if (DATA_ISO && DATA_ISO.slice(0, 7) < atteso) { txt += ' · manca l\'aggiornamento di questo mese'; $('#dato').classList.add('tardi'); }
-  $('#dato').innerHTML = T.icona('calendario') + esc(txt); $('#dato2').textContent = N.toLocaleString('it-IT') + ' righe, ' + (m.dichiarabili || 0).toLocaleString('it-IT') + ' codici dichiarabili, situazione al ' + DATA_IT;
-  $('#nota-nom').textContent = 'Testo ufficiale UE in italiano' +
-    (N_EN ? '; le ' + N_EN.toLocaleString('it-IT') + ' righe create o modificate dopo il ' + IT_DATA + ' sono ancora in inglese (sigla EN)' : '') +
-    '. La ricerca ignora accenti e differenze tra singolare e plurale.';
-  $('#fonte').textContent = 'Nomenclatura e misure: Commissione europea, DG TAXUD, estrazione mensile TARIC con situazione al ' + DATA_IT + ', nella copia pubblicata dal progetto taric-opendata su GitHub. ' +
-    'Nomenclatura, certificati, aree geografiche, note e codici addizionali sono nel testo ufficiale italiano' +
-    (N_EN ? '; per la nomenclatura il testo italiano è quello dell\'estrazione del ' + IT_DATA + ', quindi le ' + N_EN.toLocaleString('it-IT') + ' righe create o modificate dopo restano in inglese (sigla EN)' : '') +
-    '. I nomi dei tipi di misura e delle sezioni sono tradotti dalla pagina. IVA, accise e misure nazionali non fanno parte del TARIC.';
+  $('#dato').innerHTML = T.icona('calendario') + esc(txt);
+  $('#fonte').textContent = 'Dati TARIC dell\'UE (DG TAXUD) al ' + DATA_IT + '.';
   if (!N) { state.error = 'Non riesco a caricare la nomenclatura. Ricarica la pagina.'; }
   if (state.country && !RIF.aree[state.country]) state.country = '';
   vista(location.hash.replace('#', '') || 'classifica');
@@ -1184,9 +1176,10 @@ function chiuso(daSolo) {
   if (state.chiuso) return;
   state.chiuso = true;
   if (vivoT) { clearInterval(vivoT); vivoT = null; }
-  $('main').innerHTML = '<div class="foglio"><div class="box chiuso" role="status"><div class="lab">' + T.icona('spegni') + 'MAGIC HS è chiuso</div>' +
-    '<p class="cosa">' + (daSolo ? 'Il programma si è chiuso perché non lo usavi da un po\' o perché è arrivata una nuova versione.' : 'Puoi chiudere questa scheda del browser.') + '</p>' +
-    '<p class="nota">Per riaprirlo fai doppio clic su <b>Avvia MAGIC HS</b>, nella cartella condivisa di OneDrive o sul desktop. Storico e preferiti restano salvati su questo computer.</p></div></div>';
+  $('main').innerHTML = '<div class="foglio"><div class="box chiuso" role="status">' + (T.scena ? '<div class="scena">' + T.scena() + '</div>' : '') +
+    '<div class="lab">' + T.icona('spegni') + 'MAGIC HS è chiuso</div>' +
+    '<p class="cosa">' + (daSolo ? 'Si è chiuso perché non lo usavi da un po\' o perché è arrivata una nuova versione.' : 'Puoi chiudere questa scheda del browser.') + '</p>' +
+    '<p class="nota">Per riaprirlo: doppio clic su <b>Avvia MAGIC HS</b>.</p></div></div>';
   ['.schede', '#esci'].forEach(function (s) { var e = $(s); if (e) e.hidden = true; });
 }
 var vivoT = null;
@@ -1206,7 +1199,7 @@ function proponiGestione() {
   var d = document.createElement('div');
   d.className = 'foglio'; d.id = 'gestisco-io';
   d.innerHTML = '<div class="box"><div class="lab">' + T.icona('cartella') + 'Chi gestisce MAGIC HS?</div>' +
-    '<p class="nota">Nessuno pubblica ancora gli aggiornamenti per i colleghi. Se sei tu a gestire MAGIC HS (hai creato tu la cartella condivisa), premi il pulsante: da questo PC pubblicherai i dati di ogni mese, l\'intelligenza artificiale e le nuove versioni. Se sei un collega, ignora questo messaggio.</p>' +
+    '<p class="nota">Nessuno pubblica ancora gli aggiornamenti per i colleghi. Se gestisci tu MAGIC HS premi il pulsante; altrimenti ignora questo messaggio.</p>' +
     '<div class="fila"><button class="btn pri" type="button" id="gestisco-io-si">' + T.icona('spunta') + 'Gestisco io MAGIC HS</button></div><div id="gestisco-io-esito"></div></div>';
   v.insertBefore(d, v.firstChild);
   $('#gestisco-io-si').addEventListener('click', function () {
@@ -1223,7 +1216,6 @@ T.api('GET', '/api/io').then(function (u) {
   $('#chi-iniziali').parentNode.title = u.nome;
   tieniVivo();
   if (u.locale.puo_gestire) proponiGestione();
-  if (u.ia && u.ia.nome) $('#ia-nome').textContent = ' (' + u.ia.nome.replace(/ \((.+)\)$/, ' di $1') + ')';
   $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
   T.tema(u.preferenze.tema);
   state.country = u.preferenze.paese || '';

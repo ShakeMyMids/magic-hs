@@ -37,8 +37,11 @@ i nomi sono in **italiano**.
   Windows), il flusso `.github/workflows/windows.yml` li prova su Windows e li pubblica per i tag `v*`.
 - `taric/nomenclatura_it.json`: testo ufficiale italiano della nomenclatura (estrazione del 1° luglio 2026).
 - `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/`), `locale.html` (aperta senza la chiave
-  dell'avvio), `attesa.html` con `js/attesa.js` (dati non ancora pronti), `js/comune.js` (chiamate API), `js/app.js`
-  (classificazione, nomenclatura, misure), `js/profilo.js`, `js/gestione.js`.
+  dell'avvio), `attesa.html` con `js/attesa.js` (dati non ancora pronti), `js/comune.js` (chiamate API, tema, logo),
+  `js/disegni.js` (scena con nave, gru, treno, camion e aereo, inserita negli elementi `data-scena`), `js/app.js`
+  (classificazione, nomenclatura, misure), `js/profilo.js`, `js/gestione.js`. Tema «porto»: blu marina e arancio dei
+  container, colori solo nelle variabili di `css/app.css` (anche quelle `--d-*` delle illustrazioni). Testi brevi: niente
+  spiegazioni ovvie nelle pagine. Le icone PNG si rigenerano dal logo di `icons/icona.svg`.
 
 ## Regole da rispettare
 

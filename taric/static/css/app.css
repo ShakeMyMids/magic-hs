@@ -1,7 +1,7 @@
 /* MAGIC HS - stile.
-   Idea: carta da pratiche doganale in grigio caldo (mai bianco pieno), verde petrolio come accento, aria tra le schede.
-   Un solo protagonista: il codice a 10 cifre, a gruppi 4-2-2-2 come nel logo; la casella TARIC e il timbro
-   della proposta portano l'unico colore di contrasto, il viola dell'inchiostro dei timbri.
+   Idea: il porto e le merci in viaggio. Grigio acciaio chiaro (mai bianco pieno), blu marina come accento, aria tra
+   le schede; navi, aerei, treni e camion nelle illustrazioni (js/disegni.js). Un solo protagonista: il codice a 10
+   cifre; la casella TARIC e il timbro della proposta portano l'unico colore di contrasto, l'arancio dei container.
    Carattere unico: Archivo (larghezza variabile), con cifre tabellari per i codici. */
 
 /* Font locale (SIL Open Font License, vedi fonts/OFL-Archivo.txt): nessun servizio esterno */
@@ -14,25 +14,27 @@
 
 /* ================================================================ colori */
 :root{
-  --fondo:#dfdad0;        /* scrivania: grigio caldo, niente bianco pieno */
-  --carta:#ece8e0;        /* schede */
-  --carta-2:#e4dfd5;      /* riquadri dentro le schede */
-  --inchiostro:#2a2620;
-  --secondario:#615a4f;
-  --linea:#d0c9bc;
-  --linea-forte:#bfb7a8;
-  --accento:#2e6870;      /* verde petrolio */
-  --accento-forte:#23525a;
-  --accento-tenue:#d3e0dc;
-  --timbro:#6a4c93;       /* inchiostro dei timbri: solo TARIC e proposta */
-  --timbro-tenue:#ddd5ea;
-  --ambra:#7a5410;  --ambra-tenue:#ecdcbc;
-  --rosso:#9a3f34;  --rosso-tenue:#ecd2cb;
-  --su-accento:#f6f3ed;
-  --marchio-t:#d9cdf5;
-  --ombra:0 1px 2px rgba(60,48,30,.06);
-  --ombra-alta:0 18px 40px -24px rgba(60,48,30,.45),0 2px 6px -2px rgba(60,48,30,.1);
-  --vetro:rgba(223,218,208,.86);
+  --fondo:#e1e6eb;        /* banchina: grigio acciaio chiaro, niente bianco pieno */
+  --carta:#eef1f4;        /* schede */
+  --carta-2:#e5eaef;      /* riquadri dentro le schede */
+  --inchiostro:#17222e;
+  --secondario:#4f5d6c;
+  --linea:#cfd7df;
+  --linea-forte:#b8c3cf;
+  --accento:#1b5584;      /* blu marina */
+  --accento-forte:#144468;
+  --accento-tenue:#d5e2ee;
+  --timbro:#a4440c;       /* arancio dei container: solo TARIC e proposta */
+  --timbro-tenue:#f7ddca;
+  --ambra:#7a5410;  --ambra-tenue:#efe0c2;
+  --rosso:#9a3f34;  --rosso-tenue:#f0d6d0;
+  --su-accento:#f3f6f9;
+  --marchio-t:#f08a3c;
+  /* illustrazioni: mezzi e container */
+  --d-tratto:#1b5584; --d-cont-1:#e9772e; --d-cont-2:#2f7bbf; --d-cont-3:#9fb4c8; --d-mare:#c3d6e8; --d-cielo:#dbe6f0; --d-nuvola:#f5f8fb;
+  --ombra:0 1px 2px rgba(20,40,60,.07);
+  --ombra-alta:0 18px 40px -24px rgba(20,40,60,.45),0 2px 6px -2px rgba(20,40,60,.1);
+  --vetro:rgba(225,230,235,.86);
   --f:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
   --f-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --r-l:18px; --r-m:12px; --r-s:8px;
@@ -41,19 +43,21 @@
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --fondo:#171512; --carta:#1f1c18; --carta-2:#26221d; --inchiostro:#ebe5da; --secondario:#a89f91;
-    --linea:#332e27; --linea-forte:#433c33; --accento:#7fbcc2; --accento-forte:#a3d3d7; --accento-tenue:#1c3133;
-    --timbro:#bba8ea; --timbro-tenue:#2b2539; --ambra:#e1b765; --ambra-tenue:#302717; --rosso:#ee9b91; --rosso-tenue:#3a231f;
-    --su-accento:#141210; --marchio-t:#3b3352; --ombra:0 1px 2px rgba(0,0,0,.3); --ombra-alta:0 22px 44px -26px rgba(0,0,0,.85),0 2px 6px -2px rgba(0,0,0,.4);
-    --vetro:rgba(23,21,18,.84); color-scheme:dark;
+    --fondo:#0d151e; --carta:#141e29; --carta-2:#1a2633; --inchiostro:#e2e9f0; --secondario:#98a8b8;
+    --linea:#243241; --linea-forte:#324356; --accento:#7fb8e6; --accento-forte:#a8d0f1; --accento-tenue:#16304a;
+    --timbro:#f2a66b; --timbro-tenue:#3a2617; --ambra:#e1b765; --ambra-tenue:#302717; --rosso:#ee9b91; --rosso-tenue:#3a231f;
+    --su-accento:#0a1119; --marchio-t:#f08a3c; --ombra:0 1px 2px rgba(0,0,0,.3); --ombra-alta:0 22px 44px -26px rgba(0,0,0,.85),0 2px 6px -2px rgba(0,0,0,.4);
+    --d-tratto:#7fb8e6; --d-cont-1:#e9772e; --d-cont-2:#3d8fd6; --d-cont-3:#4d6378; --d-mare:#17324d; --d-cielo:#122638; --d-nuvola:#1c3550;
+    --vetro:rgba(13,21,30,.84); color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --fondo:#171512; --carta:#1f1c18; --carta-2:#26221d; --inchiostro:#ebe5da; --secondario:#a89f91;
-    --linea:#332e27; --linea-forte:#433c33; --accento:#7fbcc2; --accento-forte:#a3d3d7; --accento-tenue:#1c3133;
-    --timbro:#bba8ea; --timbro-tenue:#2b2539; --ambra:#e1b765; --ambra-tenue:#302717; --rosso:#ee9b91; --rosso-tenue:#3a231f;
-    --su-accento:#141210; --marchio-t:#3b3352; --ombra:0 1px 2px rgba(0,0,0,.3); --ombra-alta:0 22px 44px -26px rgba(0,0,0,.85),0 2px 6px -2px rgba(0,0,0,.4);
-    --vetro:rgba(23,21,18,.84); color-scheme:dark;
+  --fondo:#0d151e; --carta:#141e29; --carta-2:#1a2633; --inchiostro:#e2e9f0; --secondario:#98a8b8;
+    --linea:#243241; --linea-forte:#324356; --accento:#7fb8e6; --accento-forte:#a8d0f1; --accento-tenue:#16304a;
+    --timbro:#f2a66b; --timbro-tenue:#3a2617; --ambra:#e1b765; --ambra-tenue:#302717; --rosso:#ee9b91; --rosso-tenue:#3a231f;
+    --su-accento:#0a1119; --marchio-t:#f08a3c; --ombra:0 1px 2px rgba(0,0,0,.3); --ombra-alta:0 22px 44px -26px rgba(0,0,0,.85),0 2px 6px -2px rgba(0,0,0,.4);
+    --d-tratto:#7fb8e6; --d-cont-1:#e9772e; --d-cont-2:#3d8fd6; --d-cont-3:#4d6378; --d-mare:#17324d; --d-cielo:#122638; --d-nuvola:#1c3550;
+    --vetro:rgba(13,21,30,.84); color-scheme:dark;
 }
 
 /* ================================================================ base */
@@ -166,8 +170,8 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 /* ================================================================ classifica: la domanda */
 .domanda{gap:14px}
 .domanda h2{margin:0;font:650 clamp(22px,3.2vw,28px)/1.15 var(--f);font-stretch:96%;letter-spacing:-.01em}
-.domanda .sotto-titolo{margin:-6px 0 0;color:var(--secondario);font-size:15.5px;max-width:64ch}
-.domanda .dato{position:absolute;top:20px;right:22px;display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondario)}
+.titolo-riga{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px}
+.domanda .dato{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondario)}
 .domanda{position:relative}
 .cerca-merce{position:relative}
 .cerca-merce > .ico{position:absolute;left:16px;top:17px;width:21px;height:21px;color:var(--secondario);pointer-events:none;transition:color .2s}
@@ -178,8 +182,6 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 .cerca-merce:focus-within > .ico{color:var(--accento)}
 #q::placeholder{color:var(--secondario);opacity:.75}
 .domanda .dato.tardi{color:var(--ambra);font-weight:600}
-.domanda h2{padding-right:220px}
-@media (max-width:760px){.domanda .dato{position:static;order:-1}.domanda h2{padding-right:0}}
 @media (max-width:560px){#q{font-size:17px}}
 
 /* attesa della risposta: testo dei passaggi e barra che scorre */
@@ -354,6 +356,7 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .conta{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;margin-left:2px;border-radius:10px;background:var(--timbro);color:var(--su-accento);font:700 11.5px/1 var(--f)}
 .registro{white-space:pre-wrap;font:12.5px/1.5 var(--f-mono);max-height:440px;overflow:auto;background:var(--carta-2);padding:12px 14px;margin:0;border-radius:var(--r-m)}
 .vuoto{padding:16px 0;color:var(--secondario);font-size:14.5px}
+.vuoto > .ico{width:22px;height:22px;margin-right:10px;vertical-align:-6px;color:var(--accento);opacity:.75}
 .stella{display:inline-flex}
 .c-ok{color:var(--accento)} .c-male{color:var(--rosso)}
 
@@ -391,6 +394,35 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
   .tab td .btn{margin-top:6px}
 }
 
+/* ================================================================ scena dei trasporti (js/disegni.js)
+   In cima alla scheda, a tutta larghezza: cielo, nave portacontainer, gru, treno merci, camion e aereo. */
+.scena{display:block;aspect-ratio:1200/170;min-height:76px;max-height:170px;margin:-20px -22px 2px;overflow:hidden;border-radius:var(--r-l) var(--r-l) 0 0;
+  background:linear-gradient(180deg,var(--d-cielo) 0%,color-mix(in srgb,var(--d-cielo) 40%,var(--carta)) 72%,var(--carta) 100%)}
+.scena-svg{display:block;width:100%;height:100%}
+.accesso .scena{margin:-28px -28px 4px}
+@media (max-width:560px){.scena{margin:-16px -16px 0;border-radius:16px 16px 0 0}.accesso .scena{margin:-22px -18px 0}}
+.d-t{fill:var(--d-tratto)}
+.d-c1{fill:var(--d-cont-1)} .d-c2{fill:var(--d-cont-2)} .d-c3{fill:var(--d-cont-3)}
+.d-nervo{stroke:rgba(0,0,0,.16);stroke-width:1.3}
+.d-mozzo{fill:var(--carta)} .d-oblo{fill:var(--d-cielo)}
+.d-mare{fill:var(--d-mare)} .d-banchina{fill:var(--carta-2)}
+.d-onda{fill:none;stroke:var(--d-tratto);stroke-width:2;stroke-linecap:round;opacity:.3}
+.d-nuvola{fill:var(--d-nuvola)}
+.d-scia{fill:none;stroke:var(--d-tratto);stroke-width:2;stroke-linecap:round;stroke-dasharray:2 9;opacity:.45}
+.d-gru path{fill:none;stroke:var(--d-tratto);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.d-gru .d-cavo{stroke-width:2}
+.d-suolo{stroke:var(--linea-forte);stroke-width:2}
+.d-traversa{fill:var(--d-tratto);opacity:.3}
+.d-binario{stroke:var(--d-tratto);stroke-width:3;stroke-linecap:round}
+.d-strada{stroke:var(--d-tratto);stroke-width:2.5;stroke-dasharray:14 10;opacity:.4}
+/* in viaggio (pagina d'attesa): i mezzi si muovono finché i dati non sono pronti */
+.in-viaggio .s-camion{animation:viaggio 6s linear infinite;--da:-40px;--a:180px}
+.in-viaggio .s-treno{animation:viaggio 8s linear infinite;--da:-90px;--a:60px}
+.in-viaggio .s-aereo{animation:viaggio 9s linear infinite;--da:-160px;--a:260px}
+.in-viaggio .s-nave{animation:dondola 2.6s ease-in-out infinite alternate}
+@keyframes viaggio{0%{transform:translateX(var(--da));opacity:0}12%{opacity:1}85%{opacity:1}100%{transform:translateX(var(--a));opacity:0}}
+@keyframes dondola{from{transform:translateY(0)}to{transform:translateY(2.5px)}}
+
 /* ritocchi */
 #msg:empty,.accesso #esito:empty{display:none}
 input[type="search"]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
@@ -414,7 +446,7 @@ details.piu[open]::details-content{height:auto}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.4s;animation-timing-function:ease}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms !important;animation-delay:0s !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}
-  .stato .ico,.avanza i{animation:none !important}
+  .stato .ico,.avanza i,.in-viaggio .s-camion,.in-viaggio .s-treno,.in-viaggio .s-aereo,.in-viaggio .s-nave{animation:none !important}
   ::view-transition-old(root),::view-transition-new(root){animation:none !important}
 }
 

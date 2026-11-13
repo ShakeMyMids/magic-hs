@@ -66,11 +66,11 @@
     var d = (window.TARIC_ICONE || {})[nome];
     return d ? '<svg class="ico' + (classe ? ' ' + classe : '') + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + d + '</svg>' : '';
   };
-  /* marchio di MAGIC HS: il codice a gruppi 4-2-2-2, l'ultimo (TARIC) in viola */
+  /* marchio di MAGIC HS: una nave portacontainer, i container in arancio come la casella TARIC */
   T.marchio = '<svg class="marchio" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect class="m-fondo" width="32" height="32" rx="8"/>' +
-    '<rect class="m-r" x="6" y="9" width="12" height="2.6" rx="1.3"/><rect class="m-c" x="6" y="15" width="6.56" height="9" rx="2.2"/>' +
-    '<rect class="m-c" x="13.76" y="15" width="3.28" height="9" rx="1.6"/><rect class="m-c" x="18.24" y="15" width="3.28" height="9" rx="1.6"/>' +
-    '<rect class="m-t" x="22.72" y="15" width="3.28" height="9" rx="1.6"/></svg>';
+    '<rect class="m-t" x="8.4" y="7.2" width="5.2" height="4.4" rx=".9"/><rect class="m-c" x="8.4" y="12.4" width="5.2" height="4.4" rx=".9"/><rect class="' +
+    'm-t" x="14.4" y="12.4" width="5.2" height="4.4" rx=".9"/><rect class="m-r" x="20.4" y="12.4" width="5.2" height="4.4" rx=".9"/><path class="m-c" d="M4' +
+    '.6 18h22.8l-2.9 6.4a1.6 1.6 0 0 1-1.46.95H8.96a1.6 1.6 0 0 1-1.46-.95z"/>' + '</svg>';
 
   /* tema: auto | chiaro | scuro (la pagina usa data-theme="light"/"dark") */
   var TEMI = { auto: ['auto', 'Tema: come il dispositivo'], chiaro: ['sole', 'Tema chiaro'], scuro: ['luna', 'Tema scuro'] };
@@ -80,7 +80,7 @@
   }
   function coloreBarra() {
     var m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--fondo').trim() || (scuroAttivo() ? '#171512' : '#dfdad0'));
+    if (m) m.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--fondo').trim() || (scuroAttivo() ? '#0d151e' : '#e1e6eb'));
   }
   T.temaAttuale = 'auto';
   T.tema = function (t) {
@@ -112,6 +112,10 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-ico]'), function (el) {
       el.insertAdjacentHTML('afterbegin', T.icona(el.getAttribute('data-ico')));
       el.removeAttribute('data-ico');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-scena]'), function (el) {     // js/disegni.js
+      if (T.scena) el.insertAdjacentHTML('afterbegin', T.scena(el.getAttribute('data-scena')));
+      el.removeAttribute('data-scena');
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-marchio]'), function (el) {
       el.insertAdjacentHTML('afterbegin', T.marchio);

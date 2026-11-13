@@ -64,12 +64,11 @@
     else h += '<p class="avviso">Nessun dato installato.</p>';
     if (d.in_corso) h += '<p class="esito-ok">Aggiornamento di ' + esc(d.in_corso.mese) + ' in corso: ' + esc(d.in_corso.fase) + '…</p>';
     if (st.loc) h += '<p class="nota">Pubblicati per i colleghi nella cartella condivisa: <b>' + esc(st.loc.dati.pubblicati ? st.loc.dati.pubblicati.split('-').reverse().join('/') : 'nessuno') + '</b>.</p>';
-    h += '<p class="nota">A ogni inizio mese, quando MAGIC HS è aperto su questo PC, scarica la nuova estrazione dalla fonte, la controlla e la pubblica da solo nella cartella condivisa; i colleghi la ricevono da OneDrive.' +
-      (d.prossimo ? ' Prossimo tentativo per ' + esc(d.prossimo) + ' entro dieci minuti.' : '') + '</p></div>';
+    h += (d.prossimo ? '<p class="nota">Prossimo tentativo per ' + esc(d.prossimo) + ' entro dieci minuti.</p>' : '') + '</div>';
     h += '<div class="box s4"><div class="lab">' + T.icona('aggiorna') + 'Aggiorna adesso</div><form class="modulo" data-g="aggiorna"><label>Mese (vuoto = corrente)<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Scarica e installa</button></div>' + riga('aggiorna') + '</form></div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('carica') + 'Carica a mano un\'estrazione</div><p class="nota">Se la fonte automatica non funziona: scarica dal gruppo CIRCABC «TARIC and Quota data and information» i file Excel del mese, mettili in un archivio .zip e caricalo qui. Valgono gli stessi controlli.</p>' +
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('carica') + 'Carica a mano un\'estrazione</div><p class="nota">I file Excel del mese (CIRCABC «TARIC and Quota data and information») in un archivio .zip.</p>' +
       '<form class="modulo" data-g="carica"><div class="due"><label>Archivio .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
       '<label>Mese dell\'estrazione<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label></div>' +
       '<div class="fila"><button class="btn" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Carica e installa</button></div>' + riga('carica') + '</form></div></div>';
@@ -98,19 +97,18 @@
     if (!L) return '<p class="vuoto">Carico…</p>';
     var h = '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('cartella') + 'Cartella condivisa</div>' +
       '<p class="cosa percorso">' + esc(L.condivisa) + '</p>' +
-      '<p class="nota">' + (L.editore ? 'Da questo PC puoi pubblicare: quello che metti qui (nuove versioni del programma, dati del mese, intelligenza artificiale) arriva ai colleghi tramite OneDrive.' :
-        'Da questo PC la cartella è in sola lettura.') + '</p>' +
+      '<p class="nota">' + (L.editore ? 'Da questo PC pubblichi per tutti.' : 'Da questo PC la cartella è in sola lettura.') + '</p>' +
       '<table class="tab compatta"><thead><tr><th></th><th>Su questo PC</th><th>Pubblicato per tutti</th></tr></thead><tbody>' +
       '<tr><td>Programma</td><td data-l="Su questo PC">' + esc(L.programma.in_uso) + '</td><td data-l="Per tutti">' + esc(L.programma.pubblicato || 'nessuno') + '</td></tr>' +
       '<tr><td>Dati TARIC</td><td data-l="Su questo PC">' + esc(data(L.dati.in_uso)) + '</td><td data-l="Per tutti">' + esc(data(L.dati.pubblicati)) + '</td></tr></tbody></table></div>';
     h += '<div class="box s4"><div class="lab">' + T.icona('utenti') + 'Aggiungere un collega</div><ol class="passi">' +
-      '<li>Dai al collega solo il permesso di <b>lettura</b> sulla cartella: in SharePoint come visitatore del sito, in Teams con «Gestisci accesso» > «Può visualizzare».</li>' +
-      '<li>Il collega apre la cartella sul sito di SharePoint (o nei file del canale di Teams) e preme «Sincronizza».</li>' +
-      '<li>Sul suo PC fa doppio clic su <b>Avvia MAGIC HS</b> nella cartella sincronizzata (la prima volta ci vuole un minuto). Per comodità può creare un collegamento sul desktop.</li></ol>' +
-      '<p class="nota">Chi può modificare la cartella può cambiare il programma che parte sui PC di tutti: la modifica va solo a chi è in «Chi può pubblicare». In Teams i membri del canale hanno la modifica: interrompi l\'ereditarietà delle autorizzazioni di questa cartella.</p></div></div>';
+      '<li>Dagli solo il permesso di <b>lettura</b>: visitatore del sito SharePoint, o «Può visualizzare» in Teams.</li>' +
+      '<li>Il collega apre la cartella su SharePoint e preme «Sincronizza».</li>' +
+      '<li>Poi fa doppio clic su <b>Avvia MAGIC HS</b>.</li></ol>' +
+      '<p class="nota">La modifica solo a chi pubblica: chi può modificare la cartella cambia il programma di tutti. In Teams interrompi l\'ereditarietà delle autorizzazioni.</p></div></div>';
     var ed = L.editori || [];
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scudo') + 'Chi può pubblicare<span class="dx">' + ed.length + '</span></div>' +
-      '<p class="nota">Nomi utente di Windows di chi pubblica per tutti dati, intelligenza artificiale e nuove versioni. Ognuno vede il proprio in Profilo; serve anche il permesso di modifica sulla cartella. Le modifiche valgono sugli altri PC entro dieci minuti.</p>' +
+      '<p class="nota">Nomi utente di Windows (ognuno vede il suo in Profilo); serve anche il permesso di modifica sulla cartella.</p>' +
       '<div class="elenco">' + ed.map(function (n) {
         return '<div class="voce"><div><b>' + esc(n) + '</b>' + (n === L.utente ? ' <span class="st ok">tu</span>' : '') + '</div><div class="azioni">' +
           (ed.length > 1 ? '<button class="btn sm" type="button" data-g="editore-togli" data-v="' + esc(n) + '">Togli</button>' : '') + '</div></div>';
@@ -118,7 +116,7 @@
       '<form class="fila" data-g="editore-aggiungi"><input class="campo" name="utente" maxlength="64" required placeholder="Nome utente di Windows del collega" aria-label="Nome utente di Windows del collega">' +
       '<button class="btn" type="submit"' + (L.editore ? '' : ' disabled') + '>' + T.icona('piu') + 'Aggiungi</button></form>' + riga('editori') + '</div></div>';
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Nuova versione del programma</div>' +
-      '<p class="nota">Scarica il file <b>magic-hs-windows-….zip</b> dalla pagina delle versioni di MAGIC HS su GitHub e caricalo qui: va nella cartella condivisa e i colleghi la usano dalla prossima volta che aprono MAGIC HS. Su questo PC chiudi e riapri MAGIC HS.</p>' +
+      '<p class="nota">Il file <b>magic-hs-windows-….zip</b> dalla pagina delle versioni su GitHub.</p>' +
       '<form class="modulo" data-g="programma"><label>Pacchetto .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (L.editore ? '' : ' disabled') + '>' + T.icona('carica') + 'Pubblica per tutti</button></div>' + riga('programma') + '</form></div></div>';
     return h;
@@ -151,10 +149,8 @@
       '<div class="fila"><button class="btn pri" type="submit">Salva per tutti</button>' + (L.attiva ? '<button class="btn" type="button" data-g="prova-ia">Prova</button>' : '') + '</div>' + riga('ia') +
       (L.aggiornate ? '<p class="nota">Ultima modifica: ' + esc(T.dataOra(L.aggiornate)) + (L.da ? ', ' + esc(L.da) : '') + '.</p>' : '') + '</form></div>';
     h += '<div class="box s4"><div class="lab">' + T.icona('info') + 'Da sapere</div>' +
-      '<p class="nota">Le impostazioni vanno nella cartella condivisa e valgono per tutti i colleghi. <b>La chiave è leggibile da chi ha accesso alla cartella</b>: usa una chiave dedicata a MAGIC HS e imposta un tetto di spesa sul servizio.</p>' +
-      '<p class="nota">Con <b>Azure OpenAI</b> dell\'azienda: indirizzo https://&lt;risorsa&gt;.openai.azure.com/openai/v1, chiave della risorsa e nome della distribuzione come modello.</p>' +
-      '<p class="nota"><b>Copilot di Microsoft 365</b> non si può collegare direttamente: per i programmi serve la licenza Microsoft 365 Copilot per ogni persona e una registrazione fatta dall\'IT.</p>' +
-      '<p class="nota">Senza servizio IA MAGIC HS resta utilizzabile: nomenclatura, misure, ricerca per codice, storico e preferiti.</p></div></div>';
+      '<p class="nota"><b>La chiave è leggibile da chi vede la cartella</b>: usane una dedicata, con un tetto di spesa.</p>' +
+      '<p class="nota"><b>Azure OpenAI</b>: indirizzo https://&lt;risorsa&gt;.openai.azure.com/openai/v1 e nome della distribuzione come modello.</p></div></div>';
     return h;
   }
 
