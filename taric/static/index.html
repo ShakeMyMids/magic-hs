@@ -38,7 +38,7 @@
           <h2>Che merce devi classificare?</h2>
           <p class="sotto-titolo">Descrivila a parole: ricevi la voce doganale a 10 cifre con le alternative, poi dazi e documenti richiesti per ogni paese.</p>
           <label for="q" hidden>Descrizione della merce (casella 31 del DAU)</label>
-          <div class="cerca-merce" data-ico="cerca"><textarea id="q" rows="2" spellcheck="false" placeholder="Per esempio: scarpe da ginnastica con tomaia in pelle e suola in gomma, da uomo"></textarea></div>
+          <div class="cerca-merce" data-ico="cerca"><textarea id="q" rows="2" spellcheck="false" autocomplete="off" placeholder="Descrivi la merce da classificare"></textarea></div>
           <div class="avanza" id="avanza" hidden><i></i></div>
           <div class="fila">
             <button class="btn pri" id="vai" type="button" data-ico="bacchetta">Classifica</button>
@@ -47,7 +47,6 @@
           </div>
           <div id="msg"></div>
           <div class="fila" id="fornite" hidden></div>
-          <div class="fila" id="esempi"></div>
         </div>
       </div>
       <div id="esito" style="margin-top:16px"></div>
@@ -60,7 +59,7 @@
           <div class="lab" data-ico="albero">Nomenclatura TARIC <span class="dx" id="dato2"></span></div>
           <div class="fila">
             <label for="nq" hidden>Cerca nella nomenclatura</label>
-            <input class="campo" id="nq" type="search" autocomplete="off" spellcheck="false" placeholder="Codice (es. 8467 21) o parola (es. biciclette)">
+            <input class="campo" id="nq" type="search" autocomplete="off" spellcheck="false" placeholder="Codice o parola da cercare">
             <button class="btn" id="nq-x" type="button" data-ico="chiudi">Azzera</button>
           </div>
           <p class="nota" id="nota-nom"></p>

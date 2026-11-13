@@ -20,6 +20,8 @@ function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } els
   await p.goto(B + '/entra?k=' + info.chiave);
   await p.waitForSelector('#gestisco-io-si');
   ok(await p.isHidden('#tab-gestione'), 'prima di «Gestisco io» niente Gestione');
+  ok((await p.inputValue('#q')) === '' && (await p.innerHTML('#esito')).trim() === '', 'all\'apertura nessuna ricerca d\'esempio');
+  ok(!(await p.$('#esempi')) && !(await p.$('[data-act="prova"]')), 'nessun suggerimento di ricerca');
   await p.screenshot({ path: out + '/0-gestisco-io.png' });
   await p.click('#gestisco-io-si');
   await p.waitForSelector('#tab-gestione:not([hidden])');
@@ -73,7 +75,13 @@ function ok(c, m) { if (!c) { errori.push(m); console.log('ERRORE: ' + m); } els
   await p.waitForSelector('text=Il tuo nome');
   ok(!(await p.isVisible('text=Cambia password')), 'niente password nel profilo');
   ok(await p.isVisible('text=Senza limite mensile'), 'uso dell\'IA senza limite');
+  ok(await p.isVisible('text=trapano a percussione elettrico'), 'la classificazione è nello storico');
   await p.screenshot({ path: out + '/5-profilo.png', fullPage: true });
+  // riaperto dopo una classificazione: ancora nessun campo compilato né ricerche recenti proposte
+  await p.goto(B + '/'); await p.waitForSelector('#vai');
+  await p.waitForFunction(() => document.getElementById('dato').textContent.length > 0);
+  ok((await p.inputValue('#q')) === '' && (await p.innerHTML('#esito')).trim() === '' && !(await p.$('[data-act="prova"]')), 'riaperto: casella vuota, niente recenti');
+  await p.screenshot({ path: out + '/5b-classifica-vuota.png' });
   // telefono, tema scuro
   const t = await b.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', deviceScaleFactor: 2 });
   const q = await t.newPage();

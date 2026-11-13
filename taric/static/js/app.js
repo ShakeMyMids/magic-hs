@@ -90,37 +90,15 @@ var FREQUENTI = ['CN', 'US', 'GB', 'CH', 'TR', 'JP', 'KR', 'IN', 'VN', 'TW'];
 /* ================================================================
    State
    ================================================================ */
-var ESEMPI = ['trapano avvitatore a batteria', 'scarpe da ginnastica con tomaia in pelle', 'olio extravergine d\'oliva in bottiglia da 1 litro', 'power bank da 20 000 mAh', 'bicicletta elettrica a pedalata assistita'];
-var ESEMPIO = {
-  q: 'trapano avvitatore a batteria',
-  result: {
-    merce: 'Trapano avvitatore portatile con motore elettrico incorporato, alimentato a batteria',
-    best: { code: '8467211000', it: 'Trapani di ogni tipo con motore elettrico incorporato, che funzionano senza sorgente esterna di energia (a batteria).', why: 'È un utensile per l\'impiego a mano con motore elettrico incorporato, quindi voce 8467. Tra i trapani, l\'alimentazione a batteria porta alla sottovoce di quelli che funzionano senza sorgente esterna di energia.', conf: 90 },
-    alts: [
-      { code: '8467219900', it: 'Altri trapani elettrici, alimentati dalla rete.', when: 'Scegli questa se il trapano funziona solo collegato alla presa di corrente.', conf: 25 },
-      { code: '8467219100', it: 'Trapani elettropneumatici alimentati dalla rete.', when: 'Scegli questa se è un tassellatore elettropneumatico a filo.', conf: 12 },
-      { code: '8467292000', it: 'Altri utensili elettrici a batteria, diversi da trapani e seghe.', when: 'Scegli questa se l\'utensile serve solo ad avvitare e non a forare.', conf: 18 }
-    ],
-    domande: [
-      { q: 'Come è alimentato l\'utensile?', opts: ['Batteria ricaricabile', 'Cavo di rete'], why: 'Separa 8467 21 10 dalle sottovoci 8467 21 91 e 8467 21 99.' },
-      { q: 'Qual è la funzione principale?', opts: ['Forare, anche con avvitatura', 'Solo avvitare'], why: 'Un avvitatore senza funzione di foratura rientra tra gli altri utensili della 8467 29.' }
-    ],
-    attenzione: ['Se la batteria agli ioni di litio viaggia separata dall\'utensile va classificata a parte, alla voce 8507.'],
-    altre: []
-  }
-};
-
 var state = {
   view: 'classifica',
   ai: 'wait',          // wait | ok | no
   aiMotivo: '',
   utente: null,        // risposta di /api/io
-  recenti: [],         // ultime descrizioni classificate (dallo storico)
   preferiti: {},       // codice -> { nota }
   q: '', answers: [], heads: [],
   result: null,        // normalized AI result
   sel: null,           // { code, idx }
-  esempio: false,
   picks: {}, extra: '',
   busy: null, error: '', warn: '',
   country: '', flow: 'import',
@@ -299,7 +277,7 @@ function classifica(soloScelta) {
   // a typed code opens that code directly, without the AI
   if (/^[\d\s.]+$/.test(state.q) && digits(state.q).length >= 2) {
     var r = resolve(state.q);
-    state.result = null; state.answers = []; state.heads = []; state.esempio = false; state.picks = {}; state.trad = {};
+    state.result = null; state.answers = []; state.heads = []; state.picks = {}; state.trad = {};
     state.sel = r; state.anima = true; renderAll(); return;
   }
   if (!sampleFn) { state.error = state.ai === 'wait' ? 'Attendi un istante: sto caricando il tuo profilo.' : state.aiMotivo; renderMsg(); return; }
@@ -308,7 +286,6 @@ function classifica(soloScelta) {
   ctl = new AbortController();
   var signal = ctl.signal;
   var heads = soloScelta ? state.heads.slice() : [];
-  state.esempio = false;
   if (!soloScelta) { state.answers = []; state.result = null; state.sel = null; state.picks = {}; state.trad = {}; renderEsito(); renderFornite(); }
   renderMsg();
   if (soloScelta) { var top = $('#q'); if (top.scrollIntoView) top.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
@@ -341,7 +318,6 @@ function classifica(soloScelta) {
     state.result = res; state.picks = {}; state.extra = '';
     state.sel = { code: res.best.code, idx: byCode.has(res.best.code) ? byCode.get(res.best.code) : -1 };
     state.anima = true;
-    ricorda(state.q);
     salvaStorico();
     clearBusy(); renderAll();
     var e = $('#esito'); if (e && e.scrollIntoView) e.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -853,18 +829,6 @@ function renderFornite() {
     return '<button class="chip" type="button" data-act="togli" data-k="' + k + '" title="Togli questo dettaglio">' + esc(a.a) + ' ×</button>';
   }).join('');
 }
-function renderEsempi() {
-  var rec = state.recenti;
-  var h = '';
-  if (rec.length) h += '<span class="et">Recenti</span>' + rec.slice(0, 5).map(function (t) { return '<button class="chip" type="button" data-act="prova" data-t="' + esc(t) + '">' + esc(t) + '</button>'; }).join('');
-  else h += '<span class="et">Prova con</span>' + ESEMPI.map(function (t) { return '<button class="chip" type="button" data-act="prova" data-t="' + esc(t) + '">' + esc(t) + '</button>'; }).join('');
-  $('#esempi').innerHTML = h;
-}
-function ricorda(t) {
-  state.recenti = [t].concat(state.recenti.filter(function (x) { return x !== t; })).slice(0, 8);
-  renderEsempi();
-}
-
 function celle(sel) {
   var i = sel.idx, c = sel.code, nc, ta, manca = false;
   if (i >= 0 && !isLeaf(i)) {
@@ -882,7 +846,7 @@ function celle(sel) {
 function ruolo(sel) {
   var r = state.result;
   if (!r) return { nome: 'Scelta manuale', cand: null };
-  if (r.best && r.best.code === sel.code) return { nome: state.esempio ? 'Esempio' : 'Proposta', cand: r.best, best: true };
+  if (r.best && r.best.code === sel.code) return { nome: 'Proposta', cand: r.best, best: true };
   for (var k = 0; k < r.alts.length; k++) if (r.alts[k].code === sel.code) return { nome: 'Alternativa', cand: r.alts[k] };
   return { nome: 'Scelta manuale', cand: null };
 }
@@ -905,7 +869,7 @@ function renderEsito() {
   /* --- box 33 --- */
   h += '<div class="foglio' + (trascorso < 1800 ? ' anima" style="--t:-' + trascorso + 'ms' : '') + '">';
   h += '<div class="box s8 principale"><div class="lab"><b>33</b> Codice delle merci' +
-    (state.esempio ? '<span class="dx">esempio dimostrativo: premi Classifica per la tua merce</span>' : (r && r.merce ? '<span class="dx">' + esc(r.merce) + '</span>' : '')) + '</div>';
+    (r && r.merce ? '<span class="dx">' + esc(r.merce) + '</span>' : '') + '</div>';
   h += '<div class="testa33">' + celle(sel) +
     '<div class="timbro">' + T.icona(role.best ? 'timbro' : role.nome === 'Alternativa' ? 'domanda' : 'matita') + '<span>' + esc(role.nome) + (cand ? '<small>confidenza ' + confLabel(cand.conf) + '</small>' : '') + '</span></div></div>';
   if (i < 0) h += '<p class="errore">Il codice ' + esc(grp(sel.code)) + ' non esiste nella nomenclatura incorporata (situazione al ' + DATA_IT + '). Può essere stato introdotto dopo quella data oppure essere sbagliato: verificalo su AIDA.</p>';
@@ -972,10 +936,8 @@ function renderEsito() {
       }).join('');
     } else h += '<p class="nota">Con le informazioni date non servono altre domande.</p>';
     if (state.qmsg) h += '<p class="avviso">' + esc(state.qmsg) + '</p>';
-    if (!state.esempio) {
-      h += '<div class="fila"><input class="campo" id="extra" type="text" autocomplete="off" placeholder="Altro dettaglio utile (facoltativo)" value="' + esc(state.extra) + '">' +
-        '<button class="btn" type="button" data-act="riclassifica"' + (sampleFn ? '' : ' disabled') + '>' + T.icona('aggiorna') + 'Riclassifica</button></div>';
-    } else h += '<p class="nota">Nell\'uso reale rispondi e premi Riclassifica: la proposta si aggiorna.</p>';
+    h += '<div class="fila"><input class="campo" id="extra" type="text" autocomplete="off" placeholder="Altro dettaglio utile (facoltativo)" value="' + esc(state.extra) + '">' +
+      '<button class="btn" type="button" data-act="riclassifica"' + (sampleFn ? '' : ' disabled') + '>' + T.icona('aggiorna') + 'Riclassifica</button></div>';
     h += '</div>';
   }
   h += '</div>';
@@ -1089,8 +1051,7 @@ document.addEventListener('click', function (ev) {
   var t = ev.target.closest('[data-act]'); if (!t) return;
   var act = t.getAttribute('data-act'), i = parseInt(t.getAttribute('data-i'), 10);
   if (!act) return;
-  if ((act === 'prova' || act === 'togli' || act === 'riclassifica' || act === 'chiedi') && state.busy) return;
-  if (act === 'prova') { $('#q').value = t.getAttribute('data-t'); classifica(false); }
+  if ((act === 'togli' || act === 'riclassifica' || act === 'chiedi') && state.busy) return;
   else if (act === 'togli') { state.answers.splice(parseInt(t.getAttribute('data-k'), 10), 1); renderFornite(); classifica(true); }
   else if (act === 'copia') {
     var c = t.getAttribute('data-c'), done = function (ok) { t.textContent = ok ? 'Copiato' : c; setTimeout(function () { t.textContent = 'Copia codice'; }, 1600); };
@@ -1124,7 +1085,7 @@ document.addEventListener('click', function (ev) {
   else if (act === 'flusso') { state.flow = t.getAttribute('data-f'); renderEsito(); salvaPreferenze(); }
   else if (act === 'sez') { var s = t.getAttribute('data-k'); state.secOpen[s] = !state.secOpen[s]; renderNom(); }
   else if (act === 'toggle') { state.open[i] = !state.open[i]; renderNom(); }
-  else if (act === 'usa') { ev.stopPropagation(); state.sel = { code: CODE[i], idx: i }; state.result = null; state.esempio = false; state.answers = []; state.heads = []; state.trad = {}; state.anima = true; vista('classifica'); renderAll(); var es = $('#esito'); if (es.scrollIntoView) es.scrollIntoView({ block: 'start' }); }
+  else if (act === 'usa') { ev.stopPropagation(); state.sel = { code: CODE[i], idx: i }; state.result = null; state.answers = []; state.heads = []; state.trad = {}; state.anima = true; vista('classifica'); renderAll(); var es = $('#esito'); if (es.scrollIntoView) es.scrollIntoView({ block: 'start' }); }
   else if (act === 'apri') { ev.stopPropagation(); apriNellAlbero(i); }
 });
 document.addEventListener('change', function (ev) { if (ev.target && ev.target.id === 'paese') { state.country = ev.target.value; renderEsito(); salvaPreferenze(); } });
@@ -1154,7 +1115,7 @@ function ripristina(d) {
   state.answers = Array.isArray(d.answers) ? d.answers : [];
   state.heads = Array.isArray(d.heads) ? d.heads : [];
   state.result = (d.result && typeof d.result === 'object') ? d.result : null;
-  state.esempio = false; state.picks = {}; state.trad = {}; state.error = ''; state.warn = ''; state.extra = '';
+  state.picks = {}; state.trad = {}; state.error = ''; state.warn = ''; state.extra = '';
   var c = state.result && state.result.best ? digits(state.result.best.code) : digits(d.sel);
   state.sel = c ? { code: c, idx: byCode.has(c) ? byCode.get(c) : -1 } : null;
   state.anima = true;
@@ -1174,12 +1135,7 @@ function start() {
     (N_EN ? '; per la nomenclatura il testo italiano è quello dell\'estrazione del ' + IT_DATA + ', quindi le ' + N_EN.toLocaleString('it-IT') + ' righe create o modificate dopo restano in inglese (sigla EN)' : '') +
     '. I nomi dei tipi di misura e delle sezioni sono tradotti dalla pagina. IVA, accise e misure nazionali non fanno parte del TARIC.';
   if (!N) { state.error = 'Non riesco a caricare la nomenclatura. Ricarica la pagina.'; }
-  if (N && !state.recenti.length) {   // primo utilizzo: un esempio mostra come si legge il risultato
-    $('#q').value = ESEMPIO.q; state.q = ESEMPIO.q; state.result = ESEMPIO.result; state.esempio = true;
-    state.sel = { code: ESEMPIO.result.best.code, idx: byCode.has(ESEMPIO.result.best.code) ? byCode.get(ESEMPIO.result.best.code) : -1 };
-  }
   if (state.country && !RIF.aree[state.country]) state.country = '';
-  renderEsempi();
   vista(location.hash.replace('#', '') || 'classifica');
   renderAll();
   state.avviato = true;
@@ -1199,7 +1155,7 @@ T.app = {
   vista: vista,
   apriCodice: function (c) {
     state.sel = { code: c, idx: byCode.has(c) ? byCode.get(c) : -1 };
-    state.result = null; state.esempio = false; state.answers = []; state.heads = []; state.trad = {}; state.anima = true;
+    state.result = null; state.answers = []; state.heads = []; state.trad = {}; state.anima = true;
     vista('classifica'); renderAll(); var e = $('#esito'); if (e.scrollIntoView) e.scrollIntoView({ block: 'start' });
   },
   apriClassificazione: function (d) {
@@ -1273,12 +1229,6 @@ T.api('GET', '/api/io').then(function (u) {
   state.country = u.preferenze.paese || '';
   state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
   impostaIA();
-  return Promise.all([
-    T.api('GET', '/api/storico?limite=30').then(function (r) {
-      var visti = {};
-      state.recenti = r.voci.map(function (v) { return v.testo; }).filter(function (t) { if (visti[t]) return false; visti[t] = 1; return true; }).slice(0, 8);
-    }, function () { /* niente recenti */ }),
-    T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ })
-  ]);
+  return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
 }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
 })();
