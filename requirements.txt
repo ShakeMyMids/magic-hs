@@ -1,8 +1,7 @@
-# Dipendenze del server (versioni provate)
+# Dipendenze del programma (versioni provate); il pacchetto per Windows aggiunge truststore
 fastapi==0.162.5
 uvicorn==0.54.0
 httpx==0.28.1
-argon2-cffi==25.1.0
 openpyxl==3.1.5
 python-multipart==0.0.33
 tzdata==2026.6

@@ -23,7 +23,6 @@ import httpx
 
 from .config import Config
 from .db import Database, adesso, da_iso, iso, tra
-from .posta import Posta
 
 log = logging.getLogger("taric.dati")
 
@@ -49,8 +48,8 @@ def sposta(origine: Path, dest: Path, tentativi: int = 12) -> None:
 
 
 class GestoreDati:
-    def __init__(self, cfg: Config, db: Database, posta: Posta):
-        self.cfg, self.db, self.posta = cfg, db, posta
+    def __init__(self, cfg: Config, db: Database):
+        self.cfg, self.db = cfg, db
         self.base = cfg.dati / "taric"
         self.versioni = self.base / "versioni"
         self.lavoro = self.base / "lavoro"
@@ -64,7 +63,7 @@ class GestoreDati:
         self._lock = threading.Lock()
         self.in_corso: dict[str, Any] | None = None
         self._fermo = threading.Event()
-        # chiamata dopo l'installazione di una versione che diventa quella in uso (programma locale: pubblicazione)
+        # chiamata dopo l'installazione di una versione che diventa quella in uso (sul PC di chi pubblica: cartella condivisa)
         self.dopo_installazione: Callable[[str], None] | None = None
         with db.connessione() as c:   # un aggiornamento rimasto "in corso" e' stato interrotto da un riavvio
             c.execute("UPDATE aggiornamenti SET esito = 'interrotto', finito = ? WHERE esito = 'in_corso'", (iso(),))
@@ -227,19 +226,6 @@ class GestoreDati:
             c.execute("UPDATE aggiornamenti SET finito = ?, esito = ?, messaggio = ?, registro = ? WHERE id = ?",
                       (iso(), esito, messaggio, registro, agg_id))
             self.db.evento(c, "dati_" + esito, autore_id=autore_id, dettagli=f"{mese}: {messaggio}")
-            amministratori = [r["email"] for r in c.execute("SELECT email FROM utenti WHERE ruolo = 'amministratore' AND stato = 'attivo'")]
-        avvisa = esito == "ok" or esito == "errore" or (esito == "non_disponibile" and self._giorno_locale() >= 8 and autore_id is None)
-        if self.cfg.locale:
-            avvisa = False                    # programma sul PC: niente email, l'esito si vede in Gestione
-        if avvisa:
-            oggetto = {"ok": f"MAGIC HS: dati di {mese} installati", "errore": f"MAGIC HS: aggiornamento dei dati di {mese} NON riuscito",
-                       "non_disponibile": f"MAGIC HS: l'estrazione di {mese} non è ancora disponibile"}[esito]
-            testo = messaggio + ("\n\nLa pagina continua a usare i dati della versione precedente. Dal pannello di amministrazione puoi "
-                                 "riprovare o caricare a mano l'archivio dell'estrazione." if esito != "ok" else "")
-            if esito == "errore" and registro:
-                testo += "\n\nUltime righe del registro:\n" + "\n".join(registro.splitlines()[-25:])
-            for a in amministratori:
-                self.posta.invia(a, oggetto, testo)
         log.info("aggiornamento %s: %s - %s", mese, esito, messaggio)
         return {"esito": esito, "messaggio": messaggio}
 
@@ -286,9 +272,6 @@ class GestoreDati:
         except Exception:
             return datetime.now()
 
-    def _giorno_locale(self) -> int:
-        return self._ora_locale().day
-
     def da_fare(self) -> str | None:
         """Mese da aggiornare adesso secondo le regole automatiche, oppure None."""
         ora = self._ora_locale()
@@ -297,14 +280,14 @@ class GestoreDati:
         if not self.cfg.scarica_dati or (att and att[:7] >= mese):
             return None
         if (self.versioni / f"{mese}-01" / "nomenclatura.js").is_file():
-            return None                       # gia' installato: se e' in uso una versione precedente, l'ha scelta l'amministratore
+            return None                       # gia' installato: se e' in uso una versione precedente, l'ha scelta chi gestisce MAGIC HS
         if att and not self.cfg.aggiornamento_automatico:
             return None
         with self.db.connessione() as c:
             tentativi = c.execute("SELECT esito, finito FROM aggiornamenti WHERE mese = ? ORDER BY id DESC", (mese,)).fetchall()
         errori = sum(1 for t in tentativi if t["esito"] == "errore")
         if errori >= 3:
-            return None                       # dopo tre errori nello stesso mese decide l'amministratore
+            return None                       # dopo tre errori nello stesso mese decide chi gestisce MAGIC HS
         if tentativi and tentativi[0]["finito"]:
             attesa_ore = 6 if tentativi[0]["esito"] == "errore" else 3
             if (adesso() - da_iso(tentativi[0]["finito"])).total_seconds() < attesa_ore * 3600:
@@ -326,8 +309,7 @@ class GestoreDati:
         else:
             self.esegui(mese, "automatico")
 
-    def avvia_pianificatore(self, registrazioni: Any, backup: Any = None, ogni_6_ore: list[Any] | None = None,
-                            ogni_ciclo: list[Any] | None = None, attesa: float = 1800) -> None:
+    def avvia_pianificatore(self, backup: Any = None, ogni_ciclo: list[Any] | None = None, attesa: float = 1800) -> None:
         def ciclo() -> None:
             ultima_pulizia = 0.0
             self._fermo.wait(10)
@@ -337,12 +319,6 @@ class GestoreDati:
                         compito()
                     except Exception:
                         log.exception("compito periodico")
-                if time.time() - ultima_pulizia > 6 * 3600:
-                    for compito in ogni_6_ore or []:
-                        try:
-                            compito()
-                        except Exception:
-                            log.exception("compito periodico")
                 try:
                     if backup is not None and backup.da_fare():
                         log.info("backup automatico: %s", backup.crea().name)
@@ -350,8 +326,7 @@ class GestoreDati:
                     log.exception("backup automatico")
                 try:
                     if time.time() - ultima_pulizia > 6 * 3600:
-                        with self.db.transazione() as c:
-                            registrazioni.pulizia(c)
+                        self.db.pulizia()
                         ultima_pulizia = time.time()
                     self.controlla_mese()
                 except Exception:

@@ -16,5 +16,3 @@ jobs:
       - run: python -m pytest -q tests
       - name: Controllo sintassi JavaScript
         run: for f in taric/static/js/*.js; do node --check "$f"; done
-      - name: Controllo degli script del server
-        run: shellcheck -S style server/installa.sh server/magic-hs

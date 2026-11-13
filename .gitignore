@@ -1,4 +1,4 @@
-# dati del sito: database, chiavi, estrazioni TARIC (si rigenerano)
+# file locali: database, configurazione, estrazioni TARIC (si rigenerano)
 dati/
 taric.env
 *.db
