@@ -1,6 +1,7 @@
-// Prova nel browser del sito (modalità server, come su Render): l'amministratore si registra ed entra, un collega chiede
-// l'account e aspetta l'approvazione, classificazioni fino al limite mensile, link per la password, sospensione, uscita,
-// telefono e tema scuro. IA finta (tests/finto_claude.py) come servizio unico del server.
+// Prova nel browser del sito (come su Render): l'amministratore si registra ed entra, ricerca per parola o codice in
+// prima pagina e interruttore dell'IA, un collega chiede l'account e aspetta l'approvazione, classificazioni con l'IA fino
+// al limite mensile, link per la password, sospensione, uscita, telefono, tablet e tema scuro. IA finta
+// (tests/finto_claude.py) come servizio unico del server.
 // Uso: python tests/finto_claude.py 9100 dati-AAAA-MM-01.zip &
 //      TARIC_DATI=P MAGIC_HS_AMMINISTRATORI=capo@azienda.it TARIC_IA_FORNITORE=openai TARIC_IA_URL=http://127.0.0.1:9100/v1 \
 //        TARIC_IA_MODELLO=finto-modello TARIC_IA_CHIAVE=chiave-finta TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati \
@@ -21,8 +22,14 @@ function attenzione(p, nome) {
 async function pronta(p) { await p.waitForFunction(() => document.getElementById('dato') && document.getElementById('dato').textContent.length > 0, null, { timeout: 30000 }); }
 async function classifica(p, testo) {
   await p.click('#tab-classifica');
+  if (!(await p.isChecked('#modo-ia'))) await p.click('#interruttore-ia');       // classificazione con l'IA accesa
   await p.fill('#q', testo); await p.click('#vai');
 }
+async function cerca(p, testo) {
+  await p.fill('#q', testo);
+  await p.waitForSelector('#risultati .trow.ris');
+}
+async function senzaScorrimento(p) { return p.evaluate(() => document.documentElement.scrollWidth <= innerWidth); }
 async function richiedi(p, nome, email, password, messaggio) {
   await p.goto(B + '/accedi#richiedi');
   await p.waitForSelector('#richiedi:not([hidden])');
@@ -54,6 +61,30 @@ async function accedi(p, email, password) {
   await pronta(capo);
   ok(await capo.isVisible('#tab-gestione') && (await capo.textContent('#tab-gestione')).trim() === 'Gestione', 'amministratore dentro, scheda Gestione');
   ok((await capo.getAttribute('#esci', 'title')) === 'Esci', 'pulsante Esci');
+
+  // prima pagina: ricerca per parola o codice, senza IA
+  ok(!(await capo.isChecked('#modo-ia')) && (await capo.textContent('#titolo-q')) === 'Che merce cerchi?' && (await capo.textContent('#vai')).trim() === 'Cerca',
+    'prima pagina: ricerca per parole, IA spenta');
+  await cerca(capo, 'bicicletta');
+  ok((await capo.$$('#risultati .trow.ris')).length > 3 && await capo.isVisible('#risultati >> text=Biciclette con cuscinetti a sfere'), 'risultati per parola sotto la casella');
+  await capo.click('#risultati .trow.ris.L button[data-act="usa"]');
+  await capo.waitForSelector('.timbro >> text=Scelta manuale');
+  ok(await capo.isVisible('#risultati .link.indietro') && !(await capo.isVisible('#risultati .trow.ris')), 'Usa: scheda del codice, risultati ridotti');
+  await capo.click('#risultati .link.indietro');
+  await capo.waitForSelector('#risultati .trow.ris');
+  ok(true, 'torna ai risultati');
+  await capo.fill('#q', '8712'); await capo.press('#q', 'Enter');
+  await capo.waitForSelector('#esito >> text=Sottovoci');
+  ok(true, 'codice digitato: si apre con le sottovoci');
+  await capo.fill('#q', 'qwzxj'); await capo.waitForSelector('#risultati >> text=Nessun risultato');
+  ok(await capo.isVisible('#risultati [data-act="chiedi"]'), "nessun risultato: proposta di classificare con l'IA");
+  await capo.click('#interruttore-ia');
+  ok((await capo.textContent('#titolo-q')) === 'Che merce devi classificare?' && (await capo.textContent('#vai')).trim() === 'Classifica' && await capo.isHidden('#risultati'),
+    "interruttore: classificazione con l'IA");
+  await capo.reload(); await pronta(capo);
+  ok(await capo.isChecked('#modo-ia'), 'interruttore ricordato sul dispositivo');
+  await capo.click('#interruttore-ia');
+  ok(!(await capo.isChecked('#modo-ia')), 'di nuovo ricerca per parole');
   await capo.click('#tab-gestione');
   await capo.waitForSelector('button[data-g="u-apri"]');
   ok((await capo.$$('button[data-g="u-apri"]')).length === 1 && await capo.isVisible('td >> text=capo@azienda.it'), 'in Utenti c\'è l\'amministratore');
@@ -140,8 +171,26 @@ async function accedi(p, email, password) {
   await q.goto(B + '/accedi'); await q.waitForSelector('#accedi');
   await q.screenshot({ path: out + '/7-tel-accedi.png', fullPage: true });
   await accedi(q, 'capo@azienda.it', 'Porto-Container-42'); await pronta(q);
+  await cerca(q, 'scarpe');
+  await q.screenshot({ path: out + '/8-tel-cerca.png' });
+  ok(await q.isHidden('.domanda .scena'), "telefono: l'illustrazione lascia posto ai risultati");
   await q.goto(B + '/#gestione'); await q.waitForSelector('button[data-g="u-apri"]');
-  await q.screenshot({ path: out + '/8-tel-utenti.png', fullPage: true });
+  await q.screenshot({ path: out + '/9-tel-utenti.png', fullPage: true });
+  ok(await senzaScorrimento(q), 'telefono: niente scorrimento di lato');
+
+  // tablet in verticale e in orizzontale
+  for (const [nome, w, h] of [['tablet', 810, 1080], ['tablet-orizzontale', 1080, 810]]) {
+    const ct = await b.newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true, colorScheme: 'light' });
+    const tp = await ct.newPage(); attenzione(tp, nome);
+    await accedi(tp, 'capo@azienda.it', 'Porto-Container-42'); await pronta(tp);
+    await cerca(tp, 'bicicletta');
+    await tp.screenshot({ path: out + '/10-' + nome + '.png' });
+    for (const v of ['classifica', 'nomenclatura', 'profilo', 'gestione']) {
+      await tp.goto(B + '/#' + v); await tp.waitForTimeout(400);
+      ok(await senzaScorrimento(tp), nome + ': ' + v + ' senza scorrimento di lato');
+    }
+    await ct.close();
+  }
 
   // uscita
   await capo.click('#esci');

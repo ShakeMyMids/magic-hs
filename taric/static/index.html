@@ -2,14 +2,16 @@
 <html lang="it" data-dati="{{DATI}}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>MAGIC HS</title>
 <link rel="stylesheet" href="/static/css/app.css">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
-<meta name="theme-color" content="#e1e6eb">
+<meta name="theme-color" content="#e1e6eb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d151e" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-title" content="MAGIC HS">
 </head>
 <body>
 <div class="page">
@@ -35,34 +37,30 @@
       <div class="foglio">
         <div class="box domanda">
           <div class="scena" data-scena></div>
-          <div class="titolo-riga"><h2>Che merce devi classificare?</h2><span class="dato" id="dato"></span></div>
-          <label for="q" hidden>Descrizione della merce (casella 31 del DAU)</label>
-          <div class="cerca-merce" data-ico="cerca"><textarea id="q" rows="2" spellcheck="false" autocomplete="off" placeholder="Descrivi la merce da classificare"></textarea></div>
+          <div class="titolo-riga"><h2 id="titolo-q">Che merce cerchi?</h2><span class="dato" id="dato"></span></div>
+          <label for="q" id="etichetta-q" hidden>Parola o codice da cercare nella nomenclatura</label>
+          <div class="cerca-merce" data-ico="cerca"><textarea id="q" rows="1" spellcheck="false" autocomplete="off" enterkeyhint="search" placeholder="Parola o codice"></textarea>
+            <button class="tasto-ico azzera" id="q-x" type="button" aria-label="Svuota la casella" data-ico="chiudi" hidden></button></div>
           <div class="avanza" id="avanza" hidden><i></i></div>
-          <div class="fila">
-            <button class="btn pri" id="vai" type="button" data-ico="bacchetta">Classifica</button>
+          <div class="fila comandi">
+            <button class="btn pri" id="vai" type="button" data-ico="cerca">Cerca</button>
             <button class="btn" id="ferma" type="button" data-ico="ferma" hidden>Ferma</button>
             <div class="stato" id="stato" role="status" aria-live="polite"></div>
+            <label class="interruttore" id="interruttore-ia" hidden><input type="checkbox" id="modo-ia" role="switch"><span class="pista" aria-hidden="true"></span><span data-ico="scintille">Usa l'IA</span></label>
           </div>
           <div id="msg"></div>
           <div class="fila" id="fornite" hidden></div>
         </div>
       </div>
-      <div id="esito" style="margin-top:16px"></div>
+      <div id="risultati" class="risultati" hidden></div>
+      <div id="esito"></div>
     </section>
 
     <!-- ======================= NOMENCLATURA ======================= -->
     <section id="view-nomenclatura" aria-labelledby="tab-nomenclatura" hidden>
       <div class="foglio">
-        <div class="box">
-          <div class="lab" data-ico="albero">Nomenclatura TARIC</div>
-          <div class="fila">
-            <label for="nq" hidden>Cerca nella nomenclatura</label>
-            <input class="campo" id="nq" type="search" autocomplete="off" spellcheck="false" placeholder="Codice o parola da cercare">
-            <button class="btn" id="nq-x" type="button" data-ico="chiudi">Azzera</button>
-          </div>
-        </div>
         <div class="box albero-box">
+          <div class="lab" data-ico="albero">Nomenclatura TARIC</div>
           <div class="albero" id="albero"></div>
         </div>
       </div>

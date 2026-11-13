@@ -92,6 +92,9 @@ var FREQUENTI = ['CN', 'US', 'GB', 'CH', 'TR', 'JP', 'KR', 'IN', 'VN', 'TW'];
    ================================================================ */
 var state = {
   view: 'classifica',
+  modo: 'parole',      // parole: ricerca nella nomenclatura | ia: classificazione con l'intelligenza artificiale
+  risChiusi: false,    // risultati della ricerca ridotti a un link dopo aver scelto un codice
+  risTutti: false,
   ai: 'wait',          // wait | ok | no
   aiMotivo: '',
   utente: null,        // risposta di /api/io
@@ -104,7 +107,7 @@ var state = {
   country: '', flow: 'import',
   trad: {},            // row index -> italian text
   tradBusy: false,
-  qmsg: '', nq: '', open: {}, secOpen: {}, flash: -1,
+  qmsg: '', open: {}, secOpen: {}, flash: -1,
   anima: false
 };
 var ctl = null, tick = null, sampleFn = null;
@@ -245,7 +248,7 @@ function creaIA() {
   };
 }
 function impostaIA() {
-  var u = state.utente, ia = u && u.ia, intanto = ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
+  var u = state.utente, ia = u && u.ia, intanto = ' Intanto puoi cercare per parola o codice: spegni «Usa l\'IA».';
   sampleFn = null; state.ai = 'no';
   if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva: ' +
     (u && u.ruolo === 'amministratore' ? 'inserisci la chiave di Gemini nel servizio su Render (Gestione, «Intelligenza artificiale»).'
@@ -253,8 +256,75 @@ function impostaIA() {
   else if (ia.tetto) state.aiMotivo = 'Questo mese le classificazioni con l\'IA sono finite per tutti: chiedi all\'amministratore.' + intanto;
   else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi all\'amministratore.' + intanto;
   else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' classificazioni con l\'IA di questo mese: ' +
-    'per averne altre chiedi all\'amministratore. Nomenclatura e misure restano consultabili.';
+    'per averne altre chiedi all\'amministratore.' + intanto;
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
+  $('#interruttore-ia').hidden = !(ia && ia.configurata);
+  if (!(ia && ia.configurata) && state.modo === 'ia') state.modo = 'parole';
+  applicaModo();
+}
+
+/* ---------- prima pagina: ricerca per parola o codice, oppure classificazione con l'IA (interruttore) ---------- */
+var MODI = {
+  parole: { titolo: 'Che merce cerchi?', segnaposto: 'Parola o codice', etichetta: 'Parola o codice da cercare nella nomenclatura',
+            tasto: 'Cerca', ico: 'cerca', invio: 'search' },
+  ia: { titolo: 'Che merce devi classificare?', segnaposto: 'Descrivi la merce: che cos\'è, materiale, uso', etichetta: 'Descrizione della merce (casella 31 del DAU)',
+        tasto: 'Classifica', ico: 'bacchetta', invio: 'go' }
+};
+function applicaModo() {
+  var m = MODI[state.modo], q = $('#q');
+  $('.domanda').classList.toggle('modo-ia', state.modo === 'ia');
+  $('#modo-ia').checked = state.modo === 'ia';
+  $('#titolo-q').textContent = m.titolo;
+  $('#etichetta-q').textContent = m.etichetta;
+  q.placeholder = m.segnaposto; q.setAttribute('enterkeyhint', m.invio); q.rows = state.modo === 'ia' ? 3 : 1;
+  $('#vai').innerHTML = T.icona(m.ico) + esc(m.tasto);
+  renderRisultati(); renderMsg();
+}
+function cambiaModo(modo) {
+  state.modo = modo; state.error = ''; state.risChiusi = false; state.risTutti = false;
+  try { localStorage.setItem('magic-hs.modo', modo); } catch (e) { /* resta solo per questa pagina */ }
+  applicaModo();
+}
+/* Cerca (o Invio): un codice si apre subito, le parole mostrano i risultati */
+function cercaOra() {
+  var qEl = $('#q'), q = qEl.value.trim();
+  state.error = '';
+  if (!q) { state.error = 'Scrivi una parola o un codice.'; renderMsg(); qEl.focus(); return; }
+  if (/^[\d\s.]+$/.test(q) && digits(q).length >= 2) {
+    state.sel = resolve(q); state.result = null; state.answers = []; state.heads = []; state.picks = {}; state.trad = {};
+    state.anima = true; state.risChiusi = true; renderAll(); qEl.blur(); return;
+  }
+  state.risChiusi = false; renderRisultati(); renderMsg(); qEl.blur();
+  var r = $('#risultati'); if (r && !r.hidden && r.scrollIntoView) r.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function rigaRisultato(i) {
+  var p = pathOf(i), ctx = p.length > 1 ? p.slice(0, -1).filter(function (j) { return LVL[j] <= 1; }).map(function (j) { return showCode(j) + ' ' + descOf(j); }).join(' › ') : '';
+  return '<div class="trow ris ' + FLAG[i] + '" data-act="usa" data-i="' + i + '">' +
+    '<span class="cod">' + esc(showCode(i)) + '</span><span class="txt">' + esc(descOf(i)) + tagEN(i) + '</span>' +
+    '<button class="btn sm" type="button" data-act="usa" data-i="' + i + '">' + (isLeaf(i) ? 'Usa' : 'Apri') + '</button>' +
+    (ctx ? '<span class="ctx">' + esc(ctx) + '</span>' : '') + '</div>';
+}
+var MOSTRATI = 40;
+function renderRisultati() {
+  var el = $('#risultati'), q = $('#q').value.trim();
+  $('#q-x').hidden = !q;
+  $('.domanda').classList.toggle('cercando', state.modo === 'parole' && !!q);
+  if (state.modo !== 'parole' || !q) { el.hidden = true; el.innerHTML = ''; return; }
+  var res = cerca(q), testuale = !/^[\d\s.]+$/.test(q), h;
+  el.hidden = false;
+  if (state.risChiusi) {
+    el.innerHTML = res.length ? '<button class="link indietro" type="button" data-act="mostra-ris">' + T.icona('indietro') + 'Torna ai risultati per «' + esc(q) + '»</button>' : '';
+    el.hidden = !res.length; return;
+  }
+  var ponte = (testuale && state.utente && state.utente.ia && state.utente.ia.configurata) ? '<button class="btn sm" type="button" data-act="chiedi">' + T.icona('scintille') + 'Classifica con l\'IA</button>' : '';
+  h = '<div class="box ris-box"><div class="lab">' + T.icona('cerca') + 'Risultati<span class="dx">' + (res.length === 150 ? 'più di 150' : res.length) + '</span></div><div class="albero">';
+  if (!res.length) h += '<div class="trow info"><span class="txt nota">Nessun risultato. ' +
+    (testuale ? 'La nomenclatura usa termini suoi (per esempio «foratrici» per i trapani): prova un\'altra parola' + (ponte ? ' oppure fai classificare la merce all\'IA.' : '.') : 'Controlla le cifre del codice.') + '</span>' + ponte + '</div>';
+  h += res.slice(0, state.risTutti ? res.length : MOSTRATI).map(rigaRisultato).join('');
+  if (res.length > MOSTRATI && !state.risTutti) h += '<div class="trow info"><button class="btn sm" type="button" data-act="tutti-ris">Mostra tutti (' + (res.length === 150 ? 'primi 150' : res.length) + ')</button></div>';
+  else if (res.length === 150) h += '<div class="trow info"><span class="txt nota">Mostro i primi 150 risultati: aggiungi una parola o qualche cifra.</span></div>';
+  if (res.length && ponte) h += '<div class="trow info"><span class="txt nota">Non trovi la voce? Puoi far classificare «' + esc(q) + '» all\'IA.</span>' + ponte + '</div>';
+  el.innerHTML = h + '</div></div>';
 }
 function aggiornaIo() {
   return T.api('GET', '/api/io').then(function (u) { state.utente = u; impostaIA(); renderMsg(); return u; }, function () { return state.utente; });
@@ -287,6 +357,7 @@ function classifica(soloScelta) {
   state.error = ''; state.warn = '';
   var qEl = $('#q'); state.q = qEl.value.trim().replace(/\s+/g, ' ');
   if (!state.q) { state.error = 'Scrivi che cosa devi classificare.'; renderMsg(); qEl.focus(); return; }
+  qEl.blur();
   // a typed code opens that code directly, without the AI
   if (/^[\d\s.]+$/.test(state.q) && digits(state.q).length >= 2) {
     var r = resolve(state.q);
@@ -831,8 +902,8 @@ function renderMsg() {
   var h = '';
   if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>';
   var ia = state.utente && state.utente.ia;
-  if (state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
-  if (state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Classificazioni con l\'IA questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
+  if (state.modo === 'ia' && state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
+  if (state.modo === 'ia' && state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Classificazioni con l\'IA questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
   $('#msg').innerHTML = h;
 }
 function renderFornite() {
@@ -995,38 +1066,24 @@ function cerca(q) {
   hits.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
   return hits.slice(0, 150).map(function (x) { return x[1]; });
 }
-function trow(i, depth, ctx) {
+function trow(i, depth) {
   var leaf = isLeaf(i), hasKids = END[i] > i + 1, open = !!state.open[i];
-  var act = leaf ? 'usa' : (ctx ? 'apri' : (hasKids ? 'toggle' : ''));
+  var act = leaf ? 'usa' : (hasKids ? 'toggle' : '');
   return '<div class="trow ' + FLAG[i] + (state.flash === i ? ' acceso' : '') + '" style="--d:' + depth + '" data-act="' + act + '" data-i="' + i + '" id="r' + i + '">' +
-    '<span class="car">' + (hasKids && !ctx ? (open ? '▾' : '▸') : '') + '</span>' +
+    '<span class="car">' + (hasKids ? (open ? '▾' : '▸') : '') + '</span>' +
     '<span class="cod">' + esc(showCode(i)) + '</span>' +
     '<span class="txt">' + esc(descOf(i)) + tagEN(i) + '</span>' +
-    (leaf ? '<button class="btn sm" type="button" data-act="usa" data-i="' + i + '">Usa</button>' : (ctx ? '<button class="btn sm" type="button" data-act="apri" data-i="' + i + '">Apri</button>' : '<span></span>')) +
-    (ctx ? '<span class="ctx">' + esc(ctx) + '</span>' : '') + '</div>';
+    (leaf ? '<button class="btn sm" type="button" data-act="usa" data-i="' + i + '">Usa</button>' : '<span></span>') + '</div>';
 }
 function renderNom() {
-  var el = $('#albero'), q = state.nq.trim(), out = [];
-  if (q) {
-    var res = cerca(q), testuale = !/^[\d\s.]+$/.test(q);
-    var ponte = (testuale && sampleFn) ? '<button class="btn sm" type="button" data-act="chiedi">Classifica con l\'IA</button>' : '';
-    if (!res.length) out.push('<div class="trow info" style="--d:0"><span class="txt nota">Nessun risultato. ' +
-      (testuale ? 'La nomenclatura usa termini suoi (per esempio «foratrici» per i trapani): prova un\'altra parola' + (ponte ? ' oppure fai classificare la merce all\'IA.' : ' oppure descrivi la merce nella scheda Classifica.') : 'Controlla le cifre del codice.') + '</span>' + ponte + '</div>');
-    res.forEach(function (i) {
-      var p = pathOf(i), ctx = p.length > 1 ? p.slice(0, -1).filter(function (j) { return LVL[j] <= 1; }).map(function (j) { return showCode(j) + ' ' + descOf(j); }).join(' › ') : '';
-      out.push(trow(i, 0, ctx || ' '));
-    });
-    if (res.length === 150) out.push('<div class="trow info" style="--d:0"><span class="txt nota">Mostro i primi 150 risultati: aggiungi una parola o qualche cifra.</span></div>');
-    else if (res.length && ponte) out.push('<div class="trow info" style="--d:0"><span class="txt nota">Non trovi la voce? La nomenclatura usa termini suoi: puoi far classificare «' + esc(q) + '» all\'IA.</span>' + ponte + '</div>');
-  } else {
-    SEZIONI.forEach(function (s, k) {
-      var open = !!state.secOpen[k];
-      out.push('<button class="sez" type="button" data-act="sez" data-k="' + k + '" aria-expanded="' + open + '"><span class="car">' + (open ? '▾' : '▸') + '</span><span class="num">' + s[0] + '</span><span>' + esc(s[1]) + ' <span class="tr">· capitoli ' + (s[2] === s[3] ? s[2] : s[2] + '–' + s[3]) + '</span></span></button>');
-      if (!open) return;
-      for (var c = s[2]; c <= s[3]; c++) { var ci = byCode.get(('0' + c).slice(-2) + '00000000'); if (ci !== undefined) node(ci, 0); }
-    });
-  }
-  function node(i, depth) { out.push(trow(i, depth, '')); if (state.open[i]) kids(i).forEach(function (j) { node(j, depth + 1); }); }
+  var el = $('#albero'), out = [];
+  SEZIONI.forEach(function (s, k) {
+    var open = !!state.secOpen[k];
+    out.push('<button class="sez" type="button" data-act="sez" data-k="' + k + '" aria-expanded="' + open + '"><span class="car">' + (open ? '▾' : '▸') + '</span><span class="num">' + s[0] + '</span><span>' + esc(s[1]) + ' <span class="tr">· capitoli ' + (s[2] === s[3] ? s[2] : s[2] + '–' + s[3]) + '</span></span></button>');
+    if (!open) return;
+    for (var c = s[2]; c <= s[3]; c++) { var ci = byCode.get(('0' + c).slice(-2) + '00000000'); if (ci !== undefined) node(ci, 0); }
+  });
+  function node(i, depth) { out.push(trow(i, depth)); if (state.open[i]) kids(i).forEach(function (j) { node(j, depth + 1); }); }
   el.innerHTML = out.join('');
   if (state.flash >= 0) { var r = document.getElementById('r' + state.flash); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'center' }); state.flash = -1; }
 }
@@ -1035,7 +1092,7 @@ function apriNellAlbero(i) {
   p.forEach(function (j) { if (j !== i || END[i] > i + 1) state.open[j] = true; });
   var cap = parseInt(CODE[p[0]].slice(0, 2), 10);
   SEZIONI.forEach(function (s, k) { if (cap >= s[2] && cap <= s[3]) state.secOpen[k] = true; });
-  state.nq = ''; $('#nq').value = ''; state.flash = i;
+  state.flash = i;
   vista('nomenclatura');
 }
 
@@ -1055,7 +1112,7 @@ function vista(v) {
   var m = T.viste && T.viste[v];
   if (m && m.mostra) m.mostra();
 }
-function renderAll() { renderStato(); renderMsg(); renderFornite(); renderEsito(); if (state.view === 'nomenclatura') renderNom(); }
+function renderAll() { renderStato(); renderMsg(); renderFornite(); renderRisultati(); renderEsito(); if (state.view === 'nomenclatura') renderNom(); }
 
 /* ================================================================
    Events
@@ -1094,11 +1151,16 @@ document.addEventListener('click', function (ev) {
       renderEsito(); T.avviso(e.errore || 'Operazione non riuscita.', 'male');
     });
   }
-  else if (act === 'chiedi') { var tq = state.nq.trim(); if (tq) { vista('classifica'); $('#q').value = tq; classifica(false); } }
+  else if (act === 'chiedi') { cambiaModo('ia'); classifica(false); }
+  else if (act === 'mostra-ris') { state.risChiusi = false; renderRisultati(); var rr = $('#risultati'); if (rr.scrollIntoView) rr.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  else if (act === 'tutti-ris') { state.risTutti = true; renderRisultati(); }
   else if (act === 'flusso') { state.flow = t.getAttribute('data-f'); renderEsito(); salvaPreferenze(); }
   else if (act === 'sez') { var s = t.getAttribute('data-k'); state.secOpen[s] = !state.secOpen[s]; renderNom(); }
   else if (act === 'toggle') { state.open[i] = !state.open[i]; renderNom(); }
-  else if (act === 'usa') { ev.stopPropagation(); state.sel = { code: CODE[i], idx: i }; state.result = null; state.answers = []; state.heads = []; state.trad = {}; state.anima = true; vista('classifica'); renderAll(); var es = $('#esito'); if (es.scrollIntoView) es.scrollIntoView({ block: 'start' }); }
+  else if (act === 'usa') {
+    ev.stopPropagation(); state.sel = { code: CODE[i], idx: i }; state.result = null; state.answers = []; state.heads = []; state.trad = {};
+    state.anima = true; state.risChiusi = true; vista('classifica'); renderAll(); var es = $('#esito'); if (es.scrollIntoView) es.scrollIntoView({ block: 'start' });
+  }
   else if (act === 'apri') { ev.stopPropagation(); apriNellAlbero(i); }
 });
 document.addEventListener('change', function (ev) { if (ev.target && ev.target.id === 'paese') { state.country = ev.target.value; renderEsito(); salvaPreferenze(); } });
@@ -1109,15 +1171,22 @@ document.addEventListener('input', function (ev) {
   if (!box) return;
   Array.prototype.forEach.call(box.children, function (r) { r.hidden = !!q && (r.getAttribute('data-t') || '').indexOf(q) < 0; });
 });
-$('#vai').addEventListener('click', function () { classifica(false); });
+function vai() { if (state.modo === 'ia') classifica(false); else cercaOra(); }
+$('#vai').addEventListener('click', vai);
 $('#ferma').addEventListener('click', ferma);
-$('#q').addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); classifica(false); } });
+$('#q').addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); vai(); } });
+var qT = null;
+$('#q').addEventListener('input', function () {
+  $('#q-x').hidden = !$('#q').value;
+  if (state.modo !== 'parole') return;
+  state.risChiusi = false; state.risTutti = false; if (state.error) { state.error = ''; renderMsg(); }
+  clearTimeout(qT); qT = setTimeout(renderRisultati, 140);
+});
+$('#q-x').addEventListener('click', function () { $('#q').value = ''; state.risChiusi = false; renderRisultati(); $('#q').focus(); });
+$('#modo-ia').addEventListener('change', function (ev) { cambiaModo(ev.target.checked ? 'ia' : 'parole'); $('#q').focus(); });
 document.addEventListener('keydown', function (ev) {
   if (ev.key === 'Enter' && ev.target && ev.target.id === 'extra') { ev.preventDefault(); var b = document.querySelector('[data-act="riclassifica"]'); if (b) b.click(); }
 });
-var nqT = null;
-$('#nq').addEventListener('input', function (ev) { state.nq = ev.target.value; clearTimeout(nqT); nqT = setTimeout(renderNom, 140); });
-$('#nq-x').addEventListener('click', function () { state.nq = ''; $('#nq').value = ''; renderNom(); });
 window.addEventListener('hashchange', function () { var v = location.hash.replace('#', '') || 'classifica'; if (v !== state.view) vista(v); });
 
 /* ================================================================
@@ -1132,6 +1201,7 @@ function ripristina(d) {
   var c = state.result && state.result.best ? digits(state.result.best.code) : digits(d.sel);
   state.sel = c ? { code: c, idx: byCode.has(c) ? byCode.get(c) : -1 } : null;
   state.anima = true;
+  if (state.result && state.modo !== 'ia' && !$('#interruttore-ia').hidden) { state.modo = 'ia'; applicaModo(); }
 }
 function start() {
   var m = D.meta, txt = 'Dati TARIC al ' + DATA_IT;
@@ -1162,7 +1232,7 @@ T.app = {
   vista: vista,
   apriCodice: function (c) {
     state.sel = { code: c, idx: byCode.has(c) ? byCode.get(c) : -1 };
-    state.result = null; state.answers = []; state.heads = []; state.trad = {}; state.anima = true;
+    state.result = null; state.answers = []; state.heads = []; state.trad = {}; state.anima = true; state.risChiusi = true;
     vista('classifica'); renderAll(); var e = $('#esito'); if (e.scrollIntoView) e.scrollIntoView({ block: 'start' });
   },
   apriClassificazione: function (d) {
@@ -1200,6 +1270,7 @@ function avvia() {
     T.tema(u.preferenze.tema);
     state.country = u.preferenze.paese || '';
     state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
+    try { state.modo = localStorage.getItem('magic-hs.modo') === 'ia' ? 'ia' : 'parole'; } catch (e) { /* senza archivio: ricerca per parole */ }
     impostaIA();
     return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
   }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
