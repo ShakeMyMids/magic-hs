@@ -6,7 +6,9 @@
   fatti con strumenti/dati_mese.py).
 Uso: python tests/finto_claude.py 9100 [dati-AAAA-MM-01.zip ...], poi il programma con
 TARIC_AGGIORNAMENTI_URL=http://127.0.0.1:9100/github/releases/latest e TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati;
-in Impostazioni > Intelligenza artificiale «compatibile OpenAI» con indirizzo http://127.0.0.1:9100/v1 (vedi tests/e2e_locale.js)."""
+in Impostazioni > Intelligenza artificiale «compatibile OpenAI» con indirizzo http://127.0.0.1:9100/v1 (vedi tests/e2e_locale.js).
+Accetta anche le chiamate dal browser (CORS), come i servizi veri, per la prova della versione sito (tests/e2e_sito.js);
+con Claude e lo strumento «risposta» risponde con tool_use, come l'API di Anthropic."""
 import hashlib
 import io
 import json
@@ -89,6 +91,18 @@ class Gestore(BaseHTTPRequestHandler):
         else:
             self._json(404, {"message": "Not Found"})
 
+    # ------------------------------------------------------------------ chiamate dal browser (CORS)
+    def end_headers(self):  # noqa: N802
+        self.send_header("access-control-allow-origin", "*")
+        self.send_header("access-control-allow-headers", "*")
+        self.send_header("access-control-allow-methods", "GET, POST, OPTIONS")
+        super().end_headers()
+
+    def do_OPTIONS(self):  # noqa: N802
+        self.send_response(204)
+        self.send_header("content-length", "0")
+        self.end_headers()
+
     # ------------------------------------------------------------------ finta IA
     def do_POST(self):  # noqa: N802
         corpo = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
@@ -97,7 +111,7 @@ class Gestore(BaseHTTPRequestHandler):
             self._json(401, {"error": {"message": "API key not valid"}})
             return
         if ":generateContent" in self.path:
-            prompt = corpo["contents"][0]["parts"][0]["text"]
+            prompt = "\n\n".join(p["text"] for p in corpo["contents"][0]["parts"])
             testo = json.dumps(rispondi(prompt), ensure_ascii=False)
             self._json(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": testo}]}, "finishReason": "STOP"}],
                              "usageMetadata": {"promptTokenCount": len(prompt) // 4, "candidatesTokenCount": len(testo) // 4}})
@@ -107,10 +121,17 @@ class Gestore(BaseHTTPRequestHandler):
             self._json(200, {"choices": [{"message": {"role": "assistant", "content": testo}, "finish_reason": "stop"}],
                              "usage": {"prompt_tokens": len(prompt) // 4, "completion_tokens": len(testo) // 4}})
         else:
-            prompt = corpo["messages"][0]["content"]
-            testo = json.dumps(rispondi(prompt), ensure_ascii=False)
-            self._json(200, {"content": [{"type": "text", "text": testo}], "stop_reason": "end_turn", "model": corpo["model"],
-                             "usage": {"input_tokens": len(prompt) // 4, "output_tokens": len(testo) // 4}})
+            contenuto = corpo["messages"][0]["content"]
+            prompt = contenuto if isinstance(contenuto, str) else "\n\n".join(b["text"] for b in contenuto)
+            risposta = rispondi(prompt)
+            testo = json.dumps(risposta, ensure_ascii=False)
+            uso = {"input_tokens": len(prompt) // 4, "output_tokens": len(testo) // 4,
+                   "cache_read_input_tokens": len(contenuto[0]["text"]) // 4 if isinstance(contenuto, list) else 0}
+            if corpo.get("tools"):
+                self._json(200, {"content": [{"type": "tool_use", "id": "toolu_1", "name": "risposta", "input": risposta}],
+                                 "stop_reason": "tool_use", "model": corpo["model"], "usage": uso})
+            else:
+                self._json(200, {"content": [{"type": "text", "text": testo}], "stop_reason": "end_turn", "model": corpo["model"], "usage": uso})
 
     def _json(self, stato: int, dati: object) -> None:
         b = json.dumps(dati).encode()

@@ -1,9 +1,12 @@
 # Istruzioni per lavorare su MAGIC HS con Claude Code
 
-Programma per Windows per la classificazione doganale (TARIC UE), ad uso interno di un'azienda: server Python locale
-(FastAPI + SQLite) su 127.0.0.1, aperto nel browser, interfaccia in JavaScript senza framework. Ognuno lo usa in
-autonomia e senza costi: programma e dati TARIC del mese arrivano dalla pagina delle versioni di GitHub (progetto
-pubblico), il servizio IA lo sceglie ognuno sul suo PC. Non c'è più una versione sito con account, registrazione, posta
+Classificazione doganale (TARIC UE) ad uso interno di un'azienda, in due forme con la stessa interfaccia in JavaScript
+senza framework (`taric/static/`):
+- **sito** (la forma principale) su GitHub Pages, <https://shakemymids.github.io/magic-hs/>: solo file statici costruiti da
+  `strumenti/sito.py`; quello che fa il server lo fa il browser (`js/web.js`, `js/ia.js`), installabile come app;
+- **programma per Windows**: server Python locale (FastAPI + SQLite) su 127.0.0.1, aperto nel browser.
+Ognuno lo usa in autonomia e senza costi: programma, sito e dati TARIC del mese arrivano da GitHub (progetto pubblico),
+il servizio IA lo sceglie ognuno per sé. Non c'è più una versione sito con account, registrazione, posta
 e pagamenti (storia di git fino al tag `v1.2.1`), né la cartella condivisa con chi pubblica per i colleghi (fino alla
 1.2.2: il programma ne importa una volta sola il servizio IA). Tutti i testi per l'utente, i commenti e i nomi sono in
 **italiano**.
@@ -52,6 +55,14 @@ e pagamenti (storia di git fino al tag `v1.2.1`), né la cartella condivisa con 
   controllo di dimensione e SHA-256, estrazione della sola cartella `python/` in `programma/<versione>` e scrittura di
   `attuale.txt` (CRLF, per `set /p`): si usa dal prossimo avvio. Nei test `conftest.FintoGitHub`: mai GitHub vero.
 - `taric/nomenclatura_it.json`: testo ufficiale italiano della nomenclatura (estrazione del 1° luglio 2026).
+- Sito: `js/web.js` risponde alle stesse richieste di `TARIC.api()` che nel programma arrivano a `app.py` (profilo,
+  preferenze, storico in IndexedDB, preferiti, Impostazioni ridotte a IA e dati, esporta/importa) e sceglie i dati del mese
+  da `config.js`; `js/ia.js` è il porting di `ia.py` (stessi schemi, nuovi tentativi, codici d'errore; Claude con
+  `anthropic-dangerous-direct-browser-access`). **Una modifica alle API in `app.py` va riportata in `web.js`** (e
+  viceversa). `T.web` vale nel sito: nasconde ciò che riguarda il programma (Chiudi, scheda Programma, Registro).
+  `sw.js` (completato da `sito.py`): prima la rete per le pagine, prima la copia salvata per `dati/<versione>/`.
+  `strumenti/sito.py` rende relativi i percorsi, mette la CSP nella pagina e i dati degli ultimi mesi in `dati/`;
+  `.github/workflows/sito.yml` lo pubblica su GitHub Pages (anche dopo ogni mese nuovo di `dati.yml`).
 - `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/`), `locale.html` (aperta senza la chiave
   dell'avvio), `attesa.html` con `js/attesa.js` (dati non ancora pronti), `js/comune.js` (chiamate API, tema, logo),
   `js/disegni.js` (scena con nave, gru, treno, camion e aereo, inserita negli elementi `data-scena`), `js/app.js`
@@ -75,10 +86,12 @@ e pagamenti (storia di git fino al tag `v1.2.1`), né la cartella condivisa con 
 ```bash
 pip install -r requirements-dev.txt
 python -m pytest -q tests
+node --test tests/ia_web.test.js
 ```
 
 I test usano `conftest.PC` (un PC con la sua cartella, finti servizio IA e GitHub: `FintoClaude`, `FintoGitHub` con
-programma, dati pronti e fonte). Prova nel browser (Playwright, finto servizio IA): vedi la sezione «Sviluppo» del README. Il programma per Windows si prova
+programma, dati pronti e fonte). L'IA del sito si prova con `node --test tests/ia_web.test.js`; il sito intero nel browser
+con `tests/e2e_sito.js` (vedi README, «Sviluppo»). Prova nel browser (Playwright, finto servizio IA): vedi la sezione «Sviluppo» del README. Il programma per Windows si prova
 anche con Wine: estrai `dist/MAGIC-HS-*.zip`, copia il pacchetto estratto in `%LOCALAPPDATA%\MAGIC HS\programma\<versione>`
 e lancia l'avvio con `MAGIC_HS_SENZA_BROWSER=1 wine cmd /c "…\Avvia MAGIC HS.cmd"`. Dopo modifiche all'interfaccia
 controlla anche il telefono (larghezza 390 px) e il tema scuro.

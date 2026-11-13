@@ -1,8 +1,10 @@
 # MAGIC HS
 
-Programma per Windows per cercare le voci doganali in modo più rapido di AIDA, ad uso interno dell'azienda. Descrivi la merce a parole: l'intelligenza artificiale (Gemini, Claude, Azure OpenAI o un altro modello a scelta) propone il codice a 10 cifre con le alternative e fa le domande che servono per scegliere. MAGIC HS mostra dazi, misure e documenti richiesti per ogni paese, presi dai dati ufficiali TARIC dell'Unione europea.
+Sito (e programma per Windows) per cercare le voci doganali in modo più rapido di AIDA, ad uso interno dell'azienda. Descrivi la merce a parole: l'intelligenza artificiale (Gemini, Claude, Azure OpenAI o un altro modello a scelta) propone il codice a 10 cifre con le alternative e fa le domande che servono per scegliere. MAGIC HS mostra dazi, misure e documenti richiesti per ogni paese, presi dai dati ufficiali TARIC dell'Unione europea.
 
-Ognuno lo usa sul proprio PC in autonomia, senza server, installazione né costi: il programma e i dati TARIC del mese arrivano da soli dalla [pagina delle versioni](https://github.com/ShakeMyMids/magic-hs/releases) del progetto su GitHub, e ognuno sceglie il proprio servizio di intelligenza artificiale (o nessuno). Nessuno deve gestire nulla per gli altri.
+**Si apre dal browser: <https://shakemymids.github.io/magic-hs/>**, senza installare nulla e senza costi; in Edge o Chrome si installa come app, con l'icona sul desktop (vedi [Versione sito](#versione-sito)). Ognuno sceglie il proprio servizio di intelligenza artificiale (o nessuno) e i dati TARIC del mese arrivano da soli. Nessuno deve gestire nulla per gli altri.
+
+Resta anche il programma per Windows, che gira sul PC e si aggiorna da solo dalla [pagina delle versioni](https://github.com/ShakeMyMids/magic-hs/releases): serve a chi lo usa già, e con *Profilo → I tuoi dati → Esporta* porta storico e preferiti nel sito.
 
 > Strumento non ufficiale e senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.
 
@@ -11,19 +13,54 @@ Ognuno lo usa sul proprio PC in autonomia, senza server, installazione né costi
 - **Classifica**: dalla descrizione della merce l'IA individua le voci candidate. Poi sceglie il codice confrontandolo con il testo ufficiale della nomenclatura, che è in italiano. Le domande affinano la scelta.
 - **Nomenclatura**: albero e ricerca per parola o per codice, senza intelligenza artificiale.
 - **Misure per paese**: dazi (anche preferenziali, antidumping e contingenti), condizioni, certificati e documenti del riquadro 44 e unità supplementari. Valgono per importazione ed esportazione.
-- **Profilo**, che resta sul PC di ciascuno:
+- **Profilo**, che resta nel browser (o sul PC) di ciascuno:
   - storico delle classificazioni, che si riaprono con tutti i dettagli;
   - voci preferite con una nota;
   - paese, flusso e tema predefiniti;
-  - classificazioni con l'IA del mese.
-- **Impostazioni** del PC:
+  - classificazioni con l'IA del mese;
+  - esportazione e importazione di tutto questo, anche tra programma per Windows e sito.
+- **Impostazioni** (nel sito solo intelligenza artificiale e dati TARIC):
   - intelligenza artificiale: servizio, chiave (protetta da Windows), prova, elenco dei modelli, uso del mese;
   - dati TARIC: versioni, aggiornamento immediato, caricamento manuale, ritorno alla versione precedente;
   - versione del programma;
   - registro degli eventi.
 - **Aggiornamenti da soli**: a ogni inizio mese GitHub prepara i dati TARIC con gli stessi controlli del programma e ogni PC li scarica (pochi MB); le nuove versioni del programma si scaricano e si preparano da sole per l'apertura successiva.
 
-## Installazione
+## Versione sito
+
+### Come si apre
+
+1. Apri <https://shakemymids.github.io/magic-hs/> in Edge o Chrome.
+2. Per averla come app: in Edge menu **⋯ → App → Installa questo sito come app**; in Chrome l'icona di installazione nella barra degli indirizzi (oppure menu **⋮ → Trasmetti, salva e condividi → Installa pagina come app**). Compare un'icona sul desktop e nel menu Start, e MAGIC HS si apre in una finestra sua.
+3. Facoltativo: in *Impostazioni → Intelligenza artificiale* scegli il servizio e inserisci la chiave.
+
+Le nuove versioni e i dati del mese arrivano da soli: basta riaprire. L'app si apre anche senza rete (nomenclatura, misure, storico e preferiti), grazie ai dati salvati nel browser.
+
+### Dove restano i dati
+
+Storico (in IndexedDB), preferiti, preferenze e servizio IA (in localStorage) restano **nel browser di quel PC**: non passano da nessun server e non si vedono da altri browser o PC. Cancellando i dati di navigazione del sito si perdono: *Profilo → I tuoi dati → Esporta* ne salva una copia in un file `.json`, che *Importa* rimette (anche in un altro browser, nel programma per Windows o viceversa; importare due volte non crea doppioni).
+
+### Intelligenza artificiale dal browser
+
+Il browser chiama direttamente il servizio scelto con la chiave della persona. Gemini, Claude e OpenAI accettano le chiamate dai browser; per **Azure OpenAI** e gli altri servizi compatibili dipende dal servizio (se *Prova* dice che non lo raggiunge, il servizio non accetta richieste da questo sito). **Ollama** sul proprio PC va avviato con la variabile `OLLAMA_ORIGINS=https://shakemymids.github.io`; Chrome e Edge possono chiedere il permesso di accedere ai dispositivi della rete locale.
+
+La chiave sta in chiaro nell'archivio del browser: la può leggere chi usa quel profilo di Windows o un'estensione del browser malevola. Usa una chiave dedicata a MAGIC HS, con un tetto di spesa. Tutte le pagine di `shakemymids.github.io` condividono lo stesso archivio del browser: non pubblicare altri siti con lo stesso account GitHub, oppure sposta MAGIC HS su un indirizzo suo (vedi sotto).
+
+### Accesso solo per le persone approvate
+
+Il sito è pubblico, ma un estraneo non costa nulla: ognuno usa la propria chiave dell'IA, e codice e dati TARIC sono comunque pubblici. Per farlo aprire solo a chi approvi tu, una registrazione dentro il sito non basterebbe (è fatto di soli file: si aggirerebbe). La strada gratuita è **Cloudflare Pages con Cloudflare Access** (gratis fino a 50 persone):
+
+1. su Cloudflare (account gratuito) crea un progetto *Pages* e pubblicaci il sito costruito dal flusso *Sito*: la cosa più comoda è aggiungere al flusso un passaggio che lo carica su Cloudflare con un token dell'account, da fare quando servirà;
+2. in *Zero Trust → Access → Applications* proteggi l'indirizzo del progetto con una regola *Emails* (gli indirizzi che approvi) o *Emails ending in* `@azienda.it`;
+3. chi apre il sito riceve un codice via email; gli altri non vedono nulla. Poi si spegne la pubblicazione su GitHub Pages.
+
+Il sito funziona così com'è (percorsi relativi); su un indirizzo nuovo storico e preferiti vanno portati con *Esporta*/*Importa*.
+
+### Pubblicazione
+
+Il flusso GitHub *Sito* (`.github/workflows/sito.yml`) costruisce il sito con `strumenti/sito.py` e i dati degli ultimi tre mesi della pagina `dati`, e lo pubblica su GitHub Pages: a ogni modifica delle pagine su `main` e dopo ogni mese nuovo pubblicato dal flusso *Dati TARIC*. Una volta sola, nelle impostazioni del repository: *Settings → Pages → Build and deployment → Source: GitHub Actions*.
+
+## Programma per Windows
 
 ### Su ogni PC
 
@@ -93,7 +130,7 @@ Ognuno la sceglie sul suo PC, in *Impostazioni → Intelligenza artificiale*. Se
 - **Se la fonte non funziona**: carica a mano l'archivio .zip con i file Excel del mese (*Impostazioni → Dati TARIC → Carica a mano*).
 - **Fuori dal TARIC**: IVA, accise e misure nazionali; per quelle resta AIDA.
 
-## Dati sul PC e copia di sicurezza
+## Dati sul PC e copia di sicurezza (programma per Windows)
 
 Storico, preferiti, preferenze, servizio IA e uso dell'IA stanno in `%LOCALAPPDATA%\MAGIC HS\dati\taric.db`; in `%LOCALAPPDATA%\MAGIC HS` c'è anche `registro.txt`, utile se qualcosa non funziona. Il programma fa da solo un backup del database al giorno in `dati\backup` e tiene gli ultimi 7.
 
@@ -113,17 +150,21 @@ Il database di prima viene salvato in un nuovo backup. La chiave dell'IA si legg
 - **Aggiornamenti**: programma e dati arrivano solo dalla pagina delle versioni del progetto su GitHub, con controllo di dimensione e impronta SHA-256, e si estraggono con nomi e dimensioni controllati; i dati si installano solo se superano i controlli. Chi può pubblicare versioni nel progetto può cambiare il programma di tutti: proteggi l'account GitHub con l'autenticazione a due fattori.
 - **Chiave dell'IA**: protetta da Windows (DPAPI) per l'utente che l'ha inserita; non è mai in chiaro sul disco.
 - **Archivi caricati**: trattati come non fidati, con estrazione dei soli `.xlsx`, limiti di dimensione e nessun percorso.
+- **Sito**: solo file statici, con la Content-Security-Policy nella pagina (script solo del sito, nessun gestore in linea) e niente pagina dentro la cornice di altri siti. Le chiamate verso l'esterno sono solo quelle al servizio IA scelto. Storico, preferiti e chiave restano nel browser.
 - **Font**: locali (licenza SIL OFL), quindi nessun servizio di terzi caricato dalle pagine.
 
 ## Sviluppo
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q tests                       # programma, aggiornamenti, IA, dati, backup
+python -m pytest -q tests                       # programma, aggiornamenti, IA, dati, backup, costruzione del sito
+node --test tests/ia_web.test.js                # IA della versione sito (js/ia.js)
 TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.py   # con un'estrazione vera (circa un minuto)
 ```
 
-Il programma si avvia anche su Linux o macOS per le prove: `python -m taric.programma --cartella <pc> --senza-browser` (fuori da Windows la chiave dell'IA si cifra con un segreto nella cartella dei dati). Per la prova nel browser (Playwright) prepara i dati di un mese con `python strumenti/dati_mese.py AAAA-MM dati-AAAA-MM-01.zip`, avvia `python tests/finto_claude.py 9100 dati-AAAA-MM-01.zip` (imita GitHub e le API di Gemini, Claude e dei servizi compatibili OpenAI), poi il programma con `TARIC_AGGIORNAMENTI_URL=http://127.0.0.1:9100/github/releases/latest` e `TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati` su una cartella vuota, e infine `node tests/e2e_locale.js <pc>/istanza.json shots-locale`. Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
+Il programma si avvia anche su Linux o macOS per le prove: `python -m taric.programma --cartella <pc> --senza-browser` (fuori da Windows la chiave dell'IA si cifra con un segreto nella cartella dei dati). Per la prova nel browser (Playwright) prepara i dati di un mese con `python strumenti/dati_mese.py AAAA-MM dati-AAAA-MM-01.zip`, avvia `python tests/finto_claude.py 9100 dati-AAAA-MM-01.zip` (imita GitHub e le API di Gemini, Claude e dei servizi compatibili OpenAI), poi il programma con `TARIC_AGGIORNAMENTI_URL=http://127.0.0.1:9100/github/releases/latest` e `TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati` su una cartella vuota, e infine `node tests/e2e_locale.js <pc>/istanza.json shots-locale`.
+
+Per la versione sito: `python strumenti/sito.py --uscita P/magic-hs dati-AAAA-MM-01.zip`, poi `python tests/finto_claude.py 9100` e `python -m http.server 8800 --bind 127.0.0.1 --directory P`, e infine `node tests/e2e_sito.js http://localhost:8800/magic-hs/ shots-sito` (su `localhost` si prova anche il service worker). Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
 
 ## Fonti e licenze
 

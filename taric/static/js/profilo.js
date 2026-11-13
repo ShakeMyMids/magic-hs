@@ -1,10 +1,12 @@
-/* MAGIC HS - vista Profilo: nome, preferenze, uso dell'IA, storico, preferiti (tutto resta su questo PC). */
+/* MAGIC HS - vista Profilo: nome, preferenze, uso dell'IA, storico, preferiti (tutto resta su questo PC, o in questo
+   browser nella versione sito), esportazione e importazione degli stessi dati. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
   var el = document.getElementById('view-profilo');
   var st = { storico: [], totale: 0, finito: false, preferiti: [], filtro: '', caricato: false, msg: {} };
   var vista = T.viste = T.viste || {};
+  var SITO = 'https://shakemymids.github.io/magic-hs/';
 
   function $(s) { return el.querySelector(s); }
   function app() { return T.app; }
@@ -68,6 +70,13 @@
     else h += '<div class="elenco">' + st.preferiti.map(rigaPreferito).join('') + '</div>';
     h += '</div></div>';
 
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'I tuoi dati</div>' +
+      '<p class="nota">' + (T.web ? 'Storico, preferiti e preferenze restano in questo browser: esportali per tenerne una copia o per passarli a un altro browser o PC.'
+        : 'Storico, preferiti e preferenze restano su questo PC. Per usarli nel <a href="' + SITO + '" target="_blank" rel="noopener">sito di MAGIC HS</a> esportali qui e importali là.') + '</p>' +
+      '<div class="fila"><button class="btn sm" type="button" data-p="esporta">' + T.icona('scarica') + 'Esporta</button>' +
+      '<button class="btn sm" type="button" data-p="scegli-file">' + T.icona('carica') + 'Importa</button>' +
+      '<input type="file" accept=".json,application/json" data-p="importa" hidden aria-label="File esportato da MAGIC HS"></div>' + riga('dati') + '</div></div>';
+
     el.innerHTML = h;
   }
 
@@ -119,7 +128,10 @@
     var dati = new FormData(f);
     if (azione === 'salva-account') {
       T.api('PUT', '/api/io', { nome: dati.get('nome'), azienda: dati.get('azienda') }).then(function () {
-        messaggio('account', 'Dati salvati.', true); document.getElementById('chi-nome').textContent = dati.get('nome');
+        var nome = String(dati.get('nome') || '').trim();
+        messaggio('account', 'Dati salvati.', true); document.getElementById('chi-nome').textContent = nome;
+        document.getElementById('chi-iniziali').textContent = nome.split(/\s+/).slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase();
+        document.getElementById('chi-iniziali').parentNode.title = nome;
         return app().aggiornaIo();
       }, function (e) { messaggio('account', e.errore); }).then(disegna);
     } else if (azione === 'nota') {
@@ -133,6 +145,7 @@
   });
 
   el.addEventListener('change', function (ev) {
+    if (ev.target.getAttribute('data-p') === 'importa') { importa(ev.target); return; }
     if (ev.target.getAttribute('data-p') !== 'pref') return;
     var io = u(), p = { paese: io.preferenze.paese, flusso: io.preferenze.flusso, tema: io.preferenze.tema };
     p[ev.target.name] = ev.target.value;
@@ -140,6 +153,31 @@
       io.preferenze = p; app().preferenze(p); T.avviso('Preferenza salvata.');
     }, function (e) { T.avviso(e.errore, 'male'); });
   });
+
+  /* ------------------------------------------------------------------ esporta e importa */
+  function esporta() {
+    T.api('GET', '/api/io/esporta').then(function (d) {
+      var oggi = new Date(), nome = 'magic-hs-' + oggi.getFullYear() + '-' + ('0' + (oggi.getMonth() + 1)).slice(-2) + '-' + ('0' + oggi.getDate()).slice(-2) + '.json';
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' }));
+      a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+      messaggio('dati', 'Esportate ' + d.storico.length + ' classificazioni e ' + d.preferiti.length + ' preferiti nel file ' + nome + '.', true); disegna();
+    }, function (e) { messaggio('dati', e.errore); disegna(); });
+  }
+  function importa(campo) {
+    var f = campo.files && campo.files[0];
+    if (!f) return;
+    if (f.size > 100 * 1024 * 1024) { messaggio('dati', 'File troppo grande.'); disegna(); return; }
+    messaggio('dati', 'Importo…', true); disegna();
+    f.text().then(function (testo) {
+      var d; try { d = JSON.parse(testo); } catch (x) { throw { errore: 'Il file non è un\'esportazione di MAGIC HS.' }; }
+      return T.api('POST', '/api/io/importa', d);
+    }).then(function (r) {
+      messaggio('dati', 'Importate ' + r.storico + (r.storico === 1 ? ' classificazione' : ' classificazioni') + ' e ' + r.preferiti + (r.preferiti === 1 ? ' preferito' : ' preferiti') + '.', true);
+      return T.api('GET', '/api/preferiti').then(function (p) { p.voci.forEach(function (v) { app().preferiti[v.codice] = { nota: v.nota }; }); }).then(carica);
+    }, function (e) { messaggio('dati', (e && e.errore) || 'Importazione non riuscita.'); disegna(); });
+  }
 
   el.addEventListener('input', function (ev) {
     if (ev.target.getAttribute('data-p') !== 'filtro') return;
@@ -166,6 +204,10 @@
       T.api('GET', '/api/storico?limite=50&prima=' + ultimo).then(function (r) {
         st.storico = st.storico.concat(r.voci); st.finito = st.storico.length >= r.totale || !r.voci.length; disegna();
       });
+    } else if (azione === 'esporta') {
+      esporta();
+    } else if (azione === 'scegli-file') {
+      $('input[data-p="importa"]').click();
     } else if (azione === 'apri-codice') {
       app().apriCodice(c);
     } else if (azione === 'togli-preferito') {

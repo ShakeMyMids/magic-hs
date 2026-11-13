@@ -441,6 +441,47 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             c.execute("DELETE FROM preferiti WHERE utente_id = ? AND codice = ?", (u["id"], codice))
         return json_ok()
 
+    # ------------------------------------------------------------------ esporta e importa (stesso formato del sito, js/web.js)
+    @app.get("/api/io/esporta")
+    def esporta(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        with db.connessione() as c:
+            io_ = descrivi_utente(c, u)
+            storico_ = [{"quando": r["quando"], "testo": r["testo"], "codice": r["codice"], "dati": json.loads(r["dati"])}
+                        for r in c.execute("SELECT quando, testo, codice, dati FROM storico WHERE utente_id = ? ORDER BY id DESC", (u["id"],))]
+            preferiti_ = [dict(r) for r in c.execute("SELECT codice, nota, quando FROM preferiti WHERE utente_id = ? ORDER BY quando DESC", (u["id"],))]
+        return {"formato": "magic-hs", "versione": 1, "esportato": iso(), "profilo": {"nome": io_["nome"], "azienda": io_["azienda"]},
+                "preferenze": io_["preferenze"], "preferiti": preferiti_, "storico": storico_}
+
+    @app.post("/api/io/importa")
+    def importa(body: dict[str, Any], u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        if body.get("formato") != "magic-hs" or not isinstance(body.get("storico"), list) or not isinstance(body.get("preferiti"), list):
+            raise Errore(422, "Il file non è un'esportazione di MAGIC HS.", "formato")
+        nuove = np = 0
+        with db.transazione() as c:
+            visti = {(r["quando"], r["testo"]) for r in c.execute("SELECT quando, testo FROM storico WHERE utente_id = ?", (u["id"],))}
+            # l'esportazione va dalla più recente: dalla più vecchia, a parità d'orario nello stesso ordine
+            for v in sorted((v for v in reversed(body["storico"]) if isinstance(v, dict)), key=lambda v: str(v.get("quando") or "")):
+                testo, dati_ = str(v.get("testo") or "").strip()[:2000], v.get("dati")
+                quando = str(v.get("quando") or iso())[:40]
+                if not testo or not isinstance(dati_, dict) or (quando, testo) in visti:
+                    continue
+                codice = str(v.get("codice") or "")
+                c.execute("INSERT INTO storico(utente_id, quando, testo, codice, dati) VALUES (?, ?, ?, ?, ?)",
+                          (u["id"], quando, testo, codice if RE_CODICE.match(codice) else "", json.dumps(dati_, ensure_ascii=False)[:200_000]))
+                visti.add((quando, testo))
+                nuove += 1
+            c.execute("DELETE FROM storico WHERE utente_id = ? AND id NOT IN (SELECT id FROM storico WHERE utente_id = ? ORDER BY quando DESC LIMIT 500)",
+                      (u["id"], u["id"]))
+            for p in body["preferiti"]:
+                codice = str((p or {}).get("codice") or "") if isinstance(p, dict) else ""
+                if not RE_CODICE.match(codice):
+                    continue
+                if c.execute("SELECT COUNT(*) FROM preferiti WHERE utente_id = ?", (u["id"],)).fetchone()[0] >= 1000:
+                    break
+                np += c.execute("INSERT INTO preferiti(utente_id, codice, nota, quando) VALUES (?, ?, ?, ?) ON CONFLICT(utente_id, codice) DO NOTHING",
+                                (u["id"], codice, str(p.get("nota") or "").strip()[:500], str(p.get("quando") or iso())[:40])).rowcount
+        return json_ok(storico=nuove, preferiti=np)
+
     # ------------------------------------------------------------------ IA
     @app.post("/api/ia")
     def chiedi_ia(body: RichiestaIA, u: sqlite3.Row = Depends(richiede_utente)) -> Response:

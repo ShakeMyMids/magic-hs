@@ -1177,7 +1177,8 @@ document.addEventListener('taric:tema', function (ev) {
   T.api('PUT', '/api/io/preferenze', { paese: u.preferenze.paese || '', flusso: u.preferenze.flusso || 'import', tema: ev.detail }).catch(function () { /* resta solo su questo dispositivo */ });
 });
 
-$('#esci').addEventListener('click', function () {
+if (T.web) $('#esci').hidden = true;          // sito: non c'è un programma da chiudere
+else $('#esci').addEventListener('click', function () {
   T.api('POST', '/api/locale/chiudi', null, { resta: true }).then(function () { chiuso(false); }, function () { chiuso(true); });
 });
 
@@ -1202,18 +1203,23 @@ function tieniVivo() {
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') controllaVivo(); });
   T.alOffline = controllaVivo;
 }
-T.api('GET', '/api/io').then(function (u) {
-  state.utente = u;
-  $('#chi-nome').textContent = u.nome;
-  $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
-  $('#chi-iniziali').parentNode.title = u.nome;
-  tieniVivo();
-  $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
-  if (u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Impostazioni se c'è una versione nuova
-  T.tema(u.preferenze.tema);
-  state.country = u.preferenze.paese || '';
-  state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
-  impostaIA();
-  return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
-}).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
+/* si parte quando tutta la pagina è caricata (anche profilo.js e gestione.js): nella versione sito le risposte
+   arrivano subito dal browser */
+function avvia() {
+  T.api('GET', '/api/io').then(function (u) {
+    state.utente = u;
+    $('#chi-nome').textContent = u.nome;
+    $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
+    $('#chi-iniziali').parentNode.title = u.nome;
+    if (!T.web) tieniVivo();
+    $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
+    if (!T.web && u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Impostazioni se c'è una versione nuova
+    T.tema(u.preferenze.tema);
+    state.country = u.preferenze.paese || '';
+    state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
+    impostaIA();
+    return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
+  }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', avvia); else avvia();
 })();

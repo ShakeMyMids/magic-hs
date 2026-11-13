@@ -15,4 +15,6 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q tests
       - name: Controllo sintassi JavaScript
-        run: for f in taric/static/js/*.js; do node --check "$f"; done
+        run: for f in taric/static/js/*.js taric/static/sw.js; do node --check "$f"; done
+      - name: Prove dell'IA della versione sito
+        run: node --test tests/ia_web.test.js

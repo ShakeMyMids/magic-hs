@@ -17,6 +17,10 @@ INTELLIGENZA ARTIFICIALE
 resta su questo computer, protetta da Windows. Senza costi puoi usare Ollama, che fa girare il modello
 sul tuo PC. Anche senza IA restano nomenclatura, misure, ricerca per codice, storico e preferiti.
 
+ANCHE DAL BROWSER
+MAGIC HS si apre anche come sito, senza programma: https://shakemymids.github.io/magic-hs/
+Per portarci storico e preferiti: qui in Profilo > I tuoi dati > Esporta, poi nel sito Importa.
+
 COME SI CHIUDE
 Con il pulsante di spegnimento in alto a destra nella pagina. Se chiudi solo il browser, il programma
 si chiude da solo dopo mezz'ora.

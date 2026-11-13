@@ -1,5 +1,6 @@
 /* MAGIC HS - vista Impostazioni di questo PC: intelligenza artificiale, dati TARIC, versione del programma,
-   registro degli eventi. */
+   registro degli eventi. Nella versione sito (T.web) restano intelligenza artificiale e dati TARIC: i dati e le
+   versioni arrivano con il sito. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
@@ -40,6 +41,7 @@
   function disegna() {
     var r = st.riep, h = '';
     var schede = [['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['programma', 'Programma', 'pacco'], ['registro', 'Registro', 'registro']];
+    if (T.web) schede = schede.slice(0, 2);
     h += '<div class="sotto" role="tablist">' + schede.map(function (x) {
       return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
@@ -69,6 +71,7 @@
       ' codici dichiarabili, ' + (att.misure_import || '?') + ' misure all\'importazione e ' + (att.misure_export || '?') + ' all\'esportazione; ' + (att.righe_en || 0) + ' righe ancora in inglese.</p>' +
       (att.avvisi && att.avvisi.length ? '<p class="avviso">' + esc(att.avvisi.join(' · ')) + '</p>' : '');
     else h += '<p class="avviso">Nessun dato installato.</p>';
+    if (T.web) return h + '<p class="nota">Arrivano da soli con il sito, a ogni inizio mese.</p></div></div>' + versioniDati(d);
     if (d.in_corso) h += '<p class="esito-ok">Aggiornamento di ' + esc(d.in_corso.mese) + ' in corso: ' + esc(d.in_corso.fase) + '…</p>';
     h += '<p class="nota">A ogni inizio mese arrivano da soli, pronti da GitHub; se non ci sono ancora li prepara questo PC.</p>';
     h += (d.prossimo ? '<p class="nota">Prossimo tentativo per ' + esc(d.prossimo) + ' entro dieci minuti.</p>' : '') + '</div>';
@@ -80,20 +83,26 @@
       '<label>Mese dell\'estrazione<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label></div>' +
       '<div class="fila"><button class="btn" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Carica e installa</button></div>' + riga('carica') + '</form></div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Versioni installate</div><div class="scorri"><table class="tab"><thead><tr><th>Situazione al</th><th class="n">Righe</th><th class="n">Misure import</th><th>Generata</th><th></th></tr></thead><tbody>' +
-      d.versioni.map(function (v) {
-        return '<tr' + (v.attiva ? ' class="evid"' : '') + '><td>' + esc(v.versione.split('-').reverse().join('/')) + (v.attiva ? ' <span class="st ok">in uso</span>' : '') + '</td><td class="n" data-l="Righe">' + (v.righe || '') + '</td><td class="n" data-l="Misure import">' + (v.misure_import || '') +
-          '</td><td data-l="Generata">' + esc(T.dataOra(v.generato)) + '</td><td class="azioni"><button class="btn sm" type="button" data-g="riepilogo" data-v="' + esc(v.versione) + '">Riepilogo</button>' +
-          (v.attiva ? '' : '<button class="btn sm" type="button" data-g="usa" data-v="' + esc(v.versione) + '">Usa questa</button>') + '</td></tr>';
-      }).join('') + '</tbody></table></div></div></div>';
+    h += versioniDati(d);
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Ultimi aggiornamenti</div><div class="scorri"><table class="tab"><thead><tr><th>Quando</th><th>Mese</th><th>Origine</th><th>Esito</th><th>Messaggio</th><th></th></tr></thead><tbody>' +
       d.ultimi.map(function (a) {
         return '<tr><td>' + esc(T.dataOra(a.iniziato)) + '</td><td data-l="Mese">' + esc(a.mese) + '</td><td data-l="Origine">' + esc(a.origine.replace(/_/g, ' ')) + '</td><td data-l="Esito"><span class="st ' + a.esito + '">' + (ESITI[a.esito] || a.esito) + '</span></td><td>' + esc(a.messaggio) + '</td>' +
           '<td>' + (a.esito === 'errore' || a.esito === 'ok' ? '<button class="btn sm" type="button" data-g="registro-agg" data-id="' + a.id + '">Registro</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' + (d.ultimi.length ? '' : '<p class="vuoto">Nessun aggiornamento ancora.</p>') +
-      (st.registro ? '<div class="lab" style="margin-top:8px">' + esc(st.registro.titolo) + '<span class="dx"><button class="link" type="button" data-g="chiudi-registro">chiudi</button></span></div><pre class="registro">' + esc(st.registro.testo) + '</pre>' : '') + '</div></div>';
+      registroAperto() + '</div></div>';
     return h;
+  }
+  function registroAperto() {
+    return st.registro ? '<div class="lab" style="margin-top:8px">' + esc(st.registro.titolo) + '<span class="dx"><button class="link" type="button" data-g="chiudi-registro">chiudi</button></span></div><pre class="registro">' + esc(st.registro.testo) + '</pre>' : '';
+  }
+  function versioniDati(d) {
+    return '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + (T.web ? 'Versioni sul sito' : 'Versioni installate') + '</div><div class="scorri"><table class="tab"><thead><tr><th>Situazione al</th><th class="n">Righe</th><th class="n">Misure import</th><th>Generata</th><th></th></tr></thead><tbody>' +
+      d.versioni.map(function (v) {
+        return '<tr' + (v.attiva ? ' class="evid"' : '') + '><td>' + esc(v.versione.split('-').reverse().join('/')) + (v.attiva ? ' <span class="st ok">in uso</span>' : '') + '</td><td class="n" data-l="Righe">' + (v.righe || '') + '</td><td class="n" data-l="Misure import">' + (v.misure_import || '') +
+          '</td><td data-l="Generata">' + esc(T.dataOra(v.generato)) + '</td><td class="azioni"><button class="btn sm" type="button" data-g="riepilogo" data-v="' + esc(v.versione) + '">Riepilogo</button>' +
+          (v.attiva ? '' : '<button class="btn sm" type="button" data-g="usa" data-v="' + esc(v.versione) + '">Usa questa</button>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' + (T.web ? registroAperto() : '') + '</div></div>';
   }
 
 
@@ -149,14 +158,16 @@
 
     var u = L.uso || {}, cons = CONSOLE[L.fornitore_attivo];
     var cache = u.token_in ? Math.round(u.token_cache / u.token_in * 100) : 0;
-    h += '<div class="foglio"><div class="box s6"><div class="lab">' + T.icona('grafico') + 'Uso su questo PC<span class="dx">' + esc(meseIt(u.mese)) + '</span></div>' +
+    h += '<div class="foglio"><div class="box s6"><div class="lab">' + T.icona('grafico') + (T.web ? 'Uso in questo browser' : 'Uso su questo PC') + '<span class="dx">' + esc(meseIt(u.mese)) + '</span></div>' +
       '<p class="cosa">' + numero(u.classificazioni) + (u.classificazioni === 1 ? ' classificazione' : ' classificazioni') + '</p>' +
       '<p class="nota">' + numero(u.richieste) + ' richieste, ' + numero(u.token_in) + ' token in ingresso' + (u.token_in ? ' (' + cache + '% dalla cache, che costano molto meno)' : '') +
       ' e ' + numero(u.token_out) + ' in uscita. La spesa è nella console del servizio' +
       (cons ? ' (<a href="' + esc(cons[1]) + '" target="_blank" rel="noopener">' + esc(cons[0]) + '</a>)' : '') + ', dove conviene impostare un tetto di spesa.</p></div>' +
       '<div class="box s6"><div class="lab">' + T.icona('info') + 'Da sapere</div>' +
-      '<p class="nota"><b>La chiave resta su questo PC</b>, protetta da Windows: solo il tuo utente la può leggere.</p>' +
-      '<p class="nota"><b>Senza costi</b>: con Ollama il modello gira sul tuo PC (indirizzo http://localhost:11434/v1, servizio «compatibile OpenAI»). Senza IA restano nomenclatura, misure, storico e preferiti.</p>' +
+      (T.web ? '<p class="nota"><b>La chiave resta in questo browser</b> e va direttamente al servizio scelto, senza passare da altri server. Usane una dedicata a MAGIC HS, con un tetto di spesa.</p>' +
+        '<p class="nota"><b>Senza costi</b>: con Ollama il modello gira sul tuo PC (indirizzo http://localhost:11434/v1, servizio «compatibile OpenAI»), avviato con OLLAMA_ORIGINS=' + esc(location.origin) + ' perché accetti le richieste di questo sito. Senza IA restano nomenclatura, misure, storico e preferiti.</p>'
+        : '<p class="nota"><b>La chiave resta su questo PC</b>, protetta da Windows: solo il tuo utente la può leggere.</p>' +
+        '<p class="nota"><b>Senza costi</b>: con Ollama il modello gira sul tuo PC (indirizzo http://localhost:11434/v1, servizio «compatibile OpenAI»). Senza IA restano nomenclatura, misure, storico e preferiti.</p>') +
       '<p class="nota"><b>Azure OpenAI</b>: indirizzo https://&lt;risorsa&gt;.openai.azure.com/openai/v1 e nome della distribuzione come modello.</p></div></div>';
     return h;
   }
@@ -240,11 +251,11 @@
       T.api('POST', '/api/admin/locale/ia/prova').then(function (r) { msg('ia', 'Il servizio risponde (' + r.modello + ', ' + (r.secondi < 1 ? 'in meno di un secondo' : 'in ' + String(r.secondi).replace('.', ',') + ' secondi') + ').', true); },
         function (e) { msg('ia', errore(e)); }).then(disegna);
     } else if (g === 'usa') {
-      if (!window.confirm('Usare i dati del ' + v.split('-').reverse().join('/') + ' al posto di quelli attuali?')) return;
+      if (!window.confirm('Usare i dati del ' + v.split('-').reverse().join('/') + ' al posto di quelli ' + (T.web ? 'in uso? Vale per questo browser.' : 'attuali?'))) return;
       T.api('POST', '/api/admin/dati/attiva', { versione: v }).then(function () { T.avviso('Versione cambiata: ricarico la pagina.'); setTimeout(function () { location.reload(); }, 900); },
         function (e) { T.avviso(errore(e), 'male'); });
     } else if (g === 'riepilogo') {
-      T.api('GET', '/api/admin/dati/riepilogo/' + v).then(function (r) { st.registro = { titolo: 'Riepilogo della versione ' + v, testo: r.testo || '' }; disegna(); });
+      T.api('GET', '/api/admin/dati/riepilogo/' + v).then(function (r) { st.registro = { titolo: 'Riepilogo della versione ' + v.split('-').reverse().join('/'), testo: r.testo || '' }; disegna(); });
     } else if (g === 'registro-agg') {
       T.api('GET', '/api/admin/dati/registro/' + id).then(function (r) { st.registro = { titolo: 'Registro dell\'aggiornamento', testo: r.testo || '(vuoto)' }; disegna(); });
     } else if (g === 'chiudi-registro') { st.registro = null; disegna(); }
