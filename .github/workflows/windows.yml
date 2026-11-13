@@ -89,7 +89,9 @@ jobs:
           $loc = Invoke-RestMethod "$base/api/admin/locale" -WebSession $s
           "programma $($loc.programma.in_uso), editori $($loc.editori -join ', '), cartella $($loc.condivisa)"
           if ($loc.programma.in_uso -ne $loc.programma.pubblicato) { throw "versione inattesa" }
-          for ($i = 0; $i -lt 200 -and -not $io.dati.versione; $i++) {
+          # la versione e' attiva sul PC qualche secondo prima che finisca la pubblicazione nella cartella:
+          # si aspetta anche la fine dell'aggiornamento (fase vuota)
+          for ($i = 0; $i -lt 200 -and (-not $io.dati.versione -or $io.dati.aggiornamento); $i++) {
             Start-Sleep -Seconds 4
             try { $io = Invoke-RestMethod "$base/api/io" -WebSession $s } catch { "nuovo tentativo: $_" }
             if ($i % 8 -eq 0) { "dati: $($io.dati.aggiornamento)" }
