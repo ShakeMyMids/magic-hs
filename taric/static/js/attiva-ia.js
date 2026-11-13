@@ -1,4 +1,4 @@
-/* MAGIC HS - festa per l'intelligenza artificiale collegata, nel sito e nel programma per Windows:
+/* MAGIC HS - festa per l'intelligenza artificiale collegata:
    T.festaIA({nome, secondi}) quando il servizio IA risponde alla prima prova (scena di T.festa() in disegni.js: la gru
    carica sulla nave il container dell'IA). Con «movimento ridotto» si vede subito la scena finale. */
 (function () {

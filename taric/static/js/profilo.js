@@ -1,5 +1,5 @@
-/* MAGIC HS - vista Profilo: nome (e nel sito account e password), preferenze, uso dell'IA, storico, preferiti,
-   esportazione e importazione degli stessi dati (dal programma per Windows al sito e viceversa). */
+/* MAGIC HS - vista Profilo: account e password, preferenze, uso dell'IA, storico, preferiti, esportazione e
+   importazione degli stessi dati (anche quelli esportati dal vecchio programma per Windows). */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
@@ -38,12 +38,12 @@
 
     h += usoIA(io);
 
-    h += '<div class="foglio"><div class="box' + (io.server ? ' s6' : '') + '"><div class="lab">' + T.icona('utente') + (io.server ? 'Il tuo account' : 'Il tuo nome') + '</div>' +
-      '<form class="modulo" data-p="salva-account">' + (io.server ? '<p class="nota">Accedi con <b>' + esc(io.email) + '</b></p>' : '') + '<div class="due">' +
+    h += '<div class="foglio"><div class="box s6"><div class="lab">' + T.icona('utente') + 'Il tuo account</div>' +
+      '<form class="modulo" data-p="salva-account"><p class="nota">Accedi con <b>' + esc(io.email) + '</b></p><div class="due">' +
       '<label>Nome e cognome<input class="campo" name="nome" required minlength="2" maxlength="100" value="' + esc(io.nome) + '"></label>' +
       '<label>Azienda<input class="campo" name="azienda" maxlength="150" value="' + esc(io.azienda) + '"></label></div>' +
       '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div>';
-    if (io.server) h += '<div class="box s6"><div class="lab">' + T.icona('lucchetto') + 'Password</div>' +
+    h += '<div class="box s6"><div class="lab">' + T.icona('lucchetto') + 'Password</div>' +
       '<form class="modulo" data-p="password"><input class="trappola" name="username" autocomplete="username" value="' + esc(io.email) + '" tabindex="-1" aria-hidden="true">' +
       '<div class="due"><label>Password attuale<input class="campo" type="password" name="attuale" autocomplete="current-password" required></label>' +
       '<label>Nuova (almeno 10 caratteri)<input class="campo" type="password" name="nuova" autocomplete="new-password" required minlength="10"></label></div>' +
@@ -77,8 +77,7 @@
     h += '</div></div>';
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'I tuoi dati</div>' +
-      '<p class="nota">' + (io.server ? 'Storico, preferiti e preferenze sono nel tuo account: li ritrovi da qualsiasi PC. Con «Importa» porti qui quelli esportati dal programma per Windows.'
-        : 'Storico, preferiti e preferenze restano su questo PC. Per portarli nel sito di MAGIC HS esportali qui e importali nel Profilo del sito.') + '</p>' +
+      '<p class="nota">Storico, preferiti e preferenze sono nel tuo account: li ritrovi da qualsiasi PC. Con «Importa» porti qui quelli esportati dal programma per Windows.</p>' +
       '<div class="fila"><button class="btn sm" type="button" data-p="esporta">' + T.icona('scarica') + 'Esporta</button>' +
       '<button class="btn sm" type="button" data-p="scegli-file">' + T.icona('carica') + 'Importa</button>' +
       '<input type="file" accept=".json,application/json" data-p="importa" hidden aria-label="File esportato da MAGIC HS"></div>' + riga('dati') + '</div></div>';
@@ -89,7 +88,7 @@
   /* ------------------------------------------------------------------ uso dell'IA */
   function usoIA(io) {
     var ia = io.ia, h = '<div class="foglio"><div class="box piano"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita</div>';
-    if (!ia.configurata) h += '<p class="nota">Non è attiva: ' + (io.server ? 'la attiva l\'amministratore di MAGIC HS.' : 'scegli un servizio in Impostazioni, «Intelligenza artificiale».') + '</p>';
+    if (!ia.configurata) h += '<p class="nota">Non è attiva: la attiva l\'amministratore di MAGIC HS.</p>';
     else if (ia.tetto) h += '<p class="nota">Questo mese le classificazioni con l\'IA sono finite per tutti: chiedi all\'amministratore.</p>';
     else if (ia.limite === null) h += '<p class="cosa">' + ia.usate + (ia.usate === 1 ? ' classificazione' : ' classificazioni') + ' a ' + esc(meseIt(ia.mese)) + '</p>';
     else {

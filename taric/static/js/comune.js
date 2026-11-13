@@ -9,8 +9,8 @@
     });
   };
 
-  /* Chiamata alle API del programma. Risolve con il JSON della risposta; in caso d'errore rifiuta con
-     { stato, codice, errore }. Con una sessione scaduta torna alla pagina iniziale (salvo opzioni.resta). */
+  /* Chiamata alle API del sito. Risolve con il JSON della risposta; in caso d'errore rifiuta con
+     { stato, codice, errore }. Con una sessione scaduta torna alla pagina di accesso (salvo opzioni.resta). */
   T.api = function (metodo, url, corpo, opzioni) {
     opzioni = opzioni || {};
     var init = { method: metodo, credentials: 'same-origin', headers: { 'X-Taric': '1', 'Accept': 'application/json' }, signal: opzioni.signal };
@@ -21,14 +21,12 @@
       var leggi = tipo.indexOf('application/json') >= 0 ? r.json() : r.text().then(function (t) { return { testo: t }; });
       return leggi.catch(function () { return {}; }).then(function (d) {
         if (r.ok) return d;
-        if (r.status === 401 && !opzioni.resta) location.href = '/';      // sessione scaduta: la pagina iniziale spiega come riaprire
+        if (r.status === 401 && !opzioni.resta) location.href = '/accedi';      // sessione scaduta
         throw { stato: r.status, codice: (d && d.codice) || 'errore_' + r.status, errore: (d && d.errore) || 'Errore di MAGIC HS (' + r.status + '). Riprova.' };
       });
     }, function (e) {
       if (e && e.name === 'AbortError') throw e;
-      if (T.alOffline) T.alOffline();            // forse il programma si è chiuso
-      throw { stato: 0, codice: 'offline', errore: T.server ? 'MAGIC HS non risponde: controlla la connessione e riprova.'
-        : 'MAGIC HS non risponde: se l\'hai chiuso, riaprilo da «Avvia MAGIC HS».' };
+      throw { stato: 0, codice: 'offline', errore: 'MAGIC HS non risponde: controlla la connessione e riprova.' };
     });
   };
 

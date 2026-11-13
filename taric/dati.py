@@ -2,7 +2,7 @@
 e pianificatore. Ogni versione sta in dati/taric/versioni/AAAA-MM-01; quella in uso e' scritta in attiva.txt
 e cambia solo dopo che lo script di generazione ha superato tutti i controlli.
 
-Ogni PC prova prima i dati gia' pronti su GitHub (pagina «dati», preparata ogni mese da strumenti/dati_mese.py con
+Il sito prova prima i dati gia' pronti su GitHub (pagina «dati», preparata ogni mese da strumenti/dati_mese.py con
 gli stessi controlli): pochi MB, controllati con l'impronta SHA-256. Se non ci sono ancora, scarica l'estrazione
 dalla fonte e la prepara da se' con aggiorna.py (circa un minuto)."""
 from __future__ import annotations
@@ -65,7 +65,7 @@ def estrai_dati(archivio: Path, dest: Path) -> None:
 
 
 def sposta(origine: Path, dest: Path, tentativi: int = 12) -> None:
-    """os.replace che ritenta: su Windows un antivirus o OneDrive possono tenere aperto un file per qualche istante."""
+    """os.replace che ritenta se il file e' ancora aperto per qualche istante."""
     for n in range(tentativi):
         try:
             os.replace(origine, dest)
@@ -212,9 +212,8 @@ class GestoreDati:
             if att and att <= f"{mese}-01":
                 cmd += ["--prec", str(self.versioni / att / "versione.json")]
             self._fase("genero e controllo i dati (circa un minuto)")
-            senza_finestra = getattr(subprocess, "CREATE_NO_WINDOW", 0)      # Windows: niente finestra nera
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800,
-                               cwd=cartella, creationflags=senza_finestra)
+                               cwd=cartella)
             registro = (p.stdout + ("\n" + p.stderr if p.stderr else ""))[-12000:]
             righe = [r for r in p.stdout.splitlines() if r.strip()]
             if p.returncode != 0 or not righe or righe[-1].strip() != "CONTROLLI OK":
@@ -389,7 +388,7 @@ class GestoreDati:
         else:
             self.esegui(mese, "automatico")
 
-    def avvia_pianificatore(self, backup: Any = None, ogni_ciclo: list[Any] | None = None, attesa: float = 1800) -> None:
+    def avvia_pianificatore(self, backup: Any = None, attesa: float = 1800) -> None:
         def ciclo() -> None:
             ultima_pulizia = 0.0
             self._fermo.wait(1 if self.attiva() is None else 10)        # primo avvio: i dati servono subito
@@ -406,11 +405,6 @@ class GestoreDati:
                     self.controlla_mese()             # prima i dati: al primo avvio servono subito
                 except Exception:
                     log.exception("pianificatore")
-                for compito in ogni_ciclo or []:
-                    try:
-                        compito()
-                    except Exception:
-                        log.exception("compito periodico")
                 self._fermo.wait(attesa)
         threading.Thread(target=ciclo, name="taric-pianificatore", daemon=True).start()
 

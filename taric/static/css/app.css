@@ -423,7 +423,7 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 @keyframes viaggio{0%{transform:translateX(var(--da));opacity:0}12%{opacity:1}85%{opacity:1}100%{transform:translateX(var(--a));opacity:0}}
 @keyframes dondola{from{transform:translateY(0)}to{transform:translateY(2.5px)}}
 
-/* nuova versione del programma pronta: puntino arancio sulla scheda Impostazioni */
+/* richieste di account da approvare: puntino arancio sulla scheda Gestione */
 .schede a.novita{position:relative}
 .schede a.novita::after{content:"";position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--d-cont-1);
   box-shadow:0 0 0 2px var(--fondo)}
@@ -469,10 +469,6 @@ html.con-finestra{overflow:hidden}
 .box.invito{border-color:color-mix(in srgb,var(--d-cont-1) 45%,var(--linea));background:linear-gradient(135deg,color-mix(in srgb,var(--d-cont-1) 9%,var(--carta)),var(--carta) 60%)}
 .box.invito .lab .ico{color:var(--d-cont-1)}
 
-/* programma per Windows: avviso del passaggio al sito */
-.nota.trasloco{display:flex;gap:8px;align-items:flex-start;margin:0;padding:10px 12px;border-radius:var(--r-m);background:var(--carta-2);border:1px solid var(--linea)}
-.nota.trasloco .ico{flex:none;width:18px;height:18px;margin-top:1px;color:var(--accento)}
-
 /* gestione degli utenti del sito: pannello sotto la riga della persona */
 .tab tr.dettaglio td{padding:0 0 14px;border-top:0}
 .pannello{display:grid;gap:10px;padding:12px 14px;border-radius:var(--r-m);background:var(--carta-2);border:1px solid var(--linea)}
@@ -508,5 +504,3 @@ html.con-finestra{overflow:hidden}
 @keyframes f-salpa{from{transform:translateX(0)}to{transform:translateX(30px)}}
 @media (max-width:560px){.finestra{padding:16px 16px 18px}.finestra.festa{padding:0 0 18px}.festa-testo{padding:6px 16px 0}.festa-testo h2{font-size:20px}}
 
-/* programma chiuso */
-.box.chiuso .lab .ico{color:var(--rosso)}

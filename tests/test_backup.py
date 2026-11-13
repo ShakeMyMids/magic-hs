@@ -1,4 +1,4 @@
-"""Backup e ripristino del database del PC (storico, preferiti, preferenze)."""
+"""Backup e ripristino del database del sito (account, storico, preferiti, preferenze)."""
 from __future__ import annotations
 
 import os
@@ -11,9 +11,8 @@ import pytest
 
 from taric.__main__ import main
 from taric.backup import Backup, ErroreBackup
-from taric.programma import Blocco
 
-from conftest import PC
+from conftest import Sito
 
 
 def storico(db: Path) -> list[str]:
@@ -28,13 +27,13 @@ def classifica(c, testo: str) -> None:
     assert c.post("/api/storico", json={"testo": testo, "codice": "8467211000", "dati": {}}).status_code == 200
 
 
-def test_ripristino_rimette_il_database_e_salva_quello_di_prima(pc: PC, tmp_path: Path):
-    c = pc.entra()
+def test_ripristino_rimette_il_database_e_salva_quello_di_prima(sito: Sito, tmp_path: Path):
+    c = sito.capo()
     classifica(c, "trapano")
-    b = Backup(pc.cfg.dati)
+    b = Backup(sito.cfg.dati)
     salvato = b.crea()
     classifica(c, "dopo il backup")
-    db = pc.cfg.dati / "taric.db"
+    db = sito.cfg.dati / "taric.db"
     assert "dopo il backup" in storico(db)
     esito = b.ripristina(salvato)
     assert esito.startswith("1 classificazioni nello storico") and "precedente" in esito
@@ -44,12 +43,12 @@ def test_ripristino_rimette_il_database_e_salva_quello_di_prima(pc: PC, tmp_path
     with zipfile.ZipFile(ultimo) as z:
         (tmp_path / "prima.db").write_bytes(z.read("taric.db"))
     assert "dopo il backup" in storico(tmp_path / "prima.db")
-    # dopo il ripristino il programma funziona con il database rimesso
+    # dopo il ripristino il sito funziona con il database rimesso
     assert c.get("/api/storico").json()["voci"][0]["testo"] == "trapano"
 
 
-def test_ripristino_rifiuta_file_sbagliati(pc: PC, tmp_path: Path):
-    b = Backup(pc.cfg.dati)
+def test_ripristino_rifiuta_file_sbagliati(sito: Sito, tmp_path: Path):
+    b = Backup(sito.cfg.dati)
     altro = tmp_path / "altro.zip"
     with zipfile.ZipFile(altro, "w") as z:
         z.writestr("taric.db", b"x")
@@ -70,11 +69,11 @@ def test_ripristino_rifiuta_file_sbagliati(pc: PC, tmp_path: Path):
     with pytest.raises(ErroreBackup, match="non trovato"):
         b.ripristina(tmp_path / "manca.zip")
     assert b.elenco() == []                     # nessun tentativo fallito tocca il database o i backup
-    assert not list(pc.cfg.dati.glob(".ripristino-*"))
+    assert not list(sito.cfg.dati.glob(".ripristino-*"))
 
 
-def test_backup_automatico_una_volta_al_giorno_e_pulizia(pc: PC):
-    b = Backup(pc.cfg.dati, copie=3)
+def test_backup_automatico_una_volta_al_giorno_e_pulizia(sito: Sito):
+    b = Backup(sito.cfg.dati, copie=3)
     assert b.da_fare()
     for _ in range(5):
         f = b.crea()
@@ -83,25 +82,20 @@ def test_backup_automatico_una_volta_al_giorno_e_pulizia(pc: PC):
     ieri = time.time() - 24 * 3600
     os.utime(f, (ieri, ieri))
     assert b.da_fare()
-    assert not Backup(pc.cfg.dati, copie=0).da_fare()
+    assert not Backup(sito.cfg.dati, copie=0).da_fare()
     assert oct(f.stat().st_mode & 0o777) == "0o600"
 
 
-def test_riga_di_comando(pc: PC, capsys: pytest.CaptureFixture[str]):
-    c = pc.entra()
+def test_riga_di_comando(sito: Sito, capsys: pytest.CaptureFixture[str]):
+    c = sito.capo()
     classifica(c, "trapano")
-    cartella = pc.cartella                  # come %LOCALAPPDATA%\MAGIC HS: dentro c'e' dati\taric.db
-    assert main(["--cartella", str(cartella), "backup"]) == 0
+    dati = sito.cfg.dati                    # come TARIC_DATI su Render: dentro c'e' taric.db
+    assert main(["--dati", str(dati), "backup"]) == 0
     salvato = capsys.readouterr().out.strip().split(": ", 1)[1]
-    assert Path(salvato).is_file()
-    # con MAGIC HS aperto (blocco dell'istanza preso) il ripristino si rifiuta
-    aperto = Blocco(cartella / "istanza.lock")
-    assert aperto.prendi()
-    try:
-        assert main(["--cartella", str(cartella), "ripristina", salvato]) == 1
-        assert "MAGIC HS è aperto" in capsys.readouterr().out
-    finally:
-        aperto.lascia()
-    assert main(["--cartella", str(cartella), "ripristina", salvato]) == 0
+    assert Path(salvato).is_file() and Path(salvato).parent == dati / "backup"
+    classifica(c, "dopo il backup")
+    assert main(["--dati", str(dati), "ripristina", salvato]) == 0
     assert "Database ripristinato (1 classificazioni" in capsys.readouterr().out
-    assert main(["--cartella", str(cartella), "ripristina", str(cartella / "manca.zip")]) == 1
+    assert [v["testo"] for v in c.get("/api/storico").json()["voci"]] == ["trapano"]        # il sito usa subito quello rimesso
+    assert main(["--dati", str(dati), "ripristina", str(dati / "manca.zip")]) == 1
+    assert "file non trovato" in capsys.readouterr().out

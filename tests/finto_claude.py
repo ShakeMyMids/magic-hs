@@ -1,35 +1,18 @@
 """Finti servizi esterni per le prove dell'interfaccia (nessuna chiamata reale):
-- IA: risponde nei formati di Anthropic (/v1/messages), Gemini (/v1beta/models/<modello>:generateContent) e compatibile
-  OpenAI (/v1/chat/completions); accetta solo la chiave «chiave-finta».
-- GitHub: /github/releases/latest con la versione 9.9.9 e il suo pacchetto per Windows (finto ma valido), e la pagina
-  /github/releases/tags/dati con i dati pronti indicati sulla riga di comando (archivi dati-AAAA-MM-01.zip, per esempio
-  fatti con strumenti/dati_mese.py).
-Uso: python tests/finto_claude.py 9100 [dati-AAAA-MM-01.zip ...], poi il programma con
-TARIC_AGGIORNAMENTI_URL=http://127.0.0.1:9100/github/releases/latest e TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati;
-in Impostazioni > Intelligenza artificiale «compatibile OpenAI» con indirizzo http://127.0.0.1:9100/v1 (vedi tests/e2e_locale.js).
-Accetta anche le chiamate dal browser (CORS), come i servizi veri, per la prova della versione sito (tests/e2e_sito.js);
-con Claude e lo strumento «risposta» risponde con tool_use, come l'API di Anthropic."""
+- IA: risponde nei formati di Anthropic (/v1/messages, con lo strumento «risposta» come tool_use), Gemini
+  (/v1beta/models/<modello>:generateContent) e compatibile OpenAI (/v1/chat/completions); accetta solo la chiave
+  «chiave-finta».
+- GitHub: la pagina /github/releases/tags/dati con i dati pronti indicati sulla riga di comando (archivi
+  dati-AAAA-MM-01.zip, per esempio fatti con strumenti/dati_mese.py).
+Uso: python tests/finto_claude.py 9100 [dati-AAAA-MM-01.zip ...], poi il sito con TARIC_IA_FORNITORE=openai,
+TARIC_IA_URL=http://127.0.0.1:9100/v1, TARIC_IA_CHIAVE=chiave-finta e TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati
+(vedi README, «Sviluppo», e tests/e2e_sito.js)."""
 import hashlib
-import io
 import json
 import sys
-import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-
-def pacchetto(versione: str) -> bytes:
-    b = io.BytesIO()
-    with zipfile.ZipFile(b, "w") as z:
-        z.writestr("python/pythonw.exe", b"MZ")
-        z.writestr("python/Lib/site-packages/taric/__init__.py", f'__version__ = "{versione}"\n')
-        z.writestr("Avvia MAGIC HS.cmd", "@echo off\r\n")
-        z.writestr("LEGGIMI.txt", f"MAGIC HS {versione}\r\n")
-    return b.getvalue()
-
-
-NUOVA = "9.9.9"
-PACCHETTO = pacchetto(NUOVA)
 DATI: dict[str, bytes] = {}            # nome dell'archivio -> contenuto
 
 
@@ -60,7 +43,6 @@ class Gestore(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------ finto GitHub
     def do_GET(self):  # noqa: N802
         base = f"http://127.0.0.1:{self.server.server_port}/github"
-        nome = f"magic-hs-windows-{NUOVA}.zip"
         if self.path == "/github/releases/tags/dati":
             self._json(200, {"tag_name": "dati", "prerelease": True, "assets": [
                 {"name": n, "size": len(b), "digest": "sha256:" + hashlib.sha256(b).hexdigest(), "browser_download_url": base + "/dati/" + n}
@@ -72,17 +54,6 @@ class Gestore(BaseHTTPRequestHandler):
             self.send_header("content-length", str(len(b)))
             self.end_headers()
             self.wfile.write(b)
-        elif self.path == "/github/releases/latest":
-            self._json(200, {"tag_name": "v" + NUOVA, "draft": False, "prerelease": False, "published_at": "2026-11-20T10:00:00Z",
-                             "html_url": base + "/releases/v" + NUOVA,
-                             "assets": [{"name": nome, "size": len(PACCHETTO), "browser_download_url": base + "/" + nome,
-                                         "digest": "sha256:" + hashlib.sha256(PACCHETTO).hexdigest()}]})
-        elif self.path == "/github/" + nome:
-            self.send_response(200)
-            self.send_header("content-type", "application/octet-stream")
-            self.send_header("content-length", str(len(PACCHETTO)))
-            self.end_headers()
-            self.wfile.write(PACCHETTO)
         elif self.path == "/v1/models":
             if (self.headers.get("authorization") or "") != "Bearer chiave-finta":
                 self._json(401, {"error": {"message": "API key not valid"}})
@@ -90,18 +61,6 @@ class Gestore(BaseHTTPRequestHandler):
                 self._json(200, {"data": [{"id": "finto-modello"}, {"id": "finto-modello-rapido"}]})
         else:
             self._json(404, {"message": "Not Found"})
-
-    # ------------------------------------------------------------------ chiamate dal browser (CORS)
-    def end_headers(self):  # noqa: N802
-        self.send_header("access-control-allow-origin", "*")
-        self.send_header("access-control-allow-headers", "*")
-        self.send_header("access-control-allow-methods", "GET, POST, OPTIONS")
-        super().end_headers()
-
-    def do_OPTIONS(self):  # noqa: N802
-        self.send_response(204)
-        self.send_header("content-length", "0")
-        self.end_headers()
 
     # ------------------------------------------------------------------ finta IA
     def do_POST(self):  # noqa: N802

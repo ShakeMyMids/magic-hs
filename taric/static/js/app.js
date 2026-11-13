@@ -248,8 +248,8 @@ function impostaIA() {
   var u = state.utente, ia = u && u.ia, intanto = ' Intanto puoi sfogliare la nomenclatura e aprire un codice scrivendone le cifre.';
   sampleFn = null; state.ai = 'no';
   if (!ia || !ia.configurata) state.aiMotivo = 'La classificazione assistita non è attiva: ' +
-    (u && u.server ? (u.ruolo === 'amministratore' ? 'inserisci la chiave di Gemini nel servizio su Render (Gestione, «Intelligenza artificiale»).'
-      : 'la deve attivare l\'amministratore di MAGIC HS.') : 'scegli un servizio di intelligenza artificiale in Impostazioni.') + intanto;
+    (u && u.ruolo === 'amministratore' ? 'inserisci la chiave di Gemini nel servizio su Render (Gestione, «Intelligenza artificiale»).'
+      : 'la deve attivare l\'amministratore di MAGIC HS.') + intanto;
   else if (ia.tetto) state.aiMotivo = 'Questo mese le classificazioni con l\'IA sono finite per tutti: chiedi all\'amministratore.' + intanto;
   else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi all\'amministratore.' + intanto;
   else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' classificazioni con l\'IA di questo mese: ' +
@@ -1149,7 +1149,7 @@ function start() {
 }
 window.TARIC_DEBUG = { misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
 
-/* funzioni usate dalle viste Profilo e Impostazioni */
+/* funzioni usate dalle viste Profilo e Gestione */
 T.app = {
   esiste: function (c) { return byCode.has(c); },
   descrizione: function (c) { var i = byCode.has(c) ? byCode.get(c) : -1; return i < 0 ? '' : descOf(i); },
@@ -1182,57 +1182,21 @@ document.addEventListener('taric:tema', function (ev) {
   T.api('PUT', '/api/io/preferenze', { paese: u.preferenze.paese || '', flusso: u.preferenze.flusso || 'import', tema: ev.detail }).catch(function () { /* resta solo su questo dispositivo */ });
 });
 
-/* sito: esce dall'account; programma per Windows: chiude il programma */
+/* esce dall'account */
 $('#esci').addEventListener('click', function () {
-  if (T.server) { T.api('POST', '/api/esci', null, { resta: true }).then(vaiAllAccesso, vaiAllAccesso); return; }
-  T.api('POST', '/api/locale/chiudi', null, { resta: true }).then(function () { chiuso(false); }, function () { chiuso(true); });
+  T.api('POST', '/api/esci', null, { resta: true }).then(vaiAllAccesso, vaiAllAccesso);
 });
 function vaiAllAccesso() { location.href = '/accedi'; }
 
-/* il programma si chiude da solo quando non si usa; la pagina lo tiene vivo e avvisa se non c'è più */
-function chiuso(daSolo) {
-  if (state.chiuso) return;
-  state.chiuso = true;
-  if (vivoT) { clearInterval(vivoT); vivoT = null; }
-  $('main').innerHTML = '<div class="foglio"><div class="box chiuso" role="status">' + (T.scena ? '<div class="scena">' + T.scena() + '</div>' : '') +
-    '<div class="lab">' + T.icona('spegni') + 'MAGIC HS è chiuso</div>' +
-    '<p class="cosa">' + (daSolo ? 'Si è chiuso perché non lo usavi da un po\' o perché è arrivata una nuova versione.' : 'Puoi chiudere questa scheda del browser.') + '</p>' +
-    '<p class="nota">Per riaprirlo: doppio clic su <b>Avvia MAGIC HS</b>.</p></div></div>';
-  ['.schede', '#esci'].forEach(function (s) { var e = $(s); if (e) e.hidden = true; });
-}
-var vivoT = null;
-function controllaVivo() {
-  if (state.chiuso) return;
-  fetch('/api/locale/ping', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { if (!r.ok) throw r; }).catch(function () { chiuso(true); });
-}
-function tieniVivo() {
-  vivoT = setInterval(controllaVivo, 120000);
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') controllaVivo(); });
-  T.alOffline = controllaVivo;
-}
-/* si parte quando tutta la pagina è caricata (anche profilo.js e gestione.js): nella versione sito le risposte
-   arrivano subito dal browser */
+/* si parte quando tutta la pagina è caricata (anche profilo.js e gestione.js) */
 function avvia() {
   T.api('GET', '/api/io').then(function (u) {
     state.utente = u;
-    T.server = !!u.server;
     $('#chi-nome').textContent = u.nome;
     $('#chi-iniziali').textContent = String(u.nome || '').trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
     $('#chi-iniziali').parentNode.title = u.nome + (u.email ? ' · ' + u.email : '');
     $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
-    if (T.server) {
-      $('#esci').title = 'Esci'; $('#esci').setAttribute('aria-label', 'Esci da MAGIC HS'); $('#esci').innerHTML = T.icona('esci');
-      $('#tab-gestione').lastChild.textContent = 'Gestione';
-      if (u.ruolo === 'amministratore' && T.segnaRichieste) T.segnaRichieste();      // puntino sulla scheda Gestione per le richieste da approvare
-    } else {
-      // ultima versione del programma per Windows: MAGIC HS diventa un sito
-      var nota = document.createElement('p');
-      nota.className = 'nota trasloco';
-      nota.innerHTML = T.icona('info') + '<span><b>MAGIC HS diventa un sito</b>: chiedi l\'indirizzo a chi gestisce MAGIC HS. Storico e preferiti si portano lì con Profilo › I tuoi dati › Esporta.</span>';
-      $('#view-classifica .domanda').appendChild(nota);
-      tieniVivo();
-      if (u.ruolo === 'amministratore' && T.controllaVersioni) T.controllaVersioni(false);     // segno sulla scheda Impostazioni se c'è una versione nuova
-    }
+    if (u.ruolo === 'amministratore' && T.segnaRichieste) T.segnaRichieste();      // puntino sulla scheda Gestione per le richieste da approvare
     T.tema(u.preferenze.tema);
     state.country = u.preferenze.paese || '';
     state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';

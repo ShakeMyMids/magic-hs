@@ -1,8 +1,8 @@
-"""Prepara i dati TARIC di un mese, pronti per i PC: python strumenti/dati_mese.py AAAA-MM file-di-uscita.zip
+"""Prepara i dati TARIC di un mese, pronti per il sito: python strumenti/dati_mese.py AAAA-MM file-di-uscita.zip
 
-Scarica l'estrazione dalla fonte e la elabora con gli stessi passaggi e controlli del programma (dati.GestoreDati,
+Scarica l'estrazione dalla fonte e la elabora con gli stessi passaggi e controlli del sito (dati.GestoreDati,
 aggiorna.py); se tutto va bene scrive l'archivio con i file dei dati (dati.RE_FILE). Lo usa il flusso GitHub «Dati
-TARIC» (.github/workflows/dati.yml), che lo pubblica nella pagina «dati»: i PC lo scaricano da li'.
+TARIC» (.github/workflows/dati.yml), che lo pubblica nella pagina «dati»: il sito lo scarica da li'.
 Codice di uscita: 0 = archivio scritto, 2 = estrazione del mese non ancora disponibile alla fonte, 1 = errore.
 """
 from __future__ import annotations

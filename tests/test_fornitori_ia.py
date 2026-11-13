@@ -1,6 +1,6 @@
 """Test dei fornitori IA: scelta da configurazione, formato delle chiamate a Gemini e ai servizi compatibili OpenAI,
 traduzione degli errori (limite giornaliero del piano gratuito, chiave non valida, paese non supportato...).
-Il servizio lo sceglie ognuno sul suo PC, in Impostazioni."""
+Il servizio si sceglie con le variabili del server (su Render: Environment)."""
 from __future__ import annotations
 
 import json
@@ -8,7 +8,7 @@ import json
 import httpx
 import pytest
 
-from conftest import PC, FintoClaude
+from conftest import FintoClaude, Sito
 from taric.config import carica
 
 
@@ -25,11 +25,15 @@ def cfg(tmp, **v):
     return carica({"TARIC_DATI": str(tmp / "dati"), **v})
 
 
-def pc_con_ia(ambiente, **ia: str):
-    """Un PC con il servizio IA indicato, salvato dalla pagina Impostazioni; restituisce (PC, client già entrato)."""
+VARIABILI = {"fornitore": "TARIC_IA_FORNITORE", "chiave": "TARIC_IA_CHIAVE", "url": "TARIC_IA_URL", "modello": "TARIC_IA_MODELLO",
+             "modello_rapido": "TARIC_IA_MODELLO_RAPIDO"}
+
+
+def sito_con_ia(ambiente, **ia: str):
+    """Il sito con il servizio IA indicato nelle variabili del server; restituisce (Sito, amministratore già entrato)."""
     tmp, mp = ambiente
-    pc = PC(tmp, mp, versioni=("2026-11-01",), ia=ia)
-    return pc, pc.entra()
+    sito = Sito(tmp, mp, ia=False, extra={VARIABILI[k]: v for k, v in ia.items()})
+    return sito, sito.capo()
 
 
 def test_scelta_del_fornitore(pulito):
@@ -48,7 +52,7 @@ def test_scelta_del_fornitore(pulito):
 
 
 def test_gemini_chiamate_e_risposte(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="chiave-gemini")
+    s, a = sito_con_ia(ambiente, fornitore="gemini", chiave="chiave-gemini")
     assert a.get("/api/io").json()["ia"]["nome"] == "Gemini (Google)"
     s.claude.risposte = [FintoClaude.testo('{"voci": [{"voce": "6403"}]}'), FintoClaude.testo('{"migliore": {"codice": "6403999610"}}')]
     assert a.post("/api/ia", json={"prompt": "scarpe", "livello": "rapido"}).json()["risultato"] == {"voci": [{"voce": "6403"}]}
@@ -65,7 +69,7 @@ def test_gemini_chiamate_e_risposte(ambiente):
 
 
 def test_gemini_errori(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="chiave-gemini")
+    s, a = sito_con_ia(ambiente, fornitore="gemini", chiave="chiave-gemini")
     errore = lambda stato, msg, st="": httpx.Response(stato, json={"error": {"code": stato, "message": msg, "status": st}})
     s.claude.risposte = [
         errore(429, "Quota exceeded for metric: generate_content_free_tier_requests, limit: 20, quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier", "RESOURCE_EXHAUSTED"),
@@ -85,14 +89,14 @@ def test_gemini_errori(ambiente):
 
 
 def test_messaggio_limite_giornaliero(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="k")
+    s, a = sito_con_ia(ambiente, fornitore="gemini", chiave="k")
     s.claude.risposte = [httpx.Response(429, json={"error": {"message": "quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier"}})]
     r = a.post("/api/ia", json={"prompt": "x", "livello": "rapido"})
     assert r.status_code == 429 and "limite di oggi" in r.json()["errore"]
 
 
 def test_compatibile_openai_groq_o_ollama(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="openai", url="https://api.groq.com/openai/v1", modello="openai/gpt-oss-120b", chiave="chiave-groq")
+    s, a = sito_con_ia(ambiente, fornitore="openai", url="https://api.groq.com/openai/v1", modello="openai/gpt-oss-120b", chiave="chiave-groq")
     s.claude.risposte = [FintoClaude.testo('{"ok": 1}'),
                          httpx.Response(400, json={"error": {"message": "response_format is not supported"}}), FintoClaude.testo('{"ok": 2}')]
     assert a.post("/api/ia", json={"prompt": "x", "livello": "rapido"}).json()["risultato"] == {"ok": 1}
@@ -107,7 +111,7 @@ def test_compatibile_openai_groq_o_ollama(ambiente):
 
 
 def test_ollama_senza_chiave(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="openai", url="http://localhost:11434/v1", modello="qwen3:14b")
+    s, a = sito_con_ia(ambiente, fornitore="openai", url="http://localhost:11434/v1", modello="qwen3:14b")
     assert a.post("/api/ia", json={"prompt": "x", "livello": "rapido"}).status_code == 200
     assert "authorization" not in s.claude.richieste[0]["intestazioni"]
     assert json.loads(json.dumps(s.claude.richieste[0]["corpo"]))["model"] == "qwen3:14b"
@@ -119,7 +123,7 @@ VOCI = '{"merce": "scarpe", "voci": [{"voce": "6403", "motivo": "cuoio"}], "non_
 
 
 def test_claude_contesto_in_cache_e_risposta_con_strumento(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="anthropic", chiave="k")
+    s, a = sito_con_ia(ambiente, fornitore="anthropic", chiave="k")
     s.claude.cache = 100
     s.claude.risposte = [FintoClaude.testo(VOCI)]
     r = a.post("/api/ia", json={"contesto": CONTESTO, "prompt": "MERCE: scarpe", "livello": "standard", "schema": "voci", "operazione": "op1"}).json()
@@ -137,7 +141,7 @@ def test_claude_contesto_in_cache_e_risposta_con_strumento(ambiente):
 
 
 def test_claude_senza_strumento_se_il_servizio_non_lo_accetta(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="anthropic", chiave="k")
+    s, a = sito_con_ia(ambiente, fornitore="anthropic", chiave="k")
     s.claude.risposte = [httpx.Response(400, json={"error": {"type": "invalid_request_error", "message": "tools: unsupported"}}), FintoClaude.testo(VOCI)]
     r = a.post("/api/ia", json={"prompt": "x", "livello": "rapido", "schema": "voci", "operazione": "op1"})
     assert r.status_code == 200 and r.json()["risultato"]["merce"] == "scarpe"
@@ -145,7 +149,7 @@ def test_claude_senza_strumento_se_il_servizio_non_lo_accetta(ambiente):
 
 
 def test_gemini_schema_e_contesto_prima_della_merce(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="g")
+    s, a = sito_con_ia(ambiente, fornitore="gemini", chiave="g")
     s.claude.cache = 90
     s.claude.risposte = [FintoClaude.testo(VOCI)]
     r = a.post("/api/ia", json={"contesto": CONTESTO, "prompt": "MERCE: scarpe", "livello": "rapido", "schema": "voci", "operazione": "op1"}).json()
@@ -163,7 +167,7 @@ def test_gemini_schema_e_contesto_prima_della_merce(ambiente):
 
 
 def test_openai_schema_poi_json_poi_niente(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="openai", url="https://risorsa.openai.azure.com/openai/v1", modello="gpt-prova", chiave="az")
+    s, a = sito_con_ia(ambiente, fornitore="openai", url="https://risorsa.openai.azure.com/openai/v1", modello="gpt-prova", chiave="az")
     s.claude.cache = 64
     rifiuto = lambda: httpx.Response(400, json={"error": {"message": "response_format not supported"}})
     s.claude.risposte = [rifiuto(), rifiuto(), FintoClaude.testo(VOCI)]
@@ -179,13 +183,43 @@ def test_openai_schema_poi_json_poi_niente(ambiente):
 
 # ------------------------------------------------------------------ elenco dei modelli per Gestione
 def test_elenco_dei_modelli(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="anthropic", chiave="k")
-    r = a.post("/api/admin/locale/ia/modelli").json()
+    s, a = sito_con_ia(ambiente, fornitore="anthropic", chiave="k")
+    r = a.post("/api/admin/ia/modelli").json()
     assert r["modelli"] == ["claude-haiku-5-5", "claude-sonnet-5-5"]
     assert s.claude.richieste[-1]["url"] == "https://api.anthropic.com/v1/models?limit=100"
     assert s.claude.richieste[-1]["intestazioni"]["x-api-key"] == "k"
 
 
 def test_elenco_dei_modelli_gemini_solo_quelli_che_generano(ambiente):
-    s, a = pc_con_ia(ambiente, fornitore="gemini", chiave="g")
-    assert a.post("/api/admin/locale/ia/modelli").json()["modelli"] == ["gemini-3.7-flash"]
+    s, a = sito_con_ia(ambiente, fornitore="gemini", chiave="g")
+    assert a.post("/api/admin/ia/modelli").json()["modelli"] == ["gemini-3.7-flash"]
+
+
+def test_prova_del_servizio_e_azure(ambiente):
+    tmp, mp = ambiente
+    s = Sito(tmp, mp, ia=False)
+    assert s.capo().post("/api/admin/ia/prova").json()["codice"] == "not_configured"
+    s.riavvia(TARIC_IA_FORNITORE="openai", TARIC_IA_URL="https://risorsa.openai.azure.com/openai/v1", TARIC_IA_MODELLO="gpt-classifica",
+              TARIC_IA_CHIAVE="chiave-azure")
+    c = s.accedi("capo@azienda.it")
+    # i modelli recenti di Azure/OpenAI rifiutano max_tokens: si riprova con max_completion_tokens
+    s.claude.risposte = [httpx.Response(400, json={"error": {"message": "Unsupported parameter: 'max_tokens' is not supported with this model. "
+                                                                       "Use 'max_completion_tokens' instead."}}),
+                         FintoClaude.testo('{"ok": true}')]
+    r = c.post("/api/admin/ia/prova")
+    assert r.status_code == 200 and r.json()["risposta"] == {"ok": True}, r.text
+    prima, seconda = s.claude.richieste[-2:]
+    assert "max_tokens" in prima["corpo"] and "max_completion_tokens" in seconda["corpo"] and "max_tokens" not in seconda["corpo"]
+    assert seconda["intestazioni"]["api-key"] == "chiave-azure" and seconda["url"].endswith("/openai/v1/chat/completions")
+    with s.app.state.db.connessione() as conn:                # la prova non conta come classificazione
+        assert conn.execute("SELECT COUNT(*) FROM uso_ia").fetchone()[0] == 0
+    s.claude.risposte = [httpx.Response(401, json={"error": {"message": "Access denied due to invalid subscription key"}})]
+    r = c.post("/api/admin/ia/prova")
+    assert r.status_code == 503 and "rifiuta la chiave" in r.json()["errore"]
+    s.riavvia(TARIC_IA_MODELLO_RAPIDO="gpt-mini")
+    c = s.accedi("capo@azienda.it")
+    s.claude.risposte = [FintoClaude.testo('{"ok": true}'), FintoClaude.testo('{"ok": true}')]
+    assert c.post("/api/admin/ia/prova").json()["modello"] == "gpt-mini"
+    assert c.post("/api/admin/ia/prova?livello=standard").json()["modello"] == "gpt-classifica"
+    assert [x["corpo"]["model"] for x in s.claude.richieste[-2:]] == ["gpt-mini", "gpt-classifica"]
+    assert c.post("/api/admin/ia/prova?livello=altro").status_code == 422

@@ -1,8 +1,8 @@
-"""Backup e ripristino del database del PC (storico, preferiti, preferenze, uso dell'IA, registro).
+"""Backup e ripristino del database del sito (account, storico, preferiti, preferenze, uso dell'IA, registro).
 
 Un backup e' un archivio .zip con dentro solo "taric.db", copiato con l'API di backup di SQLite:
 la copia e' coerente anche se MAGIC HS sta scrivendo. I dati TARIC non servono (si riscaricano da soli).
-Il programma ne fa uno al giorno in %LOCALAPPDATA%\\MAGIC HS\\dati\\backup; si rimette con «python -m taric ripristina».
+Il server ne fa uno al giorno nella cartella dei dati (backup/); si rimette con «python -m taric ripristina».
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def controlla_db(percorso: Path) -> str:
             if not {"utenti", "impostazioni", "storico"} <= tabelle:
                 raise ErroreBackup("il file non e' un database di MAGIC HS")
             if versione > len(SCHEMA):
-                raise ErroreBackup("il backup viene da una versione piu' recente di MAGIC HS: aggiorna prima il programma")
+                raise ErroreBackup("il backup viene da una versione piu' recente di MAGIC HS: aggiorna prima il sito")
             n = c.execute("SELECT COUNT(*) FROM storico").fetchone()[0]
         finally:
             c.close()

@@ -210,15 +210,24 @@ def test_storico_e_preferiti_separati(sito: Sito):
     assert luca.get("/api/storico").json()["totale"] == 1
 
 
-def test_importa_nel_sito_dal_programma(sito: Sito, ambiente):
-    from conftest import PC
-    tmp, mp = ambiente
-    pc = PC(tmp, mp, nome="pc-di-luca", versioni=("2026-11-01",)).entra()
-    pc.post("/api/storico", json={"testo": "scarpe", "codice": "6403999610", "dati": {"result": 1}})
-    pc.put("/api/preferiti/6403999610", json={"nota": "cliente X"})
-    luca = sito.collega(sito.capo())
-    r = luca.post("/api/io/importa", json=pc.get("/api/io/esporta").json()).json()
-    assert (r["storico"], r["preferiti"]) == (1, 1) and luca.get("/api/preferiti").json()["voci"][0]["nota"] == "cliente X"
+# file esportato dal programma per Windows 1.4.0 (Profilo › I tuoi dati › Esporta): stesso formato del sito
+DAL_PROGRAMMA = {"formato": "magic-hs", "versione": 1, "esportato": "2026-11-12T10:00:00+00:00",
+                 "profilo": {"nome": "Luca", "azienda": ""}, "preferenze": {"paese": "CN", "flusso": "import", "tema": "auto"},
+                 "preferiti": [{"codice": "6403999610", "nota": "cliente X", "quando": "2026-11-10T09:00:00+00:00"}],
+                 "storico": [{"quando": "2026-11-11T09:00:00+00:00", "testo": "scarpe", "codice": "6403999610", "dati": {"result": 2}},
+                             {"quando": "2026-11-10T09:00:00+00:00", "testo": "trapano", "codice": "8467211000", "dati": {"result": 1}}]}
+
+
+def test_esporta_e_importa_anche_dal_programma(sito: Sito):
+    capo = sito.capo()
+    luca = sito.collega(capo)
+    r = luca.post("/api/io/importa", json=DAL_PROGRAMMA).json()
+    assert (r["storico"], r["preferiti"]) == (2, 1) and luca.get("/api/preferiti").json()["voci"][0]["nota"] == "cliente X"
+    assert luca.post("/api/io/importa", json=DAL_PROGRAMMA).json()["storico"] == 0          # niente doppioni
+    assert [v["testo"] for v in luca.get("/api/storico").json()["voci"]] == ["scarpe", "trapano"]
+    r = capo.post("/api/io/importa", json=luca.get("/api/io/esporta").json()).json()    # da un account all'altro
+    assert (r["storico"], r["preferiti"]) == (2, 1)
+    assert capo.post("/api/io/importa", json={"formato": "altro", "storico": [], "preferiti": []}).json()["codice"] == "formato"
 
 
 def test_csrf_origine_e_cookie(sito: Sito):
