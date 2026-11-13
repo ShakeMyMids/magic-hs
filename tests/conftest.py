@@ -93,6 +93,40 @@ def sha(b: bytes) -> str:
     return "sha256:" + hashlib.sha256(b).hexdigest()
 
 
+class FintoS3:
+    """Archivio compatibile S3 per la copia esterna: accetta i PUT firmati bene (ricalcola la firma con le intestazioni
+    ricevute) e risponde come S3 agli altri. guasto = codice d'errore S3 da restituire a ogni richiesta."""
+
+    def __init__(self, chiave: str = "CHIAVE-B2", segreto: str = "segreto/di+prova", regione: str = "eu-central-003"):
+        self.chiave, self.segreto, self.regione = chiave, segreto, regione
+        self.oggetti: dict[str, bytes] = {}
+        self.richieste: list[httpx.Request] = []
+        self.guasto = ""
+
+    @staticmethod
+    def errore(stato: int, codice: str) -> httpx.Response:
+        return httpx.Response(stato, text=f'<?xml version="1.0" encoding="UTF-8"?><Error><Code>{codice}</Code><Message>prova</Message></Error>')
+
+    def __call__(self, req: httpx.Request) -> httpx.Response:
+        import datetime as dt
+        from taric.copia import firma_s3
+        self.richieste.append(req)
+        if self.guasto:
+            return self.errore(403 if self.guasto != "NoSuchBucket" else 404, self.guasto)
+        corpo = req.read()
+        if req.method != "PUT" or hashlib.sha256(corpo).hexdigest() != req.headers.get("x-amz-content-sha256"):
+            return self.errore(400, "BadDigest")
+        quando = dt.datetime.strptime(req.headers["x-amz-date"], "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+        attesa = firma_s3("PUT", str(req.url), self.regione, self.chiave, self.segreto, req.headers["x-amz-content-sha256"],
+                          quando, {"content-type": req.headers.get("content-type", "")})
+        if f"Credential={self.chiave}/" not in req.headers.get("authorization", ""):
+            return self.errore(403, "InvalidAccessKeyId")
+        if req.headers.get("authorization") != attesa["Authorization"]:
+            return self.errore(403, "SignatureDoesNotMatch")
+        self.oggetti[req.url.path] = corpo
+        return httpx.Response(200, headers={"ETag": '"' + hashlib.md5(corpo).hexdigest() + '"'})
+
+
 class FintoGitHub:
     """Finta GitHub: pagina «dati» con i dati pronti dei mesi (dati={"AAAA-MM": archivio}) ed estrazioni della fonte
     (fonte={"AAAA-MM": archivio}). Quello che manca risponde 404 (con errore=... tutto risponde con quell'errore): i test
@@ -129,7 +163,8 @@ def ambiente(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, pyt
     for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "TARIC_IA_FORNITORE", "TARIC_IA_URL", "TARIC_IA_CHIAVE",
               "TARIC_IA_MODELLO", "TARIC_IA_MODELLO_RAPIDO", "TARIC_MODELLO", "TARIC_MODELLO_RAPIDO", "TARIC_DATI",
               "TARIC_DATI_URL", "TARIC_FONTE_URL", "TARIC_SCARICA_DATI",
-              "MAGIC_HS_AMMINISTRATORI", "MAGIC_HS_INDIRIZZO", "RENDER_EXTERNAL_URL"):
+              "MAGIC_HS_AMMINISTRATORI", "MAGIC_HS_INDIRIZZO", "RENDER_EXTERNAL_URL",
+              "MAGIC_HS_COPIA_URL", "MAGIC_HS_COPIA_REGIONE", "MAGIC_HS_COPIA_CHIAVE", "MAGIC_HS_COPIA_SEGRETO"):
         monkeypatch.delenv(k, raising=False)
     return tmp_path, monkeypatch
 
@@ -151,6 +186,7 @@ class Sito:
             (self.cartella / "dati" / "taric" / "attiva.txt").write_text(v)
         self.claude = FintoClaude()
         self.github = github or FintoGitHub()
+        self.s3 = FintoS3()
         self.attese: list[float] = []
         originale = S.verifica_modulo          # nelle prove il modulo si invia subito (niente attesa minima contro i bot)
         mp.setattr(S, "verifica_modulo", lambda segreto, valore, minimo_s=3, massimo_s=7200: originale(segreto, valore, 0, massimo_s))
@@ -164,7 +200,8 @@ class Sito:
         self.extra.update(extra)
         self.cfg = carica(self.extra)
         web = httpx.Client(transport=httpx.MockTransport(self.github), follow_redirects=True)
-        self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False, client_dati=web)
+        self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False, client_dati=web,
+                            client_copia=httpx.Client(transport=httpx.MockTransport(self.s3)))
         self.app.state.ia.attendi = self.attese.append          # i nuovi tentativi non aspettano davvero
 
     def client(self, base: str = INDIRIZZO) -> TestClient:

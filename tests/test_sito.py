@@ -32,6 +32,24 @@ def test_pagine_del_sito(sito: Sito):
     assert "Strict-Transport-Security" in r.headers
 
 
+def test_file_statici_con_impronta_e_compressi(sito: Sito):
+    """Dopo un aggiornamento il browser prende i file nuovi (?v=impronta), e i file grandi viaggiano compressi."""
+    import re
+    c = sito.client()
+    pagina = c.get("/accedi").text
+    m = re.search(r'src="(/static/js/accesso\.js\?v=([0-9a-f]{12}))"', pagina)
+    assert m and 'href="/static/css/app.css?v=' in pagina
+    r = c.get(m.group(1))
+    assert r.status_code == 200 and "immutable" in r.headers["cache-control"]
+    assert c.get("/static/js/accesso.js").headers["cache-control"] == "no-cache"
+    home = sito.capo().get("/").text
+    v = re.search(r'src="/static/js/app\.js\?v=([0-9a-f]{12})"', home).group(1)
+    r = c.get(f"/static/js/app.js?v={v}", headers={"Accept-Encoding": "gzip"})
+    assert r.headers.get("content-encoding") == "gzip" and "function cerca(" in r.text
+    import hashlib
+    assert hashlib.sha256((Path(__file__).resolve().parents[1] / "taric/static/js/app.js").read_bytes()).hexdigest()[:12] == v
+
+
 def test_installabile_come_app(sito: Sito):
     """Collegamento sul desktop o icona sul telefono: manifest e service worker raggiungibili anche prima dell'accesso."""
     c = sito.client()

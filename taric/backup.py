@@ -92,15 +92,21 @@ class Backup:
 
     # ------------------------------------------------------------ creazione
     def crea(self) -> Path:
-        if not self.db.exists():
-            raise ErroreBackup("non c'e' ancora un database da salvare")
         self.cartella.mkdir(mode=0o700, parents=True, exist_ok=True)
         nome = f"magic-hs-{datetime.now():%Y-%m-%d-%H%M%S}.zip"
         dest = self.cartella / nome
         while dest.exists():                                   # due backup nello stesso secondo
             time.sleep(1)
             dest = self.cartella / f"magic-hs-{datetime.now():%Y-%m-%d-%H%M%S}.zip"
-        tmp = self.cartella / f".in-corso-{secrets.token_hex(4)}"
+        self.scrivi(dest)
+        self.pota()
+        return dest
+
+    def scrivi(self, dest: Path) -> None:
+        """Scrive in dest un backup (.zip con taric.db); la cartella di dest deve esistere."""
+        if not self.db.exists():
+            raise ErroreBackup("non c'e' ancora un database da salvare")
+        tmp = dest.parent / f".in-corso-{secrets.token_hex(4)}"
         tmp.mkdir()
         try:
             copia = tmp / NOME_DB
@@ -112,8 +118,6 @@ class Backup:
             os.replace(parziale, dest)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-        self.pota()
-        return dest
 
     def pota(self) -> None:
         tieni = max(self.copie, 1)
@@ -131,9 +135,38 @@ class Backup:
         return time.time() - p.stat().st_mtime > ore * 3600
 
     # ------------------------------------------------------------ ripristino (a MAGIC HS chiuso)
-    def ripristina(self, archivio: Path) -> str:
-        """Sostituisce il database con quello del backup. Va eseguito con MAGIC HS chiuso.
-        Il database attuale viene prima salvato in un nuovo backup."""
+    @property
+    def in_attesa(self) -> Path:
+        """Database da rimettere al prossimo avvio (preparato da programma_ripristino a sito acceso)."""
+        return self.dati / "ripristino-in-attesa.db"
+
+    def programma_ripristino(self, archivio: Path) -> str:
+        """A sito acceso: controlla il backup e lo mette da parte; il sito lo rimette al prossimo avvio (applica_in_attesa),
+        quando nessuno sta scrivendo nel database."""
+        nuovo = self._estrai(archivio)
+        try:
+            descrizione = controlla_db(nuovo)
+            os.chmod(nuovo, 0o600)
+            os.replace(nuovo, self.in_attesa)
+        finally:
+            for f in (nuovo, Path(f"{nuovo}-wal"), Path(f"{nuovo}-shm")):
+                f.unlink(missing_ok=True)
+        return descrizione
+
+    def applica_in_attesa(self) -> str | None:
+        """All'avvio, prima di aprire il database: rimette il backup preparato da programma_ripristino, se c'e'."""
+        if not self.in_attesa.is_file():
+            return None
+        try:
+            return self.ripristina(self.in_attesa)
+        except ErroreBackup:
+            os.replace(self.in_attesa, self.dati / "ripristino-non-riuscito.db")       # niente tentativi a ogni avvio
+            raise
+        finally:
+            self.in_attesa.unlink(missing_ok=True)
+
+    def _estrai(self, archivio: Path) -> Path:
+        """Copia il database del backup (.zip con solo taric.db, oppure .db) in un file temporaneo nella cartella dei dati."""
         if not archivio.is_file():
             raise ErroreBackup(f"file non trovato: {archivio}")
         self.dati.mkdir(parents=True, exist_ok=True)
@@ -152,6 +185,16 @@ class Backup:
                 if archivio.stat().st_size > MASSIMO_DB:
                     raise ErroreBackup("database troppo grande")
                 shutil.copyfile(archivio, nuovo)
+        except BaseException:
+            nuovo.unlink(missing_ok=True)
+            raise
+        return nuovo
+
+    def ripristina(self, archivio: Path) -> str:
+        """Sostituisce il database con quello del backup, a sito spento (da acceso: programma_ripristino).
+        Il database attuale viene prima salvato in un nuovo backup."""
+        nuovo = self._estrai(archivio)
+        try:
             descrizione = controlla_db(nuovo)
             prima = self.crea().name if self.db.exists() else None
             for suffisso in ("-wal", "-shm"):

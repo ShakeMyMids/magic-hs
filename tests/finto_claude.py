@@ -4,6 +4,8 @@
   «chiave-finta».
 - GitHub: la pagina /github/releases/tags/dati con i dati pronti indicati sulla riga di comando (archivi
   dati-AAAA-MM-01.zip, per esempio fatti con strumenti/dati_mese.py).
+- Archivio S3 per la copia esterna del database: PUT e GET sotto /s3/ (MAGIC_HS_COPIA_URL=http://127.0.0.1:9100/s3/magic-hs),
+  accetta solo la chiave «chiave-s3-finta» e il contenuto con l'impronta dichiarata; GET /s3/ elenca gli oggetti.
 Uso: python tests/finto_claude.py 9100 [dati-AAAA-MM-01.zip ...], poi il sito con TARIC_IA_FORNITORE=openai,
 TARIC_IA_URL=http://127.0.0.1:9100/v1, TARIC_IA_CHIAVE=chiave-finta e TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati
 (vedi README, «Sviluppo», e tests/e2e_sito.js)."""
@@ -14,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 DATI: dict[str, bytes] = {}            # nome dell'archivio -> contenuto
+S3: dict[str, bytes] = {}              # percorso -> contenuto (copia esterna del database)
 
 
 def rispondi(prompt: str) -> object:
@@ -54,6 +57,13 @@ class Gestore(BaseHTTPRequestHandler):
             self.send_header("content-length", str(len(b)))
             self.end_headers()
             self.wfile.write(b)
+        elif self.path == "/s3/":
+            self._json(200, {"oggetti": {k: len(v) for k, v in S3.items()}})
+        elif self.path in S3:
+            self.send_response(200)
+            self.send_header("content-length", str(len(S3[self.path])))
+            self.end_headers()
+            self.wfile.write(S3[self.path])
         elif self.path == "/v1/models":
             if (self.headers.get("authorization") or "") != "Bearer chiave-finta":
                 self._json(401, {"error": {"message": "API key not valid"}})
@@ -91,6 +101,28 @@ class Gestore(BaseHTTPRequestHandler):
                                  "stop_reason": "tool_use", "model": corpo["model"], "usage": uso})
             else:
                 self._json(200, {"content": [{"type": "text", "text": testo}], "stop_reason": "end_turn", "model": corpo["model"], "usage": uso})
+
+    # ------------------------------------------------------------------ finto archivio S3
+    def do_PUT(self):  # noqa: N802
+        corpo = self.rfile.read(int(self.headers.get("content-length", 0)))
+        firma = self.headers.get("authorization") or ""
+        if not self.path.startswith("/s3/") or not firma.startswith("AWS4-HMAC-SHA256 Credential=chiave-s3-finta/"):
+            self._xml(403, "InvalidAccessKeyId")
+        elif self.headers.get("x-amz-content-sha256") != hashlib.sha256(corpo).hexdigest():
+            self._xml(400, "XAmzContentSHA256Mismatch")
+        else:
+            S3[self.path] = corpo
+            self.send_response(200)
+            self.send_header("content-length", "0")
+            self.end_headers()
+
+    def _xml(self, stato: int, codice: str) -> None:
+        b = f"<Error><Code>{codice}</Code><Message>finto S3</Message></Error>".encode()
+        self.send_response(stato)
+        self.send_header("content-type", "application/xml")
+        self.send_header("content-length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
 
     def _json(self, stato: int, dati: object) -> None:
         b = json.dumps(dati).encode()

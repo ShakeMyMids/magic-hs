@@ -99,3 +99,43 @@ def test_riga_di_comando(sito: Sito, capsys: pytest.CaptureFixture[str]):
     assert [v["testo"] for v in c.get("/api/storico").json()["voci"]] == ["trapano"]        # il sito usa subito quello rimesso
     assert main(["--dati", str(dati), "ripristina", str(dati / "manca.zip")]) == 1
     assert "file non trovato" in capsys.readouterr().out
+
+
+def test_ripristino_a_sito_acceso_al_prossimo_avvio(sito: Sito, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch):
+    """Dalla Shell di Render il sito e' acceso: il backup si controlla subito e si rimette al riavvio."""
+    import taric.__main__ as cli
+    c = sito.capo()
+    classifica(c, "trapano")
+    dati = sito.cfg.dati
+    salvato = Backup(dati).crea()
+    classifica(c, "dopo il backup")
+    monkeypatch.setattr(cli, "sito_acceso", lambda d: True)
+    assert main(["--dati", str(dati), "ripristina", str(salvato)]) == 0
+    assert "al prossimo avvio" in capsys.readouterr().out
+    assert (dati / "ripristino-in-attesa.db").is_file()
+    assert "dopo il backup" in storico(dati / "taric.db")              # niente cambia finche' il sito e' acceso
+    sito.riavvia()
+    c = sito.accedi("capo@azienda.it")
+    assert [v["testo"] for v in c.get("/api/storico").json()["voci"]] == ["trapano"]
+    assert not (dati / "ripristino-in-attesa.db").exists()
+    # un backup sbagliato non arriva nemmeno a essere messo da parte
+    (dati / "rotto.db").write_bytes(b"non e' un database" * 100)
+    assert main(["--dati", str(dati), "ripristina", str(dati / "rotto.db")]) == 1
+    assert not (dati / "ripristino-in-attesa.db").exists()
+
+
+def test_sito_acceso_dal_pid(tmp_path: Path):
+    import subprocess
+    import sys
+    from taric.__main__ import sito_acceso
+    assert not sito_acceso(tmp_path)
+    p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)", "taric"])
+    try:
+        (tmp_path / "server.pid").write_text(str(p.pid))
+        assert sito_acceso(tmp_path)
+    finally:
+        p.kill()
+        p.wait()
+    assert not sito_acceso(tmp_path)                                     # processo finito
+    (tmp_path / "server.pid").write_text("non un numero")
+    assert not sito_acceso(tmp_path)

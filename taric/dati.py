@@ -21,7 +21,7 @@ import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -388,7 +388,8 @@ class GestoreDati:
         else:
             self.esegui(mese, "automatico")
 
-    def avvia_pianificatore(self, backup: Any = None, attesa: float = 1800) -> None:
+    def avvia_pianificatore(self, backup: Any = None, attesa: float = 1800, compiti: tuple[Callable[[], Any], ...] = ()) -> None:
+        """Ogni `attesa` secondi: backup del giorno, compiti (per esempio la copia esterna), pulizia, dati del mese."""
         def ciclo() -> None:
             ultima_pulizia = 0.0
             self._fermo.wait(1 if self.attiva() is None else 10)        # primo avvio: i dati servono subito
@@ -398,6 +399,11 @@ class GestoreDati:
                         log.info("backup automatico: %s", backup.crea().name)
                 except Exception:
                     log.exception("backup automatico")
+                for compito in compiti:
+                    try:
+                        compito()
+                    except Exception:
+                        log.exception("pianificatore: %s", getattr(compito, "__name__", compito))
                 try:
                     if time.time() - ultima_pulizia > 6 * 3600:
                         self.db.pulizia()

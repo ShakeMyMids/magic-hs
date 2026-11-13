@@ -236,6 +236,19 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 .ris-box > .lab{padding:0 12px}
 .trow.ris{grid-template-columns:118px minmax(0,1fr) auto;padding-left:12px}
 .trow.ris .ctx{grid-column:2 / -1}
+/* archivio aziendale: le classificazioni già fatte in azienda, prima dei risultati della nomenclatura */
+.ris-box > .lab + .albero + .lab{margin-top:10px}
+/* preferiti cambiati con i dati del mese (js/profilo.js) */
+details.cambi{margin-top:6px}
+details.piu.cambi > summary{color:var(--ambra)}
+details.cambi > summary .ico{width:15px;height:15px}
+ul.cambi{margin:6px 0 2px;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--secondario)}
+ul.cambi b{color:var(--inchiostro)}
+.trow.ris.arch{background:color-mix(in srgb,var(--accento) 6%,transparent)}
+.trow.ris.arch .ctx{color:var(--accento-forte)}
+.gia{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--r-m);background:var(--accento-tenue);color:var(--inchiostro)}
+.gia .cosa{font-size:16px}
+.gia .cosa .ico{color:var(--accento-forte);margin-right:7px;vertical-align:-3px}
 .ris-box .trow.ris + .trow.ris,.ris-box .trow.ris + .trow.info{box-shadow:0 -1px 0 color-mix(in srgb,var(--linea) 75%,transparent)}
 .ris-box.arriva .trow.ris{animation:sale .34s var(--dolce) backwards;animation-delay:calc(var(--i,0) * 24ms)}
 @keyframes sale{from{opacity:0;transform:translateY(7px)}}
@@ -560,6 +573,16 @@ html.con-finestra{overflow:hidden}
 .tab tr.dettaglio td{padding:0 0 14px;border-top:0}
 .pannello{display:grid;gap:10px;padding:12px 14px;border-radius:var(--r-m);background:var(--carta-2);border:1px solid var(--linea)}
 .pannello form.fila{align-items:flex-end}
+.campo.corto{flex:0 1 210px}
+.voce form.fila{margin-top:8px}
+/* calcolo degli importi nella casella 47 */
+.calcolo{display:flex;flex-direction:column;gap:10px;margin-top:4px;padding:14px 16px;border-radius:14px;background:var(--carta-2)}
+.calc-campi{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.calc-campi label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--secondario)}
+.calc-campi .campo{flex:none;width:100%}
+.calc-tab td{padding:8px 4px}
+.calc-tab tr.evid td{background:none;border-bottom:0;font-size:16px}
+@media (max-width:640px){.calc-tab td[class="n"]{text-align:right !important}.tab.calc-tab tr{display:flex;justify-content:space-between;gap:10px}.tab.calc-tab td{width:auto}}
 .pannello label.corto{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--secondario)}
 .pannello label.corto .campo{width:140px;flex:none}
 .pannello .campo[readonly]{flex:1 1 260px;font-size:13px}
@@ -633,4 +656,24 @@ html.con-finestra{overflow:hidden}
   .schede{bottom:calc(6px + env(safe-area-inset-bottom));padding:4px;border-radius:16px}
   .schede a{flex-direction:row;gap:7px;padding:8px 6px;border-radius:12px;font-size:13px}
   .schede a .ico{width:18px;height:18px}
+}
+
+/* ================================================================ stampa (o PDF) della scheda del codice
+   Colori chiari su carta bianca qualunque sia il tema, solo la scheda: niente barre, ricerca, pulsanti e disegni. */
+.solo-stampa{display:none}
+@media print{
+  :root:root:root{--fondo:#fff;--carta:#fff;--carta-2:#f2f4f7;--inchiostro:#111;--secondario:#444;--linea:#d3d9df;--linea-forte:#b8c0c9;
+    --accento:#1b5584;--accento-forte:#144468;--accento-tenue:#e4ecf4;--timbro:#a4440c;--timbro-tenue:#fbe7d8;--ambra:#7a5410;--ambra-tenue:#f6ecd6;
+    --rosso:#9a3f34;--rosso-tenue:#f6e0db;--su-accento:#fff;--ombra:none;--ombra-scheda:none;--ombra-alta:none;color-scheme:light}
+  @page{margin:14mm 12mm}
+  html,body{background:#fff !important}
+  .page{max-width:none;padding:0}
+  .barra,.schede,#avvisi,.velo,.domanda,#risultati,.scena,.btn,.tasto-ico,.link,#view-classifica .fila .chip:not([aria-pressed="true"]),details > summary{display:none !important}
+  .solo-stampa{display:block;margin:0 0 10px;font-size:12px;color:#444}
+  .foglio{display:block}
+  .box{box-shadow:none !important;border-color:#cfd5dc;margin:0 0 10px;break-inside:avoid;background:#fff !important}
+  .principale{background:#fff !important}
+  .calc-campi .campo,select.campo{border-color:#cfd5dc;background:#fff}
+  *,*::before,*::after{animation:none !important;transition:none !important}
+  a{color:inherit;text-decoration:none}
 }

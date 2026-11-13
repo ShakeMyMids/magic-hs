@@ -7,8 +7,10 @@ un limite mensile di classificazioni per persona e un tetto mensile per tutti. S
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import re
 import secrets
 import sqlite3
@@ -22,19 +24,24 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.middleware.gzip import GZipMiddleware
 
 from . import __version__
 from . import sicurezza as S
-from .backup import Backup
+from .backup import Backup, ErroreBackup
+from .cambi import cambi
 from .config import Config
-from .dati import GestoreDati
+from .copia import CopiaEsterna
+from .dati import RE_VERSIONE, GestoreDati
 from .db import Database, iso
 from .ia import ErroreIA, ServizioIA, mese_corrente
+from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
 
 log = logging.getLogger("taric")
 STATIC = Path(__file__).with_name("static")
 COOKIE = "magic_hs"
 RE_CODICE = re.compile(r"^\d{10}$")
+RE_STATICO = re.compile(r'(src|href)="/static/([A-Za-z0-9_./-]+)"')
 RE_AREA = re.compile(r"^[A-Z0-9]{2,4}$")
 
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
@@ -76,6 +83,7 @@ class Preferenze(BaseModel):
     paese: str = Field(default="", max_length=4)
     flusso: Literal["import", "export"] = "import"
     tema: Literal["auto", "chiaro", "scuro"] = "auto"
+    condividi: Optional[bool] = None            # classificazioni nell'archivio aziendale (None = lascia com'e')
 
 
 class VoceStorico(BaseModel):
@@ -103,6 +111,15 @@ class Mese(BaseModel):
 
 class Versione(BaseModel):
     versione: str = Field(pattern=r"^\d{4}-\d{2}-01$")
+
+
+# ricerca per parole: parole senza risultati e sinonimi aggiunti dall'amministratore
+class RicercaVuota(BaseModel):
+    testo: str = Field(min_length=1, max_length=200)
+
+
+class Sinonimo(BaseModel):
+    termini: list[str] = Field(min_length=1, max_length=6)
 
 
 # account, accesso e gestione degli utenti
@@ -163,12 +180,21 @@ def segreto_moduli(cartella: Path) -> bytes:
 
 # ------------------------------------------------------------------ applicazione
 def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
-             client_dati: httpx.Client | None = None) -> FastAPI:
-    """Crea il sito: client_ia e client_dati sostituiscono, nelle prove, i servizi esterni."""
+             client_dati: httpx.Client | None = None, client_copia: httpx.Client | None = None) -> FastAPI:
+    """Crea il sito: client_ia, client_dati e client_copia sostituiscono, nelle prove, i servizi esterni."""
+    try:                                   # backup preparato a sito acceso con «python -m taric ripristina»
+        rimesso = Backup(cfg.dati).applica_in_attesa()
+        if rimesso:
+            log.warning("database ripristinato all'avvio: %s", rimesso)
+    except ErroreBackup as e:
+        log.error("ripristino all'avvio non riuscito: %s", e)
     db = Database(cfg.dati / "taric.db")
     ia = ServizioIA(cfg, db, client_ia)
     dati = GestoreDati(cfg, db, client_dati)
     copie = Backup(cfg.dati, cfg.backup_copie)
+    fuori = CopiaEsterna(cfg, db, client_copia)
+    if fuori.problema():
+        log.warning("copia esterna del database spenta: %s", fuori.problema())
 
     segreto = segreto_moduli(cfg.dati)
     with db.transazione() as c:       # gli indirizzi di MAGIC_HS_AMMINISTRATORI sono sempre amministratori attivi
@@ -179,13 +205,18 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     @asynccontextmanager
     async def vita(_app: FastAPI) -> AsyncIterator[None]:
+        pid = cfg.dati / "server.pid"           # per «python -m taric ripristina»: il sito e' acceso
+        pid.write_text(str(os.getpid()))
         if pianificatore:
-            dati.avvia_pianificatore(copie, attesa=600)
+            dati.avvia_pianificatore(copie, attesa=600, compiti=(lambda: fuori.automatica(copie),))
         yield
         dati.ferma()
+        pid.unlink(missing_ok=True)
 
     app = FastAPI(title="MAGIC HS", docs_url=None, redoc_url=None, openapi_url=None, lifespan=vita)
     app.state.cfg, app.state.db, app.state.dati, app.state.ia = cfg, db, dati, ia
+    # file compressi (la nomenclatura del mese pesa circa 2 MB, compressa un quarto)
+    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
     # ------------------------------------------------------------------ utilita'
     def utente_corrente(request: Request) -> sqlite3.Row | None:
@@ -237,6 +268,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             resp.headers["Strict-Transport-Security"] = "max-age=31536000"
         if request.url.path.startswith("/api/"):
             resp.headers["Cache-Control"] = "no-store"
+        elif request.url.path.startswith("/static/"):
+            # con l'impronta del contenuto (?v=) il file non cambia mai: il browser lo tiene; senza, lo ricontrolla
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable" if request.query_params.get("v") else "no-cache"
         return resp
 
     @app.exception_handler(Errore)
@@ -249,8 +283,28 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return JSONResponse({"errore": "Dati non validi: controlla " + ", ".join(campi) + ".", "codice": "dati_non_validi"}, status_code=422)
 
     # ------------------------------------------------------------------ pagine
-    def pagina(nome: str) -> FileResponse:
-        return FileResponse(STATIC / nome, media_type="text/html", headers={"Cache-Control": "no-cache"})
+    impronte: dict[tuple[str, int], str] = {}
+
+    def impronta(rel: str) -> str:
+        """Prime cifre dello SHA-256 di un file statico: cambia quando cambia il file."""
+        f = STATIC / rel
+        try:
+            chiave = (rel, f.stat().st_mtime_ns)
+        except OSError:
+            return ""
+        if chiave not in impronte:
+            impronte[chiave] = hashlib.sha256(f.read_bytes()).hexdigest()[:12]
+        return impronte[chiave]
+
+    def con_impronte(html: str) -> str:
+        """/static/x.js -> /static/x.js?v=impronta: dopo un aggiornamento il browser prende i file nuovi, mai un misto."""
+        def sostituisci(m: re.Match[str]) -> str:
+            v = impronta(m.group(2))
+            return f'{m.group(1)}="/static/{m.group(2)}' + (f'?v={v}"' if v else '"')
+        return RE_STATICO.sub(sostituisci, html)
+
+    def pagina(nome: str) -> HTMLResponse:
+        return HTMLResponse(con_impronte((STATIC / nome).read_text(encoding="utf-8")), headers={"Cache-Control": "no-cache"})
 
     @app.get("/", include_in_schema=False)
     def home(request: Request) -> Response:
@@ -260,7 +314,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         if v is None:
             return pagina("attesa.html")
         html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{DATI}}", f"/data/{v}/")
-        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+        return HTMLResponse(con_impronte(html), headers={"Cache-Control": "no-cache"})
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
     def manifest() -> FileResponse:
@@ -545,6 +599,21 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             db.evento(c, "backup_scaricato", autore_id=a["id"], dettagli=f.name)
         return FileResponse(f, media_type="application/zip", filename=f.name)
 
+    @app.post("/api/admin/copia-esterna")
+    def admin_copia_esterna(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Manda subito una copia del database nell'archivio esterno (MAGIC_HS_COPIA_*)."""
+        if not fuori.attiva:
+            raise Errore(409, fuori.problema() or "Copia esterna non configurata: vedi MAGIC_HS_COPIA_* nel README.", "copia_spenta")
+        s = fuori.esegui(copie)
+        with db.transazione() as c:
+            if s["esito"] == "ok":
+                db.evento(c, "copia_esterna", autore_id=a["id"], dettagli=f"{s['destinazione']}/{s['oggetto']}")
+            else:
+                db.evento(c, "copia_esterna_errore", autore_id=a["id"], dettagli=s["messaggio"])
+        if s["esito"] != "ok":
+            raise Errore(502, "Copia non riuscita: " + s["messaggio"], "copia_non_riuscita")
+        return s
+
     # ------------------------------------------------------------------ profilo
     def descrivi_utente(c: sqlite3.Connection, u: sqlite3.Row) -> dict[str, Any]:
         lim = ia.limite(c, u)
@@ -554,7 +623,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         except ValueError:
             pref = {}
         return {"id": u["id"], "nome": u["nome"], "email": u["email"], "azienda": u["azienda"], "ruolo": u["ruolo"],
-                "preferenze": {"paese": pref.get("paese", ""), "flusso": pref.get("flusso", "import"), "tema": pref.get("tema", "auto")},
+                "preferenze": {"paese": pref.get("paese", ""), "flusso": pref.get("flusso", "import"), "tema": pref.get("tema", "auto"),
+                               "condividi": pref.get("condividi", True) is not False},
                 "ia": {"disponibile": ia.disponibile and lim != 0 and not tetto, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
                        "usate": ia.usate(c, u["id"]), "mese": mese_corrente(), "tetto": tetto},
                 "dati": {"versione": dati.attiva(), "aggiornamento": (dati.in_corso or {}).get("fase")}}
@@ -576,8 +646,11 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         if paese and not RE_AREA.match(paese):
             raise Errore(422, "Paese non valido.", "paese")
         with db.transazione() as c:
-            c.execute("UPDATE utenti SET preferenze = ? WHERE id = ?",
-                      (json.dumps({"paese": paese, "flusso": body.flusso, "tema": body.tema}), u["id"]))
+            pref = json.loads(c.execute("SELECT preferenze FROM utenti WHERE id = ?", (u["id"],)).fetchone()[0] or "{}")
+            pref.update({"paese": paese, "flusso": body.flusso, "tema": body.tema})
+            if body.condividi is not None:
+                pref["condividi"] = body.condividi
+            c.execute("UPDATE utenti SET preferenze = ? WHERE id = ?", (json.dumps(pref), u["id"]))
         return json_ok()
 
     # ------------------------------------------------------------------ storico
@@ -605,9 +678,10 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         testo_dati = json.dumps(body.dati, ensure_ascii=False)
         if len(testo_dati) > 200_000:
             raise Errore(413, "Classificazione troppo grande da salvare.", "troppo_grande")
+        condivisa = json.loads(u["preferenze"] or "{}").get("condividi", True) is not False      # archivio aziendale
         with db.transazione() as c:
-            sid = c.execute("INSERT INTO storico(utente_id, quando, testo, codice, dati) VALUES (?, ?, ?, ?, ?)",
-                            (u["id"], iso(), body.testo.strip(), body.codice, testo_dati)).lastrowid
+            sid = c.execute("INSERT INTO storico(utente_id, quando, testo, codice, dati, condivisa) VALUES (?, ?, ?, ?, ?, ?)",
+                            (u["id"], iso(), body.testo.strip(), body.codice, testo_dati, int(condivisa))).lastrowid
             c.execute("DELETE FROM storico WHERE utente_id = ? AND id NOT IN (SELECT id FROM storico WHERE utente_id = ? ORDER BY id DESC LIMIT 500)",
                       (u["id"], u["id"]))
         return json_ok(id=sid)
@@ -689,6 +763,124 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                                 (u["id"], codice, str(p.get("nota") or "").strip()[:500], str(p.get("quando") or iso())[:40])).rowcount
         return json_ok(storico=nuove, preferiti=np)
 
+    # ------------------------------------------------------------------ preferiti: cosa e' cambiato con i dati del mese
+    @app.get("/api/preferiti/cambi")
+    def cambi_preferiti(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Differenze tra la versione dei dati in uso e la precedente installata, per i codici preferiti."""
+        att = dati.attiva()
+        nomi = sorted(d.name for d in dati.versioni.iterdir() if d.is_dir() and RE_VERSIONE.match(d.name) and (d / "nomenclatura.js").is_file()) \
+            if dati.versioni.is_dir() else []
+        prec = max((n for n in nomi if att and n < att), default=None)
+        if not att or not prec:
+            return {"da": prec, "a": att, "cambi": {}}
+        with db.connessione() as c:
+            codici = [r[0] for r in c.execute("SELECT codice FROM preferiti WHERE utente_id = ?", (u["id"],))]
+        try:
+            diff = cambi(dati.versioni / prec, dati.versioni / att, codici)
+        except (OSError, ValueError, KeyError, IndexError) as e:          # file dei dati inattesi: niente avvisi, il resto funziona
+            log.warning("confronto dei preferiti %s -> %s non riuscito: %s", prec, att, e)
+            diff = {}
+        return {"da": prec, "a": att, "cambi": diff}
+
+    # ------------------------------------------------------------------ archivio aziendale: classificazioni gia' fatte
+    @app.get("/api/archivio")
+    def archivio(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Le classificazioni con codice condivise dai colleghi (e le proprie), raggruppate per descrizione e codice: la
+        ricerca per parole le propone per prime e prima di chiamare l'IA si riprende quella identica."""
+        gruppi: dict[tuple[str, str], dict[str, Any]] = {}
+        with db.connessione() as c:
+            righe = c.execute(
+                "SELECT s.id, s.testo, s.codice, s.quando, s.utente_id, u.nome, json_extract(s.dati, '$.result') IS NOT NULL AS ia "
+                "FROM storico s JOIN utenti u ON u.id = s.utente_id "
+                "WHERE s.codice != '' AND (s.condivisa = 1 OR s.utente_id = ?) ORDER BY s.id DESC LIMIT 5000", (u["id"],))
+            for r in righe:
+                chiave = (piano(r["testo"]).strip(), r["codice"])
+                g = gruppi.get(chiave)
+                if g is None:
+                    if len(gruppi) >= 2000:
+                        continue
+                    gruppi[chiave] = {"id": r["id"], "testo": r["testo"], "codice": r["codice"], "quando": r["quando"],
+                                      "chi": "tu" if r["utente_id"] == u["id"] else r["nome"], "volte": 1, "ia": bool(r["ia"])}
+                else:
+                    g["volte"] += 1
+        return {"voci": list(gruppi.values())}
+
+    @app.get("/api/archivio/{sid}")
+    def voce_archivio(sid: int, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Una classificazione dell'archivio, completa: si riapre senza una nuova richiesta all'IA."""
+        with db.connessione() as c:
+            r = c.execute("SELECT testo, codice, quando, dati FROM storico WHERE id = ? AND (condivisa = 1 OR utente_id = ?)", (sid, u["id"])).fetchone()
+        if r is None:
+            raise Errore(404, "Classificazione non trovata.", "non_trovata")
+        return {"testo": r["testo"], "codice": r["codice"], "quando": r["quando"], "dati": json.loads(r["dati"])}
+
+    # ------------------------------------------------------------------ ricerca per parole: sinonimi e parole senza risultati
+    @app.get("/api/sinonimi")
+    def sinonimi(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Sinonimi aggiunti in Gestione: si sommano a quelli di js/sinonimi.js."""
+        with db.connessione() as c:
+            return {"sinonimi": {r["parola"]: json.loads(r["termini"]) for r in c.execute("SELECT parola, termini FROM sinonimi ORDER BY parola")}}
+
+    @app.post("/api/ricerche-vuote")
+    def ricerca_vuota(body: RicercaVuota, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Una ricerca per parole senza risultati, senza dire chi l'ha fatta: l'amministratore ne ricava i sinonimi."""
+        testo = piano(body.testo).strip()[:80]
+        if len(testo) < 3 or not re.search(r"[a-z]", testo):
+            return json_ok()
+        adesso = iso()
+        with db.transazione() as c:
+            c.execute("INSERT INTO ricerche_vuote(testo, volte, prima, ultima) VALUES (?, 1, ?, ?) "
+                      "ON CONFLICT(testo) DO UPDATE SET volte = volte + 1, ultima = excluded.ultima", (testo, adesso, adesso))
+            c.execute("DELETE FROM ricerche_vuote WHERE testo NOT IN (SELECT testo FROM ricerche_vuote ORDER BY ultima DESC LIMIT 1000)")
+        return json_ok()
+
+    @app.get("/api/admin/ricerca")
+    def admin_ricerca(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.connessione() as c:
+            vuote = [dict(r) for r in c.execute("SELECT testo, volte, prima, ultima FROM ricerche_vuote ORDER BY volte DESC, ultima DESC LIMIT 200")]
+            sin = [{"parola": r["parola"], "termini": json.loads(r["termini"]), "quando": r["quando"], "autore": r["nome"] or ""}
+                   for r in c.execute("SELECT s.parola, s.termini, s.quando, u.nome FROM sinonimi s LEFT JOIN utenti u ON u.id = s.autore_id ORDER BY s.parola")]
+        return {"vuote": vuote, "sinonimi": sin}
+
+    @app.put("/api/admin/sinonimi/{parola}")
+    def metti_sinonimo(parola: str, body: Sinonimo, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        chiave = piano(parola).strip()
+        if not RE_PAROLA.fullmatch(chiave) or len(chiave) < 2 or len(chiave) > 40:
+            raise Errore(422, "Il sinonimo vale per una sola parola, come «muletto».", "parola")
+        termini = list(dict.fromkeys(piano(x).strip() for x in body.termini if piano(x).strip()))
+        if not termini or any(len(x) > 60 for x in termini):
+            raise Errore(422, "Scrivi uno o più termini della nomenclatura, separati da virgole.", "termini")
+        v = dati.attiva()
+        if v:                               # ogni termine deve portare a qualcosa, come i sinonimi di js/sinonimi.js
+            testi = testi_nomenclatura(dati.versioni / v / "nomenclatura.js")
+            mancano = [x for x in termini if not presente(testi, x)]
+            if mancano:
+                raise Errore(422, "Nella nomenclatura non c'è: " + ", ".join(f"«{x}»" for x in mancano) + ". Usa le parole del testo ufficiale.", "termini")
+        with db.transazione() as c:
+            c.execute("INSERT INTO sinonimi(parola, termini, autore_id, quando) VALUES (?, ?, ?, ?) "
+                      "ON CONFLICT(parola) DO UPDATE SET termini = excluded.termini, autore_id = excluded.autore_id, quando = excluded.quando",
+                      (chiave, json.dumps(termini, ensure_ascii=False), a["id"], iso()))
+            c.execute("DELETE FROM ricerche_vuote WHERE testo = ?", (chiave,))
+            db.evento(c, "sinonimo", autore_id=a["id"], dettagli=f"{chiave} -> {', '.join(termini)}")
+        return json_ok(parola=chiave, termini=termini)
+
+    @app.delete("/api/admin/sinonimi/{parola}")
+    def togli_sinonimo(parola: str, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.transazione() as c:
+            n = c.execute("DELETE FROM sinonimi WHERE parola = ?", (piano(parola).strip(),)).rowcount
+            if n:
+                db.evento(c, "sinonimo_tolto", autore_id=a["id"], dettagli=piano(parola).strip())
+        return json_ok(tolti=n)
+
+    @app.delete("/api/admin/ricerche-vuote")
+    def svuota_ricerche(testo: str = "", a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.transazione() as c:
+            if testo:
+                n = c.execute("DELETE FROM ricerche_vuote WHERE testo = ?", (piano(testo).strip(),)).rowcount
+            else:
+                n = c.execute("DELETE FROM ricerche_vuote").rowcount
+        return json_ok(tolte=n)
+
     # ------------------------------------------------------------------ IA
     @app.post("/api/ia")
     def chiedi_ia(body: RichiestaIA, u: sqlite3.Row = Depends(richiede_utente)) -> Response:
@@ -721,7 +913,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def admin_riepilogo(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         with db.connessione() as c:
             in_attesa = c.execute("SELECT COUNT(*) FROM utenti WHERE stato = 'in_attesa'").fetchone()[0]
-        return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso, "in_attesa": in_attesa}
+        s = fuori.stato()
+        return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso, "in_attesa": in_attesa,
+                "copia_esterna": "spenta" if s["problema"] else ("errore" if s["attiva"] and s["esito"] == "errore" else "")}
 
     @app.get("/api/admin/eventi")
     def admin_eventi(limite: int = 200, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
@@ -733,7 +927,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.get("/api/admin/dati")
     def admin_dati(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         return {"attiva": dati.attiva(), "versioni": dati.elenco(), "in_corso": dati.in_corso, "ultimi": dati.ultimi(),
-                "automatico": cfg.aggiornamento_automatico, "fonte": cfg.fonte_url, "prossimo": dati.da_fare()}
+                "automatico": cfg.aggiornamento_automatico, "fonte": cfg.fonte_url, "prossimo": dati.da_fare(),
+                "copia_esterna": fuori.stato()}
 
     @app.get("/api/admin/dati/registro/{agg_id}")
     def admin_registro(agg_id: int, a: sqlite3.Row = Depends(richiede_admin)) -> PlainTextResponse:

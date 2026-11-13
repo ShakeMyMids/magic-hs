@@ -1,12 +1,13 @@
 /* MAGIC HS - vista Gestione, per l'amministratore: utenti (richieste da approvare, limiti, link per la password),
-   intelligenza artificiale unica (stato, prova, limiti, uso per persona), dati TARIC con la copia del database, registro. */
+   intelligenza artificiale unica (stato, prova, limiti, uso per persona), dati TARIC con la copia del database, ricerca
+   (parole cercate senza risultati e sinonimi aggiunti), registro. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
   var el = document.getElementById('view-gestione');
   var vista = T.viste = T.viste || {};
   var st = { sotto: 'utenti', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, modelli: [], utenti: null, iaS: null,
-             aperto: 0, link: null };
+             aperto: 0, link: null, ricerca: null, sinonimoPer: '', bozza: null };
 
   var ESITI = { ok: 'riuscito', errore: 'errore', non_disponibile: 'non ancora disponibile', in_corso: 'in corso', interrotto: 'interrotto' };
   var EVENTI = {
@@ -16,7 +17,9 @@
     riattivato: 'Account riattivato', link_password: 'Link per la password', password_cambiata: 'Password cambiata',
     password_reimpostata: 'Password reimpostata', accesso_bloccato: 'Accesso bloccato (password errate)', utente_eliminato: 'Account eliminato',
     ruolo: 'Ruolo cambiato', quota_ia: 'Limite personale cambiato', impostazioni_sito: 'Limiti e registrazioni cambiati',
-    backup_scaricato: 'Copia del database scaricata', sessioni_chiuse: 'Uscita da tutti i dispositivi'
+    backup_scaricato: 'Copia del database scaricata', sessioni_chiuse: 'Uscita da tutti i dispositivi',
+    copia_esterna: 'Copia del database mandata fuori', copia_esterna_errore: 'Copia esterna non riuscita',
+    sinonimo: 'Sinonimo aggiunto', sinonimo_tolto: 'Sinonimo tolto'
   };
   function numero(n) { return Number(n || 0).toLocaleString('it-IT'); }
 
@@ -32,6 +35,7 @@
     if (st.sotto === 'utenti' || st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/utenti').then(function (r) { st.utenti = r; }));
     if (st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/ia').then(function (r) { st.iaS = r; }));
     if (st.sotto === 'dati') chiamate.push(T.api('GET', '/api/admin/dati').then(function (r) { st.dati = r; }));
+    if (st.sotto === 'ricerca') chiamate.push(T.api('GET', '/api/admin/ricerca').then(function (r) { st.ricerca = r; }));
     if (st.sotto === 'registro') chiamate.push(T.api('GET', '/api/admin/eventi?limite=300').then(function (r) { st.eventi = r.eventi; }));
     return Promise.all(chiamate).then(disegna, function (e) { el.innerHTML = '<p class="errore">' + esc(errore(e)) + '</p>'; });
   }
@@ -39,12 +43,12 @@
   /* ------------------------------------------------------------------ disegno */
   function disegna() {
     var r = st.riep, h = '';
-    var schede = [['utenti', 'Utenti', 'utenti'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['registro', 'Registro', 'registro']];
+    var schede = [['utenti', 'Utenti', 'utenti'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['ricerca', 'Ricerca', 'cerca'], ['registro', 'Registro', 'registro']];
     h += '<div class="sotto" role="tablist">' + schede.map(function (x) {
       return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
     if (r) h += avvisi(r);
-    h += { dati: dati, registro: registro, ia: ia, utenti: utenti }[st.sotto]();
+    h += { dati: dati, registro: registro, ia: ia, utenti: utenti, ricerca: ricerca }[st.sotto]();
     el.innerHTML = h;
     pianificaRinfresco();
   }
@@ -54,6 +58,7 @@
     if (r.in_attesa && st.sotto !== 'utenti') a.push(r.in_attesa === 1 ? 'C\'è una richiesta di account da approvare: vai su Utenti.' : 'Ci sono ' + r.in_attesa + ' richieste di account da approvare: vai su Utenti.');
     if (!r.ia && st.sotto !== 'ia') a.push('La classificazione assistita è spenta: inserisci la chiave di Gemini nel servizio su Render (vedi Intelligenza artificiale).');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC: vai su Dati TARIC.');
+    if (r.copia_esterna && st.sotto !== 'dati') a.push(r.copia_esterna === 'errore' ? 'L\'ultima copia del database fuori da Render non è riuscita: vedi Dati TARIC.' : 'La copia del database fuori da Render è spenta: manca qualcosa nelle variabili MAGIC_HS_COPIA_* (vedi Dati TARIC).');
     if (a.length) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Da sistemare</div>' + a.map(function (t) { return '<p class="avviso">' + esc(t) + '</p>'; }).join('') + '</div></div>';
     return h;
   }
@@ -74,9 +79,7 @@
     h += '<div class="box s4"><div class="lab">' + T.icona('aggiorna') + 'Aggiorna adesso</div><form class="modulo" data-g="aggiorna"><label>Mese (vuoto = corrente)<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Scarica e installa</button></div>' + riga('aggiorna') + '</form></div></div>';
 
-    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scarica') + 'Copia del database</div>' +
-      '<p class="nota">Account, storico, preferiti e uso dell\'IA di tutti. Il server ne fa una al giorno sul suo disco; scaricane una ogni tanto da tenere altrove.</p>' +
-      '<div class="fila"><a class="btn sm" href="/api/admin/backup" download>' + T.icona('scarica') + 'Scarica la copia</a></div></div></div>';
+    h += copiaDatabase(d.copia_esterna || {});
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('carica') + 'Carica a mano un\'estrazione</div><p class="nota">I file Excel del mese (CIRCABC «TARIC and Quota data and information») in un archivio .zip.</p>' +
       '<form class="modulo" data-g="carica"><div class="due"><label>Archivio .zip<input class="campo" type="file" name="file" accept=".zip,application/zip" required></label>' +
@@ -92,6 +95,20 @@
       }).join('') + '</tbody></table></div>' + (d.ultimi.length ? '' : '<p class="vuoto">Nessun aggiornamento ancora.</p>') +
       registroAperto() + '</div></div>';
     return h;
+  }
+  /* copia del database: sul disco del server ogni giorno, fuori da Render ogni settimana (MAGIC_HS_COPIA_*) */
+  function copiaDatabase(c) {
+    var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('scarica') + 'Copia del database</div>' +
+      '<p class="nota">Account, storico, preferiti e uso dell\'IA di tutti. Il server ne fa una al giorno sul suo disco' +
+      (c.attiva ? ' e una alla settimana in <b>' + esc(c.destinazione) + '</b>.' : '; scaricane una ogni tanto da tenere altrove.') + '</p>';
+    if (c.attiva && c.esito === 'errore') h += '<p class="errore">Invio del ' + esc(T.dataOra(c.tentata)) + ' non riuscito: ' + esc(c.messaggio) + '. Si riprova da solo dopo 6 ore.</p>';
+    if (c.attiva && c.riuscita) h += '<p class="esito-ok">Ultima copia esterna: ' + esc(T.dataOra(c.riuscita)) + ' (' + esc(c.oggetto) + ')</p>';
+    else if (c.attiva && !c.tentata) h += '<p class="nota">La prima copia esterna parte entro dieci minuti.</p>';
+    if (c.problema) h += '<p class="avviso">Copia esterna spenta. ' + esc(c.problema) + '</p>';
+    else if (!c.attiva) h += '<p class="nota">Per mandarne una alla settimana fuori da Render (Backblaze B2, Cloudflare R2, Amazon S3…) imposta le variabili <code>MAGIC_HS_COPIA_*</code> del servizio, come spiega il README.</p>';
+    return h + '<div class="fila"><a class="btn sm" href="/api/admin/backup" download>' + T.icona('scarica') + 'Scarica la copia</a>' +
+      (c.attiva ? '<button class="btn sm" type="button" data-g="copia-esterna"' + (st.copiaInCorso ? ' disabled' : '') + '>' + T.icona('carica') + (st.copiaInCorso ? 'Invio in corso…' : 'Manda fuori adesso') + '</button>' : '') +
+      '</div>' + riga('copia') + '</div></div>';
   }
   function registroAperto() {
     return st.registro ? '<div class="lab" style="margin-top:8px">' + esc(st.registro.titolo) + '<span class="dx"><button class="link" type="button" data-g="chiudi-registro">chiudi</button></span></div><pre class="registro">' + esc(st.registro.testo) + '</pre>' : '';
@@ -251,6 +268,13 @@
         try { if (!localStorage.getItem(chiave) && T.festaIA) { localStorage.setItem(chiave, '1'); T.festaIA({ nome: st.iaS.ia_nome, secondi: Math.max(rapida.secondi, r.secondi) }); } }
         catch (e) { /* senza archivio del browser niente festa */ }
       }, function (e) { msg('ia', (rapida ? 'Il modello rapido risponde, il principale no: ' : '') + errore(e)); }).then(disegna);
+    } else if (g === 'r-sinonimo') { st.sinonimoPer = st.sinonimoPer === v ? '' : v; disegna(); var f = el.querySelector('form[data-g="sinonimo"] input[name="termini"]'); if (f) f.focus(); }
+    else if (g === 'r-togli' || g === 'r-svuota') {
+      if (g === 'r-svuota' && !window.confirm('Svuotare l\'elenco delle parole senza risultati?')) return true;
+      T.api('DELETE', '/api/admin/ricerche-vuote' + (g === 'r-togli' ? '?testo=' + encodeURIComponent(v) : '')).then(carica, function (e) { msg('ricerca', errore(e)); disegna(); });
+    } else if (g === 's-togli') {
+      T.api('DELETE', '/api/admin/sinonimi/' + encodeURIComponent(v)).then(function () { msg('ricerca', 'Sinonimo tolto.', true); if (app()) app().caricaSinonimi(); return carica(); },
+        function (e) { msg('ricerca', errore(e)); disegna(); });
     } else if (g === 's-modelli') {
       b.disabled = true;
       T.api('POST', '/api/admin/ia/modelli').then(function (r) { st.modelli = r.modelli || []; if (!st.modelli.length) msg('ia', 'Il servizio non ha indicato modelli.', true); },
@@ -263,6 +287,14 @@
       var q = String(d.get('quota') || '').trim();
       T.api('PATCH', '/api/admin/utenti/' + f.getAttribute('data-id'), { quota_ia: q === '' ? null : parseInt(q, 10) })
         .then(function () { msg('utenti', 'Limite salvato.', true); }, function (e) { msg('utenti', errore(e)); }).then(carica);
+    } else if (g === 'sinonimo') {
+      var parola = f.getAttribute('data-parola') || String(d.get('parola') || '').trim();
+      var termini = String(d.get('termini') || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+      st.bozza = { form: f.getAttribute('data-parola'), parola: String(d.get('parola') || ''), termini: String(d.get('termini') || '') };
+      T.api('PUT', '/api/admin/sinonimi/' + encodeURIComponent(parola), { termini: termini }).then(function (r) {
+        st.sinonimoPer = ''; st.bozza = null; msg('ricerca', 'Sinonimo salvato: «' + r.parola + '» trova anche ' + r.termini.map(function (x) { return '«' + x + '»'; }).join(', ') + '.', true);
+        if (app()) app().caricaSinonimi();
+      }, function (e) { msg('ricerca', errore(e)); }).then(carica);
     } else if (g === 's-limiti') {
       var qp = String(d.get('quota_predefinita') || '').trim(), tm = String(d.get('tetto_mese') || '').trim();
       T.api('PUT', '/api/admin/impostazioni', { quota_predefinita: qp === '' ? null : parseInt(qp, 10), tetto_mese: tm === '' ? null : parseInt(tm, 10),
@@ -270,6 +302,40 @@
         function (e) { msg('limiti', errore(e)); }).then(carica);
     } else return false;
     return true;
+  }
+
+  /* ---------- ricerca: parole senza risultati e sinonimi aggiunti ---------- */
+  function formSinonimo(parola) {
+    var b = st.bozza && st.bozza.form === parola ? st.bozza : { parola: '', termini: '' };      // dopo un errore i campi restano
+    return '<form class="fila" data-g="sinonimo" data-parola="' + esc(parola) + '">' +
+      (parola ? '' : '<input class="campo corto" name="parola" required maxlength="40" placeholder="parola, per esempio muletto" aria-label="Parola" value="' + esc(b.parola) + '">') +
+      '<input class="campo" name="termini" required maxlength="300" placeholder="termini della nomenclatura, separati da virgole" aria-label="Termini della nomenclatura" value="' + esc(b.termini) + '">' +
+      '<button class="btn sm pri" type="submit">Salva</button></form>';
+  }
+  function ricerca() {
+    var R = st.ricerca;
+    if (!R) return '<p class="vuoto">Carico…</p>';
+    var h = '<div class="foglio"><div class="box s7"><div class="lab">' + T.icona('domanda') + 'Parole cercate senza risultati<span class="dx">' + R.vuote.length + '</span></div>' + riga('ricerca');
+    if (!R.vuote.length) h += '<p class="vuoto">Nessuna: ogni ricerca ha trovato qualcosa.</p>';
+    else {
+      h += '<div class="elenco">' + R.vuote.map(function (v) {
+        var aperto = st.sinonimoPer === v.testo;
+        return '<div class="voce"><div><b>«' + esc(v.testo) + '»</b><div class="nota">' + v.volte + (v.volte === 1 ? ' volta' : ' volte') + ', l\'ultima il ' + esc(T.dataOra(v.ultima)) + '</div>' +
+          (aperto ? formSinonimo(v.testo) : '') + '</div>' +
+          '<div class="azioni"><button class="btn sm" type="button" data-g="r-sinonimo" data-v="' + esc(v.testo) + '">' + T.icona('piu') + 'Sinonimo</button>' +
+          '<button class="btn sm" type="button" data-g="r-togli" data-v="' + esc(v.testo) + '">Togli</button></div></div>';
+      }).join('') + '</div>';
+      h += '<div class="fila"><button class="btn sm" type="button" data-g="r-svuota">Svuota l\'elenco</button></div>';
+    }
+    h += '<p class="nota">Senza nome di chi ha cercato. Con un sinonimo la parola trova le voci della nomenclatura: usa i termini del testo ufficiale (per «muletto»: «carrelli»).</p></div>';
+    h += '<div class="box s5"><div class="lab">' + T.icona('libro') + 'Sinonimi aggiunti<span class="dx">' + R.sinonimi.length + '</span></div>' +
+      (R.sinonimi.length ? '<div class="elenco">' + R.sinonimi.map(function (s) {
+        return '<div class="voce"><div><b>' + esc(s.parola) + '</b> → ' + esc(s.termini.join(', ')) + '<div class="nota">' + esc(s.autore) + (s.autore ? ', ' : '') + esc(T.dataOra(s.quando, true)) + '</div></div>' +
+          '<div class="azioni"><button class="btn sm" type="button" data-g="s-togli" data-v="' + esc(s.parola) + '">' + T.icona('cestino') + 'Togli</button></div></div>';
+      }).join('') + '</div>' : '<p class="vuoto">Ancora nessuno.</p>') +
+      '<div class="lab" style="margin-top:6px">Nuovo sinonimo</div>' + formSinonimo('') +
+      '<p class="nota">Valgono per tutti, insieme a quelli già pronti.</p></div></div>';
+    return h;
   }
 
   /* ---------- registro ---------- */
@@ -323,5 +389,10 @@
     } else if (g === 'registro-agg') {
       T.api('GET', '/api/admin/dati/registro/' + id).then(function (r) { st.registro = { titolo: 'Registro dell\'aggiornamento', testo: r.testo || '(vuoto)' }; disegna(); });
     } else if (g === 'chiudi-registro') { st.registro = null; disegna(); }
+    else if (g === 'copia-esterna') {
+      st.copiaInCorso = true; msg('copia'); disegna();
+      T.api('POST', '/api/admin/copia-esterna').then(function (r) { msg('copia', 'Copia mandata: ' + r.oggetto + '.', true); },
+        function (e) { msg('copia', errore(e)); }).then(function () { st.copiaInCorso = false; return carica(); });
+    }
   });
 })();

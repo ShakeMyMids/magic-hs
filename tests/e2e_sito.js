@@ -90,7 +90,25 @@ async function accedi(p, email, password) {
   await capo.fill('#q', '8712'); await capo.press('#q', 'Enter');
   await capo.waitForSelector('#esito >> text=Sottovoci');
   ok(true, 'codice digitato: si apre con le sottovoci');
+
+  // calcolo degli importi e scheda stampabile
+  const casi = [['10.200 % + 93.100 EUR DTN', { valore: 1000, kg: 500 }, 567.5], ['0.000 % + 25.850 EUR DTN MAX 17.900 %', { valore: 1000, kg: 1000 }, 179],
+    ['6.700 % MAX 35.150 EUR DTN', { valore: 10000, kg: 100 }, 35.15], ['27.000 EUR HLT', { qta: 10, unitaQta: 'HLT' }, 270]];
+  let giusti = 0;
+  for (const [s, c, atteso] of casi) {
+    const r = await capo.evaluate(([s, c]) => window.TARIC_DEBUG.calcola(s, Object.assign({ valore: NaN, kg: NaN, qta: NaN, unitaQta: '' }, c)), [s, c]);
+    if (Math.abs((r.importo ?? -1) - atteso) < 0.005) giusti++;
+  }
+  const nc = await capo.evaluate(() => window.TARIC_DEBUG.calcola('6.900 % + EAR', { valore: 100, kg: 1, qta: NaN, unitaQta: '' }));
+  ok(giusti === casi.length && nc.no, 'calcolo dei dazi: percentuali, per massa e quantità, minimi e massimi; il resto «non calcolabile»');
+  await capo.fill('#q', '6403999610'); await capo.press('#q', 'Enter'); await capo.waitForSelector('.calcolo');
+  await capo.fill('.calc[data-c="valore"]', '10.000,00');
+  await capo.waitForSelector('#calc-esito >> text=Totale stimato da pagare');
+  const calcolo = (await capo.textContent('#calc-esito')).replace(/\s+/g, ' ');
+  ok(/800,00 €/.test(calcolo) && /2\.376,00 €/.test(calcolo) && /3\.176,00 €/.test(calcolo), 'calcolo nella scheda: dazio 8 %, IVA 22 %, totale');
+  ok(await capo.isVisible('[data-act="stampa"]'), 'scheda del codice: Stampa o PDF');
   await capo.fill('#q', 'qwzxj'); await capo.waitForSelector('#risultati >> text=Nessun risultato');
+  await capo.press('#q', 'Enter');                                       // la ricerca vuota arriva all'amministratore
   ok(await capo.isVisible('#risultati [data-act="chiedi"]'), "nessun risultato: proposta di classificare con l'IA");
   await capo.click('#interruttore-ia');
   ok((await capo.textContent('#titolo-q')) === 'Che merce devi classificare?' && (await capo.textContent('#vai')).trim() === 'Classifica' && await capo.isHidden('#risultati'),
@@ -102,7 +120,23 @@ async function accedi(p, email, password) {
   await capo.click('#tab-gestione');
   await capo.waitForSelector('button[data-g="u-apri"]');
   ok((await capo.$$('button[data-g="u-apri"]')).length === 1 && await capo.isVisible('td >> text=capo@azienda.it'), 'in Utenti c\'è l\'amministratore');
-  ok((await capo.$$('.sotto button')).length === 4, 'Utenti, IA, Dati TARIC, Registro');
+  ok((await capo.$$('.sotto button')).length === 5, 'Utenti, IA, Dati TARIC, Ricerca, Registro');
+
+  // parole cercate senza risultati e sinonimo aggiunto dall'amministratore
+  await capo.click('button[data-v="ricerca"]');
+  await capo.waitForSelector('text=«qwzxj»');
+  ok(true, 'Ricerca: la parola senza risultati arriva in Gestione');
+  await capo.fill('form[data-g="sinonimo"][data-parola=""] input[name="parola"]', 'muletto');
+  await capo.fill('form[data-g="sinonimo"][data-parola=""] input[name="termini"]', 'zxqvwk');
+  await capo.click('form[data-g="sinonimo"][data-parola=""] button[type=submit]');
+  await capo.waitForSelector('text=Nella nomenclatura non c\'è: «zxqvwk»');
+  ok(true, 'sinonimo con un termine che non esiste: rifiutato');
+  await capo.fill('form[data-g="sinonimo"][data-parola=""] input[name="termini"]', 'carrelli');
+  await capo.click('form[data-g="sinonimo"][data-parola=""] button[type=submit]');
+  await capo.waitForSelector('text=Sinonimo salvato');
+  await capo.click('#tab-classifica'); await cerca(capo, 'muletto');
+  ok(await capo.isVisible('#risultati >> text=Carrelli-elevatori'), 'il sinonimo aggiunto vale subito: «muletto» trova i carrelli elevatori');
+  await capo.fill('#q', ''); await capo.click('#tab-gestione'); await capo.click('button[data-v="utenti"]');
   await capo.click('button[data-v="ia"]');
   await capo.waitForSelector('form[data-g="s-limiti"]');
   ok(await capo.isVisible('text=finto-modello'), 'IA unica del server attiva');
@@ -156,10 +190,34 @@ async function accedi(p, email, password) {
   ok(await luca.isVisible('text=2 di 2 classificazioni') && await luca.isVisible('text=luca@azienda.it'), 'profilo con account e uso');
   await luca.screenshot({ path: out + '/5-profilo.png', fullPage: true });
 
+  // archivio aziendale: quello che ha classificato Luca lo ritrova l'amministratore, e non lo rifà con l'IA
+  await capo.click('#tab-classifica'); await capo.reload(); await pronta(capo);
+  if (await capo.isChecked('#modo-ia')) await capo.click('#interruttore-ia');
+  await cerca(capo, 'scarpe sportive');
+  ok(await capo.isVisible('#risultati >> text=Già classificate in azienda') && await capo.isVisible('#risultati .arch >> text=Luca Bianchi'),
+    'archivio aziendale: le classificazioni dei colleghi nella ricerca per parole');
+  const usate = async () => (await capo.evaluate(() => fetch('/api/io').then(r => r.json()))).ia.usate;
+  const prima = await usate();
+  await capo.click('#interruttore-ia'); await capo.fill('#q', 'Scarpe sportive di pelle'); await capo.click('#vai');
+  await capo.waitForSelector('.gia >> text=Già classificata da Luca Bianchi');
+  await capo.click('[data-act="riusa"]');
+  await capo.waitForSelector('.timbro >> text=Proposta');
+  ok(await usate() === prima, 'descrizione già classificata: ripresa senza una nuova richiesta all\'IA');
+  await capo.click('#interruttore-ia'); await capo.fill('#q', ''); await capo.click('#tab-gestione');
+
+  // copia del database fuori dal server (finto archivio S3 di tests/finto_claude.py): la prima parte da sola all'avvio
+  await capo.click('button[data-v="dati"]');
+  await capo.waitForSelector('text=Ultima copia esterna');
+  ok(await capo.isVisible('text=una alla settimana in 127.0.0.1:9100/s3/magic-hs'), 'copia esterna: destinazione e prima copia automatica');
+  await capo.click('button[data-g="copia-esterna"]');
+  await capo.waitForSelector('text=Copia mandata: magic-hs-copia-');
+  const oggetti = (await (await fetch('http://127.0.0.1:9100/s3/')).json()).oggetti;
+  ok(Object.keys(oggetti).length === 1 && Object.values(oggetti)[0] > 1000, 'copia esterna adesso: il .zip del database è nell\'archivio');
+
   // password dimenticata: link preparato dall'amministratore
-  await capo.click('button[data-v="utenti"]'); await capo.waitForSelector('button[data-g="u-apri"]');
-  const righe = await capo.$$('button[data-g="u-apri"]');
-  for (const r of righe) { const tr = await r.evaluateHandle(e => e.closest('tr')); if ((await tr.evaluate(e => e.textContent)).includes('luca@azienda.it')) { await r.click(); break; } }
+  await capo.click('button[data-v="utenti"]');
+  // selettore stabile: la tabella si ridisegna quando arrivano i dati, un riferimento all'elemento si perderebbe
+  await capo.click('tr:has-text("luca@azienda.it") button[data-g="u-apri"]');
   await capo.click('button[data-g="u-link"]');
   await capo.waitForSelector('[data-g="link-campo"]');
   const link = await capo.inputValue('[data-g="link-campo"]');

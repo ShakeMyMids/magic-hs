@@ -2,7 +2,8 @@
 
   python -m taric server                 avvia il sito (Render: porta da $PORT, dati in $TARIC_DATI)
   python -m taric backup                 salva subito un backup del database
-  python -m taric ripristina FILE        rimette il database di un backup (.zip o .db); poi va riavviato il sito
+  python -m taric ripristina FILE        rimette il database di un backup (.zip o .db): se il sito e' acceso lo rimette
+                                         al prossimo avvio, quindi va riavviato
 
 Sul server di Render (Shell del servizio) la cartella dei dati e' gia' in $TARIC_DATI; --dati ne indica un'altra.
 """
@@ -36,6 +37,17 @@ def avvia_server(porta: int, host: str) -> int:
     return 0
 
 
+def sito_acceso(dati: Path) -> bool:
+    """Vero se un server MAGIC HS sta usando questa cartella dei dati (server.pid, scritto all'avvio del sito)."""
+    try:
+        pid = int((dati / "server.pid").read_text().strip())
+        os.kill(pid, 0)
+    except (OSError, ValueError):
+        return False
+    comando = Path(f"/proc/{pid}/cmdline")
+    return not comando.exists() or b"taric" in comando.read_bytes()       # un pid riusato da un altro programma non conta
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m taric", description="MAGIC HS: sito, backup e ripristino del database")
     ap.add_argument("--dati", default="", help="cartella dei dati (predefinita: $TARIC_DATI oppure ./dati)")
@@ -51,12 +63,16 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["TARIC_DATI"] = a.dati
     if a.comando == "server":
         return avvia_server(a.porta, a.host)
-    b = Backup(Path(os.environ.get("TARIC_DATI") or "dati"))
+    dati = Path(os.environ.get("TARIC_DATI") or "dati")
+    b = Backup(dati)
     try:
         if a.comando == "backup":
             print(f"Backup salvato: {b.crea()}")
+        elif sito_acceso(dati):
+            print(f"Backup controllato ({b.programma_ripristino(Path(a.file))}). MAGIC HS e' acceso: il database si rimette al "
+                  "prossimo avvio. Riavvia il sito (su Render: Manual Deploy > Restart service).")
         else:
-            print(f"Database ripristinato ({b.ripristina(Path(a.file))}). Riavvia il sito (su Render: Manual Deploy > Restart service).")
+            print(f"Database ripristinato ({b.ripristina(Path(a.file))}).")
     except ErroreBackup as e:
         print(f"Errore: {e}.")
         return 1

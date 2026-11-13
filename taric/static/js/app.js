@@ -93,6 +93,8 @@ var FREQUENTI = ['CN', 'US', 'GB', 'CH', 'TR', 'JP', 'KR', 'IN', 'VN', 'TW'];
 var state = {
   view: 'classifica',
   modo: 'parole',      // parole: ricerca nella nomenclatura | ia: classificazione con l'intelligenza artificiale
+  gia: null,           // classificazione identica già nell'archivio aziendale (si riprende senza chiamare l'IA)
+  forzaIA: false,
   risChiusi: false,    // risultati della ricerca ridotti a un link dopo aver scelto un codice
   risTutti: false,
   ai: 'wait',          // wait | ok | no
@@ -108,7 +110,9 @@ var state = {
   trad: {},            // row index -> italian text
   tradBusy: false,
   qmsg: '', open: {}, secOpen: {}, flash: -1,
-  anima: false
+  anima: false,
+  calc: { valore: '', kg: '', qta: '', iva: '22' },   // calcolo degli importi (casella 47)
+  calcDazi: null
 };
 var ctl = null, tick = null, sampleFn = null;
 
@@ -295,6 +299,7 @@ function cercaOra() {
     state.anima = true; state.risChiusi = true; renderAll(); qEl.blur(); return;
   }
   state.risChiusi = false; renderRisultati(); renderMsg(); qEl.blur();
+  if (!cerca(q).length && !archivioPer(q).length) segnalaVuota(q, true);
   var r = $('#risultati'); if (r && !r.hidden && r.scrollIntoView) r.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function rigaRisultato(i, n) {
@@ -317,10 +322,15 @@ function renderRisultati() {
     el.hidden = !res.length; return;
   }
   var ponte = (testuale && state.utente && state.utente.ia && state.utente.ia.configurata) ? '<button class="btn sm" type="button" data-act="chiedi">' + T.icona('scintille') + 'Classifica con l\'IA</button>' : '';
-  h = '<div class="box ris-box' + (nuovi ? ' arriva' : '') + '"><div class="lab">' + T.icona('cerca') + 'Risultati<span class="dx">' + (res.length === 150 ? 'più di 150' : res.length) + '</span></div><div class="albero">';
+  var arch = archivioPer(q);
+  h = '<div class="box ris-box' + (nuovi ? ' arriva' : '') + '">';
+  if (arch.length) h += '<div class="lab">' + T.icona('utenti') + 'Già classificate in azienda<span class="dx">' + arch.length + '</span></div><div class="albero">' +
+    arch.map(rigaArchivio).join('') + '</div>';
+  h += '<div class="lab">' + T.icona('cerca') + 'Nella nomenclatura<span class="dx">' + (res.length === 150 ? 'più di 150' : res.length) + '</span></div><div class="albero">';
+  if (!res.length && !arch.length && testuale) segnalaVuota(q, false);
   if (!res.length) h += '<div class="trow info"><span class="txt nota">Nessun risultato. ' +
     (testuale ? 'La nomenclatura usa termini suoi (per esempio «foratrici» per i trapani): prova un\'altra parola' + (ponte ? ' oppure fai classificare la merce all\'IA.' : '.') : 'Controlla le cifre del codice.') + '</span>' + ponte + '</div>';
-  h += res.slice(0, state.risTutti ? res.length : MOSTRATI).map(rigaRisultato).join('');
+  h += res.slice(0, state.risTutti ? res.length : MOSTRATI).map(function (i, n) { return rigaRisultato(i, n + arch.length); }).join('');
   if (res.length > MOSTRATI && !state.risTutti) h += '<div class="trow info"><button class="btn sm" type="button" data-act="tutti-ris">Mostra tutti (' + (res.length === 150 ? 'primi 150' : res.length) + ')</button></div>';
   else if (res.length === 150) h += '<div class="trow info"><span class="txt nota">Mostro i primi 150 risultati: aggiungi una parola o qualche cifra.</span></div>';
   if (res.length && ponte) h += '<div class="trow info"><span class="txt nota">Non trovi la voce? Puoi far classificare «' + esc(q) + '» all\'IA.</span>' + ponte + '</div>';
@@ -333,7 +343,7 @@ function salvaStorico() {
   var r = state.result;
   if (!r || !r.best) return;
   T.api('POST', '/api/storico', { testo: state.q, codice: r.best.code, dati: { q: state.q, answers: state.answers, heads: state.heads, result: r } })
-    .then(function (x) { if (T.viste && T.viste.profilo) T.viste.profilo.daRicaricare = true; return x; }, function () { /* lo storico non è indispensabile */ });
+    .then(function (x) { if (T.viste && T.viste.profilo) T.viste.profilo.daRicaricare = true; caricaArchivio(); return x; }, function () { /* lo storico non è indispensabile */ });
 }
 var prefT = null;
 function salvaPreferenze() {
@@ -364,6 +374,11 @@ function classifica(soloScelta) {
     state.result = null; state.answers = []; state.heads = []; state.picks = {}; state.trad = {};
     state.sel = r; state.anima = true; renderAll(); return;
   }
+  if (!soloScelta && !state.forzaIA) {                     // già classificata in azienda: si riprende, senza costi
+    var g = giaClassificata(state.q);
+    if (g) { state.gia = g; renderMsg(); return; }
+  }
+  state.forzaIA = false; state.gia = null;
   if (!sampleFn) { state.error = state.ai === 'wait' ? 'Attendi un istante: sto caricando il tuo profilo.' : state.aiMotivo; renderMsg(); return; }
   if (state.q.length > 2000) { state.error = ERR.prompt_too_large; renderMsg(); return; }
 
@@ -691,6 +706,113 @@ function unitaSupplementare(i) {
   return trovata;
 }
 
+/* ---------- calcolo degli importi: dazio in euro e IVA stimata (casella 47) ----------
+   Si calcolano le espressioni semplici: percentuali, importi per massa (DTN = 100 kg, KGM, TNE, GRM) o per unità di
+   quantità, somme con «+», minimi (MIN) e massimi (MAX). Componenti agricole (EA, ADSZ...), qualificatori dell'unità
+   (per esempio DTN E, peso netto sgocciolato) e dazi con condizioni restano «non calcolabili qui»: meglio nessun numero
+   che uno sbagliato. */
+var MASSA = { DTN: 0.01, KGM: 1, TNE: 0.001, GRM: 1000 };          // quante unità per kg
+var QUANTITA = { MIL: 0.001, CEN: 0.01 };                          // per 1000 e per 100 pezzi
+var NON_CALCOLABILI = { EA: 1, EAR: 1, ADSZ: 1, ADSZR: 1, ADFM: 1, ADFMR: 1 };
+function numeroIt(s) {
+  s = String(s === undefined || s === null ? '' : s).trim().replace(/\s/g, '');
+  if (!s) return NaN;
+  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+  var v = Number(s);
+  return isFinite(v) && v >= 0 ? v : NaN;
+}
+/* {importo} oppure {manca: 'valore'|'kg'|'qta'} oppure {no: motivo} */
+function calcolaDazio(str, c) {
+  var t = String(str || '').replace(/\+/g, ' + ').trim().split(/\s+/), parti = { base: [], MIN: [], MAX: [] }, dove = 'base', i = 0;
+  if (!t[0]) return { no: 'nessun dazio indicato' };
+  if (/^Cond:/.test(str)) return { no: 'dipende dalle condizioni o dai documenti' };
+  while (i < t.length) {
+    var x = t[i];
+    if (x === '+') { i++; continue; }
+    if (x === 'MIN' || x === 'MAX') { dove = x; i++; continue; }
+    if (x === 'NIHIL') { parti[dove].push({ v: 0, tipo: '%' }); i++; continue; }
+    if (NON_CALCOLABILI[x]) return { no: 'contiene un elemento agricolo o un dazio addizionale variabile' };
+    if (!isNum(x)) return { no: 'espressione non prevista' };
+    var v = num(x), nx = t[i + 1];
+    if (nx === '%') { parti[dove].push({ v: v, tipo: '%' }); i += 2; continue; }
+    if (nx !== 'EUR' && nx !== 'EUC') return { no: 'espressione non prevista' };
+    var u = t[i + 2], q = t[i + 3];
+    if (!u || !/^[A-Z]{3}$/.test(u) || PAROLE[u]) return { no: 'importo per spedizione, non per merce' };
+    if (q && /^[A-Z]$/.test(q)) return { no: 'dipende da ' + unita(u, q) };
+    parti[dove].push({ v: v, tipo: 'eur', u: u });
+    i += 3;
+  }
+  var manca = '';
+  function somma(lista) {
+    return lista.reduce(function (s, p) {
+      if (p.tipo === '%') { if (isNaN(c.valore)) { manca = manca || 'valore'; return s; } return s + c.valore * p.v / 100; }
+      if (MASSA[p.u]) { if (isNaN(c.kg)) { manca = manca || 'kg'; return s; } return s + p.v * c.kg * MASSA[p.u]; }
+      if (isNaN(c.qta) || c.unitaQta !== p.u) { manca = manca || 'qta'; return s; }
+      return s + p.v * c.qta * (QUANTITA[p.u] || 1);
+    }, 0);
+  }
+  var tot = somma(parti.base);
+  if (parti.MIN.length) tot = Math.max(tot, somma(parti.MIN));
+  if (parti.MAX.length) tot = Math.min(tot, somma(parti.MAX));
+  return manca ? { manca: manca } : { importo: Math.round(tot * 100) / 100 };
+}
+/* l'unità di quantità che servirebbe (pezzi, paia, litri...), se una delle espressioni ne usa una */
+function unitaQuantita(stringhe) {
+  for (var k = 0; k < stringhe.length; k++) {
+    var m = /\b(?:EUR|EUC) ([A-Z]{3})\b(?! [A-Z]\b)/g, x;
+    while ((x = m.exec(stringhe[k] || ''))) if (!MASSA[x[1]] && !PAROLE[x[1]]) return x[1];
+  }
+  return '';
+}
+var EURO = (function () { try { return new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }); } catch (e) { return null; } })();
+function euro(v) { return (EURO ? EURO.format(v) : nIt(v, 2, 2)) + ' €'; }        // 2.376,00 € (anche le migliaia)
+function aggiornaCalcolo() {
+  var el = $('#calc-esito'), D = state.calcDazi;
+  if (!el || !D) return;
+  var c = { valore: numeroIt(state.calc.valore), kg: numeroIt(state.calc.kg), qta: numeroIt(state.calc.qta), unitaQta: D.unitaQta };
+  if (isNaN(c.valore)) { el.innerHTML = '<p class="nota">Scrivi il valore in dogana delle merci per vedere dazio, IVA e totale.</p>'; return; }
+  var MANCA = { valore: 'scrivi il valore in dogana', kg: 'scrivi la massa netta', qta: 'scrivi la quantità' };
+  function riga(nome, misura) {
+    if (!misura) return null;
+    var r = calcolaDazio(misura.duty, c);
+    return { nome: nome, dazio: fmtDazio(misura.duty), r: r };
+  }
+  var righe = [riga('Dazio paesi terzi', D.base)];
+  if (D.pref) righe.push(riga('Con la preferenza ' + nomeArea(D.pref.o) + ' (serve la prova dell\'origine)', D.pref));
+  var extra = D.extra.map(function (m) { return { m: m, r: calcolaDazio(m.duty, c) }; });
+  var ex = extra.filter(function (x) { return x.r.importo !== undefined; }).sort(function (a, b) { return b.r.importo - a.r.importo; })[0];
+  var h = '<table class="tab calc-tab"><tbody>', applicato = null, totale = 0, ok = true;
+  righe.forEach(function (x) {
+    var val = x.r.importo !== undefined ? euro(x.r.importo) : (x.r.manca ? MANCA[x.r.manca] : 'non calcolabile qui: ' + x.r.no);
+    h += '<tr><td>' + esc(x.nome) + '<span class="piccolo">' + esc(x.dazio) + '</span></td><td class="n">' + esc(val) + '</td></tr>';
+  });
+  var rb = righe[0].r, rp = righe[1] && righe[1].r, conPref = !!(rp && rp.importo !== undefined);   // con la preferenza, se si può
+  applicato = conPref ? rp.importo : (rb.importo !== undefined ? rb.importo : null);
+  if (applicato === null) ok = false;
+  if (extra.length) {
+    var testo = ex ? euro(ex.r.importo) : 'non calcolabile qui';
+    h += '<tr><td>Antidumping e dazi addizionali' + (extra.length > 1 && ex ? '<span class="piccolo">variano secondo il produttore (codice addizionale): calcolato il più alto, ' + esc(fmtDazio(ex.m.duty)) + '</span>' : (ex ? '<span class="piccolo">' + esc(fmtDazio(ex.m.duty)) + '</span>' : '')) +
+      '</td><td class="n">' + esc(testo) + '</td></tr>';
+    if (!ex) ok = false;
+  }
+  var dazi = (applicato || 0) + (ex ? ex.r.importo : 0), aliquota = Number(state.calc.iva || 22);
+  var iva = Math.round((c.valore + dazi) * aliquota) / 100;
+  totale = dazi + iva;
+  h += '<tr><td>IVA ' + aliquota + ' %<span class="piccolo">su valore e dazi; senza spese fino a destinazione e accise</span></td><td class="n">' + esc(ok ? euro(iva) : '–') + '</td></tr>';
+  h += '<tr class="evid"><td><b>Totale stimato da pagare</b>' + (conPref ? '<span class="piccolo">con la preferenza</span>' : '') + '</td><td class="n"><b>' + esc(ok ? euro(totale) : '–') + '</b></td></tr></tbody></table>';
+  if (!ok) h += '<p class="nota">Il totale manca finché un dazio non è calcolabile: completa i dati o controlla le misure qui sotto.</p>';
+  el.innerHTML = h;
+}
+function boxCalcolo(D) {
+  var v = function (k) { return esc(state.calc[k] || ''); };
+  return '<div class="calcolo"><div class="lab">' + T.icona('percento') + 'Calcolo degli importi<span class="dx">stima</span></div><div class="calc-campi">' +
+    '<label>Valore in dogana (EUR)<input class="campo calc" data-c="valore" inputmode="decimal" autocomplete="off" value="' + v('valore') + '" placeholder="per esempio 12.500,00"></label>' +
+    '<label>Massa netta (kg)<input class="campo calc" data-c="kg" inputmode="decimal" autocomplete="off" value="' + v('kg') + '"></label>' +
+    (D.unitaQta ? '<label>Quantità (' + esc(unita(D.unitaQta, '')) + ')<input class="campo calc" data-c="qta" inputmode="decimal" autocomplete="off" value="' + v('qta') + '"></label>' : '') +
+    '<label>IVA<select class="campo calc" data-c="iva">' + [22, 10, 5, 4].map(function (a) { return '<option value="' + a + '"' + (String(state.calc.iva || 22) === String(a) ? ' selected' : '') + '>' + a + ' %</option>'; }).join('') + '</select></label>' +
+    '</div><div id="calc-esito"></div></div>';
+}
+
 /* ---------- rendering of measures ---------- */
 function nomeArea(o) { return o === '1011' ? 'tutti i paesi (erga omnes)' : (RIF.aree[o] || o); }
 function fmtContingente(o) { o = String(o); return o.length === 6 ? o.slice(0, 2) + '.' + o.slice(2) : o; }
@@ -856,6 +978,13 @@ function boxMisure(sel) {
         '<div class="tile"><span class="tv">' + esc(t1) + '</span><span class="tk">Dazio paesi terzi</span></div>' +
         '<div class="tile"><span class="tv">' + esc(t2) + '</span><span class="tk">Preferenza' + (c && pref.length ? ' ' + esc(nomeArea(pref[0].o)) : '') + '</span></div>' +
         '<div class="tile"><span class="tv">' + esc(t3) + '</span><span class="tk">Antidumping e dazi addizionali</span></div></div>';
+      if (dichiarabile && base.length === 1) {
+        var dovuti = c ? extra.filter(sempreDovuto) : [];
+        var D = { base: base[0], pref: c && pref.length ? pref[0] : null, extra: dovuti };
+        D.unitaQta = unitaQuantita([D.base.duty, D.pref ? D.pref.duty : ''].concat(dovuti.map(function (m) { return m.duty; })));
+        state.calcDazi = D;
+        h47 += boxCalcolo(D);
+      } else state.calcDazi = null;
     }
     CATEGORIE.forEach(function (K) {
       var list = cat[K.id];
@@ -901,6 +1030,15 @@ function renderStato() {
 function renderMsg() {
   var h = '';
   if (state.error) h += '<p class="errore">' + esc(state.error) + '</p>';
+  var g = state.modo === 'ia' && state.gia;
+  if (g) {
+    var gi = byCode.get(g.codice);
+    h += '<div class="gia"><p class="cosa">' + T.icona('utenti') + 'Già classificata ' + (g.chi === 'tu' ? 'da te' : 'da ' + esc(g.chi)) + ' il ' + esc(T.dataOra(g.quando, true)) +
+      ': <b>' + esc(grp(g.codice)) + '</b> ' + esc(descOf(gi)) + '</p>' +
+      '<div class="fila"><button class="btn pri" type="button" data-act="riusa">' + T.icona('storico') + 'Riprendi quella classificazione</button>' +
+      '<button class="btn" type="button" data-act="ancora-ia">' + T.icona('bacchetta') + 'Classifica di nuovo con l\'IA</button></div>' +
+      '<p class="nota">Riprenderla non usa una nuova classificazione del mese.</p></div>';
+  }
   var ia = state.utente && state.utente.ia;
   if (state.modo === 'ia' && state.ai === 'no' && !state.error && state.aiMotivo) h += '<p class="avviso">' + esc(state.aiMotivo) + '</p>';
   if (state.modo === 'ia' && state.ai === 'ok' && ia && ia.limite && ia.usate >= ia.limite * 0.8) h += '<p class="nota">Classificazioni con l\'IA questo mese: ' + ia.usate + ' su ' + ia.limite + '.</p>';
@@ -963,6 +1101,7 @@ function renderEsito() {
   if (cand && cand.why) h += '<p class="perche"><b>Perché.</b> ' + esc(cand.why) + '</p>';
   if (cand && !role.best && cand.when) h += '<p class="perche"><b>Quando.</b> ' + esc(cand.when) + '</p>';
   h += '<div class="fila"><button class="btn sm" type="button" data-act="copia" data-c="' + esc(sel.code) + '">' + T.icona('copia') + 'Copia codice</button>' +
+    '<button class="btn sm" type="button" data-act="stampa">' + T.icona('documento') + 'Stampa o PDF</button>' +
     (i >= 0 ? '<button class="btn sm" type="button" data-act="apri" data-i="' + i + '">' + T.icona('libro') + 'Vedi nella nomenclatura</button>' : '') +
     (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' : '') + '</div>';
   var fineCod = (D.fine && D.fine[sel.code]) || 0;
@@ -1028,6 +1167,7 @@ function renderEsito() {
 
   h += boxMisure(sel);
   el.innerHTML = h;
+  aggiornaCalcolo();
 }
 
 /* ---------- nomenclature browser ---------- */
@@ -1040,38 +1180,110 @@ var VUOTE = {};
 /* singolare e plurale hanno la stessa radice: per le parole più lunghe si toglie la vocale finale («bicicletta» trova
    anche «biciclette», «orologio» trova «orologi», «fungo» trova «funghi») */
 function radice(t) { return (t.length >= 4 && /^[a-z]+$/.test(t)) ? t.replace(/[aeio]$/, '') : t; }
-/* sinonimi (js/sinonimi.js) per radice: «scarpe» e «scarpa» portano entrambe a «calzature» */
-var SIN = null;
+/* sinonimi per radice: «scarpe» e «scarpa» portano entrambe a «calzature». Quelli di js/sinonimi.js e quelli aggiunti
+   dall'amministratore in Gestione › Ricerca (/api/sinonimi) */
+var SIN = null, SIN_AGGIUNTI = {};
 function sinonimiDi(r) {
   if (!SIN) {
     SIN = {};
-    var s = window.TARIC_SINONIMI || {};
-    Object.keys(s).forEach(function (k) {
-      var c = radice(piano(k).trim());
-      SIN[c] = (SIN[c] || []).concat(s[k].map(function (x) { return piano(x).trim(); }));
+    [window.TARIC_SINONIMI || {}, SIN_AGGIUNTI].forEach(function (s) {
+      Object.keys(s).forEach(function (k) {
+        var c = radice(piano(k).trim());
+        SIN[c] = (SIN[c] || []).concat(s[k].map(function (x) { return piano(x).trim(); }));
+      });
     });
   }
   return SIN[r] || [];
 }
+function caricaSinonimi() {
+  return T.api('GET', '/api/sinonimi').then(function (r) { SIN_AGGIUNTI = r.sinonimi || {}; SIN = null; if (state.avviato) renderRisultati(); },
+    function () { /* restano quelli del file */ });
+}
+/* ricerche senza risultati: arrivano all'amministratore (senza nome) per aggiungere sinonimi */
+var segnalate = {}, vuotaT = null;
+function segnalaVuota(q, subito) {
+  clearTimeout(vuotaT);
+  var k = piano(q).trim();
+  if (k.length < 3 || segnalate[k]) return;
+  vuotaT = setTimeout(function () {
+    if (piano($('#q').value).trim() !== k || state.modo !== 'parole') return;        // nel frattempo la ricerca è cambiata
+    segnalate[k] = 1;
+    T.api('POST', '/api/ricerche-vuote', { testo: k }).catch(function () { /* niente */ });
+  }, subito ? 0 : 2500);
+}
 /* punteggio di una parola (o espressione) in un testo già «piano»: più basso è meglio, -1 = assente. Un sinonimo vale
-   solo come parola intera o inizio di parola e viene un po' dopo la parola cercata. */
+   solo come parola intera o inizio di parola e viene un po' dopo la parola cercata. I pesi sono tarati su un banco di
+   prova di ricerche comuni (parola intera prima di tutto, poi inizio di parola o altra desinenza, poi il resto). */
 function parolaCercata(parola, sinonimo) {
   var extra = sinonimo ? 1 : 0;
-  if (parola.indexOf(' ') >= 0) return function (t) { var p = t.indexOf(' ' + parola); return p < 0 ? -1 : 1 + (p > 0 ? 2 : 0) + extra; };
+  if (parola.indexOf(' ') >= 0) return function (t) { var p = t.indexOf(' ' + parola); return p < 0 ? -1 : 2 + (p > 0 ? 3 : 0) + extra; };
   var r = radice(parola), forma = new RegExp(' ' + r + '(?:[aeio]|io|h[ei])? ');
   return function (t) {
     var pos = t.indexOf(' ' + parola + ' '), sc = 0, mm;                         // la parola stessa
     if (pos < 0) {
-      if ((pos = t.indexOf(' ' + parola)) >= 0) sc += 1;                         // inizio di una parola
-      else if ((mm = forma.exec(t))) { pos = mm.index; sc += 1; }                // stessa parola, altra desinenza
+      if ((pos = t.indexOf(' ' + parola)) >= 0) sc += 2;                         // inizio di una parola
+      else if ((mm = forma.exec(t))) { pos = mm.index; sc += 2; }                // stessa parola, altra desinenza
       else if (sinonimo) return -1;
-      else if ((pos = t.indexOf(' ' + r)) >= 0) sc += 3;                         // stessa radice, parola più lunga
-      else if ((pos = t.indexOf(r)) >= 0) sc += 5;                               // dentro una parola
+      else if ((pos = t.indexOf(' ' + r)) >= 0) sc += 8;                         // stessa radice, parola più lunga
+      else if ((pos = t.indexOf(r)) >= 0) sc += 12;                              // dentro una parola
       else return -1;
     }
-    return sc + (pos > 0 ? 2 : 0) + extra;
+    return sc + (pos > 0 ? 3 : 0) + extra;
   };
 }
+/* le parole di una ricerca, ognuna con i suoi sinonimi: null se non c'è niente da cercare */
+function alternative(q) {
+  var toks = piano(q).trim().split(' ').filter(function (t) { return t.length > 1 && !VUOTE[t]; });
+  if (!toks.length) return null;
+  return toks.map(function (t) {
+    return [parolaCercata(t, false)].concat(sinonimiDi(radice(t)).map(function (s) { return parolaCercata(s, true); }));
+  });
+}
+function punteggio(alt, t) {
+  var sc = 0;
+  for (var m = 0; m < alt.length; m++) {
+    var best = -1;
+    for (var n = 0; n < alt[m].length; n++) { var p = alt[m][n](t); if (p >= 0 && (best < 0 || p < best)) best = p; }
+    if (best < 0) return -1;
+    sc += best;
+  }
+  return sc;
+}
+
+/* archivio aziendale: classificazioni già fatte dai colleghi (che le condividono) e da sé (/api/archivio) */
+var ARCH = [];
+function caricaArchivio() {
+  return T.api('GET', '/api/archivio').then(function (r) {
+    ARCH = (r.voci || []).map(function (v) { v.t = piano(v.testo); return v; });
+    if (state.avviato) renderRisultati();
+  }, function () { /* senza archivio la ricerca va lo stesso */ });
+}
+function archivioPer(q) {
+  var alt = alternative(q);
+  if (!alt || /^[\d\s.]+$/.test(q)) return [];
+  var hits = [];
+  ARCH.forEach(function (v, k) {
+    if (!byCode.has(v.codice)) return;                     // codice che non c'è più nella nomenclatura del mese
+    var sc = punteggio(alt, v.t);
+    if (sc >= 0) hits.push([sc, k]);
+  });
+  hits.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+  return hits.slice(0, 5).map(function (x) { return ARCH[x[1]]; });
+}
+/* la stessa descrizione già classificata con l'IA: la più recente */
+function giaClassificata(q) {
+  var k = piano(q);
+  for (var i = 0; i < ARCH.length; i++) if (ARCH[i].ia && ARCH[i].t === k && byCode.has(ARCH[i].codice)) return ARCH[i];
+  return null;
+}
+function rigaArchivio(v, n) {
+  var i = byCode.get(v.codice), chi = v.chi === 'tu' ? 'tu' : v.chi;
+  return '<div class="trow ris arch L" data-act="usa" data-i="' + i + '" style="--i:' + n + '">' +
+    '<span class="cod">' + esc(showCode(i)) + '</span><span class="txt">' + esc(descOf(i)) + '</span>' +
+    '<button class="btn sm" type="button" data-act="usa" data-i="' + i + '">Usa</button>' +
+    '<span class="ctx">«' + esc(v.testo) + '» · ' + esc(chi) + ', ' + esc(T.dataOra(v.quando, true)) + (v.volte > 1 ? ' · ' + v.volte + ' volte' : '') + '</span></div>';
+}
+
 function cerca(q) {
   var out = [], d = digits(q);
   if (/^[\d\s.]+$/.test(q) && d.length >= 2) {
@@ -1079,21 +1291,13 @@ function cerca(q) {
     return out;
   }
   if (!LOW) { LOW = new Array(N); for (var k = 0; k < N; k++) LOW[k] = piano(DESC[k]); }
-  var toks = piano(q).trim().split(' ').filter(function (t) { return t.length > 1 && !VUOTE[t]; });
-  if (!toks.length) return out;
   // ogni parola cercata vale anche per i suoi sinonimi; un testo va bene se contiene tutte le parole (o un loro sinonimo)
-  var alt = toks.map(function (t) {
-    return [parolaCercata(t, false)].concat(sinonimiDi(radice(t)).map(function (s) { return parolaCercata(s, true); }));
-  });
+  var alt = alternative(q);
+  if (!alt) return out;
   var hits = [];
   for (var j = 0; j < N; j++) {
-    var t = LOW[j], ok = true, sc = 0;
-    for (var m = 0; m < alt.length && ok; m++) {
-      var best = -1;
-      for (var n = 0; n < alt[m].length; n++) { var p = alt[m][n](t); if (p >= 0 && (best < 0 || p < best)) best = p; }
-      if (best < 0) ok = false; else sc += best;
-    }
-    if (ok) hits.push([sc + HP[j] / 2 + Math.min(t.length, 200) / 40, j]);
+    var t = LOW[j], sc = punteggio(alt, t);
+    if (sc >= 0) hits.push([sc + HP[j] * 0.35 + Math.min(t.length, 200) / 40, j]);    // a parità, prima le voci più generali e brevi
   }
   hits.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
   return hits.slice(0, 150).map(function (x) { return x[1]; });
@@ -1171,6 +1375,7 @@ document.addEventListener('click', function (ev) {
     state.qmsg = ''; state.answers = state.answers.concat(add); renderFornite(); classifica(true);
   }
   else if (act === 'traduci') traduci();
+  else if (act === 'stampa') window.print();
   else if (act === 'preferito') {
     var pc = t.getAttribute('data-c'), cera = state.preferiti[pc];
     if (cera) delete state.preferiti[pc]; else state.preferiti[pc] = { nota: '' };
@@ -1184,6 +1389,15 @@ document.addEventListener('click', function (ev) {
     });
   }
   else if (act === 'chiedi') { cambiaModo('ia'); classifica(false); }
+  else if (act === 'ancora-ia') { state.gia = null; state.forzaIA = true; classifica(false); }
+  else if (act === 'riusa' && state.gia) {
+    t.disabled = true;
+    T.api('GET', '/api/archivio/' + state.gia.id).then(function (r) {
+      state.gia = null; ripristina(r.dati); renderAll(); renderFornite();
+      T.avviso('Classificazione ripresa: nessuna nuova richiesta all\'IA.');
+      var es = $('#esito'); if (es && es.scrollIntoView) es.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, function (e) { state.gia = null; state.error = e.errore || 'Non riesco a riprenderla.'; renderMsg(); });
+  }
   else if (act === 'mostra-ris') { state.risChiusi = false; renderRisultati(); var rr = $('#risultati'); if (rr.scrollIntoView) rr.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   else if (act === 'tutti-ris') { state.risTutti = true; renderRisultati(); }
   else if (act === 'flusso') { state.flow = t.getAttribute('data-f'); renderEsito(); salvaPreferenze(); }
@@ -1195,9 +1409,13 @@ document.addEventListener('click', function (ev) {
   }
   else if (act === 'apri') { ev.stopPropagation(); apriNellAlbero(i); }
 });
-document.addEventListener('change', function (ev) { if (ev.target && ev.target.id === 'paese') { state.country = ev.target.value; renderEsito(); salvaPreferenze(); } });
+document.addEventListener('change', function (ev) {
+  if (ev.target && ev.target.id === 'paese') { state.country = ev.target.value; renderEsito(); salvaPreferenze(); }
+  if (ev.target && ev.target.classList && ev.target.classList.contains('calc')) { state.calc[ev.target.getAttribute('data-c')] = ev.target.value; aggiornaCalcolo(); }
+});
 document.addEventListener('input', function (ev) {
   var t = ev.target;
+  if (t && t.classList && t.classList.contains('calc')) { state.calc[t.getAttribute('data-c')] = t.value; aggiornaCalcolo(); return; }
   if (!t || !t.classList || !t.classList.contains('filtro')) return;
   var q = t.value.trim().toLowerCase(), box = t.parentNode.querySelector('.righe');
   if (!box) return;
@@ -1210,6 +1428,7 @@ $('#q').addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !e
 var qT = null;
 $('#q').addEventListener('input', function () {
   $('#q-x').hidden = !$('#q').value;
+  if (state.gia) { state.gia = null; renderMsg(); }
   if (state.modo !== 'parole') return;
   state.risChiusi = false; state.risTutti = false; if (state.error) { state.error = ''; renderMsg(); }
   clearTimeout(qT); qT = setTimeout(renderRisultati, 140);
@@ -1249,7 +1468,7 @@ function start() {
   renderAll();
   state.avviato = true;
 }
-window.TARIC_DEBUG = { cerca: function (q) { return cerca(q).map(function (i) { return CODE[i]; }); }, misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
+window.TARIC_DEBUG = { cerca: function (q) { return cerca(q).map(function (i) { return CODE[i]; }); }, calcola: calcolaDazio, unitaQuantita: unitaQuantita, misure: misure, fmtDazio: fmtDazio, parseCond: parseCond, sintesi: sintesi, indice: function (c) { return byCode.get(c); }, stato: state, render: renderEsito };
 
 /* funzioni usate dalle viste Profilo e Gestione */
 T.app = {
@@ -1260,6 +1479,13 @@ T.app = {
   dati: function () { return { iso: DATA_ISO, it: DATA_IT }; },
   utente: function () { return state.utente; },
   aggiornaIo: aggiornaIo,
+  caricaSinonimi: caricaSinonimi,
+  tipoMisura: function (t) { return TIPI_IT[t] || ('misura ' + t); },
+  fmtDazio: fmtDazio,
+  nomeArea: nomeArea,
+  dataIt: dataIt,
+  oggi: oggiNum,
+  controllaCambi: controllaCambi,
   preferiti: state.preferiti,
   vista: vista,
   apriCodice: function (c) {
@@ -1271,6 +1497,7 @@ T.app = {
     ripristina(d); vista('classifica'); renderAll(); renderFornite(); var e = $('#esito'); if (e.scrollIntoView) e.scrollIntoView({ block: 'start' });
   },
   preferenze: function (p) {
+    if (state.utente) state.utente.preferenze = p;
     state.country = p.paese || ''; state.flow = p.flusso === 'export' ? 'export' : 'import';
     T.tema(p.tema); renderEsito();
   }
@@ -1283,6 +1510,28 @@ document.addEventListener('taric:tema', function (ev) {
   u.preferenze.tema = ev.detail;
   T.api('PUT', '/api/io/preferenze', { paese: u.preferenze.paese || '', flusso: u.preferenze.flusso || 'import', tema: ev.detail }).catch(function () { /* resta solo su questo dispositivo */ });
 });
+
+/* preferiti cambiati con i dati del mese: puntino sulla scheda Profilo finché non si guardano */
+function controllaCambi() {
+  if (!Object.keys(state.preferiti).length) return;
+  T.api('GET', '/api/preferiti/cambi').then(function (r) {
+    var n = Object.keys(r.cambi || {}).length, visti = null, tab = $('#tab-profilo');
+    try { visti = localStorage.getItem('magic-hs.cambi-visti'); } catch (e) { /* niente archivio: il puntino resta */ }
+    var nuovo = n > 0 && visti !== r.a;
+    tab.classList.toggle('novita', nuovo);
+    if (nuovo) tab.title = n === 1 ? 'Un preferito è cambiato con i dati del mese' : n + ' preferiti sono cambiati con i dati del mese'; else tab.removeAttribute('title');
+  }, function () { /* niente avvisi */ });
+}
+
+/* stampa (o PDF) della scheda del codice: intestazione con data e dati usati, dettagli aperti */
+var chiusiPrimaStampa = [];
+window.addEventListener('beforeprint', function () {
+  var sel = state.sel, s = $('#stampa-testa');
+  if (s) s.textContent = 'MAGIC HS · ' + (sel ? 'codice ' + grp(sel.code) + ' · ' : '') + (state.country ? (state.flow === 'export' ? 'destinazione ' : 'origine ') + nomeArea(state.country) + ' · ' : '') +
+    'dati TARIC al ' + DATA_IT + ' · stampata il ' + dataIt(oggiNum()) + ' · strumento non ufficiale: verifica su AIDA o sul TARIC dell\'UE';
+  chiusiPrimaStampa = Array.prototype.filter.call(document.querySelectorAll('#esito details:not([open])'), function (d) { d.open = true; return true; });
+});
+window.addEventListener('afterprint', function () { chiusiPrimaStampa.forEach(function (d) { d.open = false; }); chiusiPrimaStampa = []; });
 
 /* esce dall'account */
 $('#esci').addEventListener('click', function () {
@@ -1304,7 +1553,8 @@ function avvia() {
     state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
     try { state.modo = localStorage.getItem('magic-hs.modo') === 'ia' ? 'ia' : 'parole'; } catch (e) { /* senza archivio: ricerca per parole */ }
     impostaIA();
-    return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); }, function () { /* niente preferiti */ });
+    caricaSinonimi(); caricaArchivio();
+    return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); controllaCambi(); }, function () { /* niente preferiti */ });
   }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', avvia); else avvia();
