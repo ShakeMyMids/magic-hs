@@ -7,6 +7,7 @@ un limite mensile di classificazioni per persona e un tetto mensile per tutti. S
 """
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import logging
@@ -36,6 +37,7 @@ from .dati import RE_VERSIONE, GestoreDati
 from .db import Database, iso
 from .ia import ErroreIA, ServizioIA, mese_corrente
 from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
+from .valute import CambiDoganali, ErroreCambio
 
 log = logging.getLogger("taric")
 STATIC = Path(__file__).with_name("static")
@@ -122,6 +124,18 @@ class Sinonimo(BaseModel):
     termini: list[str] = Field(min_length=1, max_length=6)
 
 
+# bolle simulate: i dati inseriti (intestazione e articoli); i calcoli li rifà js/calcolo.js
+class Bolla(BaseModel):
+    tipo: Literal["import", "export"]
+    riferimento: str = Field(default="", max_length=120)
+    dati: dict[str, Any]
+
+
+class BollaModificata(BaseModel):
+    riferimento: str = Field(default="", max_length=120)
+    dati: dict[str, Any]
+
+
 # account, accesso e gestione degli utenti
 class Iscrizione(BaseModel):
     nome: str = Field(min_length=2, max_length=100)
@@ -180,8 +194,9 @@ def segreto_moduli(cartella: Path) -> bytes:
 
 # ------------------------------------------------------------------ applicazione
 def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
-             client_dati: httpx.Client | None = None, client_copia: httpx.Client | None = None) -> FastAPI:
-    """Crea il sito: client_ia, client_dati e client_copia sostituiscono, nelle prove, i servizi esterni."""
+             client_dati: httpx.Client | None = None, client_copia: httpx.Client | None = None,
+             client_bce: httpx.Client | None = None) -> FastAPI:
+    """Crea il sito: client_ia, client_dati, client_copia e client_bce sostituiscono, nelle prove, i servizi esterni."""
     try:                                   # backup preparato a sito acceso con «python -m taric ripristina»
         rimesso = Backup(cfg.dati).applica_in_attesa()
         if rimesso:
@@ -193,6 +208,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     dati = GestoreDati(cfg, db, client_dati)
     copie = Backup(cfg.dati, cfg.backup_copie)
     fuori = CopiaEsterna(cfg, db, client_copia)
+    cambi_doganali = CambiDoganali(db, cfg.bce_url, client_bce)
     if fuori.problema():
         log.warning("copia esterna del database spenta: %s", fuori.problema())
 
@@ -654,6 +670,74 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return json_ok()
 
     # ------------------------------------------------------------------ storico
+    # ------------------------------------------------------------------ bolle simulate
+    MASSIMO_BOLLE = 500
+
+    def testo_bolla(dati: dict[str, Any]) -> str:
+        testo = json.dumps(dati, ensure_ascii=False)
+        if len(testo) > 300_000 or len(dati.get("articoli") or []) > 99:
+            raise Errore(413, "Bolla troppo grande: al massimo 99 articoli.", "troppo_grande")
+        return testo
+
+    @app.get("/api/bolle")
+    def bolle(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        with db.connessione() as c:
+            righe = c.execute("SELECT id, tipo, riferimento, json_extract(dati, '$.data') AS data, "
+                              "json_array_length(dati, '$.articoli') AS articoli, creata, modificata "
+                              "FROM bolle WHERE utente_id = ? ORDER BY modificata DESC, id DESC", (u["id"],)).fetchall()
+        return {"voci": [dict(r) for r in righe]}
+
+    @app.post("/api/bolle")
+    def nuova_bolla(body: Bolla, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        testo = testo_bolla(body.dati)
+        with db.transazione() as c:
+            if c.execute("SELECT COUNT(*) FROM bolle WHERE utente_id = ?", (u["id"],)).fetchone()[0] >= MASSIMO_BOLLE:
+                raise Errore(409, f"Hai già {MASSIMO_BOLLE} bolle salvate: eliminane qualcuna.", "troppe_bolle")
+            ora = iso()
+            bid = c.execute("INSERT INTO bolle(utente_id, tipo, riferimento, dati, creata, modificata) VALUES (?, ?, ?, ?, ?, ?)",
+                            (u["id"], body.tipo, body.riferimento.strip(), testo, ora, ora)).lastrowid
+        return json_ok(id=bid)
+
+    def bolla_di(c: sqlite3.Connection, bid: int, u: sqlite3.Row) -> sqlite3.Row:
+        r = c.execute("SELECT * FROM bolle WHERE id = ? AND utente_id = ?", (bid, u["id"])).fetchone()
+        if r is None:
+            raise Errore(404, "Bolla non trovata.", "non_trovato")
+        return r
+
+    @app.get("/api/bolle/{bid}")
+    def bolla(bid: int, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        with db.connessione() as c:
+            r = bolla_di(c, bid, u)
+        return {"id": r["id"], "tipo": r["tipo"], "riferimento": r["riferimento"], "dati": json.loads(r["dati"]),
+                "creata": r["creata"], "modificata": r["modificata"]}
+
+    @app.put("/api/bolle/{bid}")
+    def modifica_bolla(bid: int, body: BollaModificata, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        testo = testo_bolla(body.dati)
+        with db.transazione() as c:
+            bolla_di(c, bid, u)
+            c.execute("UPDATE bolle SET riferimento = ?, dati = ?, modificata = ? WHERE id = ?", (body.riferimento.strip(), testo, iso(), bid))
+        return json_ok(id=bid)
+
+    @app.delete("/api/bolle/{bid}")
+    def elimina_bolla(bid: int, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        with db.transazione() as c:
+            bolla_di(c, bid, u)
+            c.execute("DELETE FROM bolle WHERE id = ?", (bid,))
+        return json_ok()
+
+    @app.get("/api/cambio")
+    def cambio(valuta: str, data: str, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Cambio doganale del mese della bolla (taric/valute.py)."""
+        try:
+            giorno = dt.date.fromisoformat(data)
+        except ValueError:
+            raise Errore(422, "Data della bolla non valida.", "data") from None
+        try:
+            return cambi_doganali.tasso(valuta, giorno)
+        except ErroreCambio as e:
+            raise Errore(e.stato, e.messaggio, e.codice) from None
+
     @app.get("/api/storico")
     def storico(limite: int = 50, prima: int = 0, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
         limite = max(1, min(limite, 100))

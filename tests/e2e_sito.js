@@ -214,6 +214,57 @@ async function accedi(p, email, password) {
   const oggetti = (await (await fetch('http://127.0.0.1:9100/s3/')).json()).oggetti;
   ok(Object.keys(oggetti).length === 1 && Object.values(oggetti)[0] > 1000, 'copia esterna adesso: il .zip del database è nell\'archivio');
 
+  // bolla simulata: biciclette dalla Cina con antidumping (produttore «altri», B999) in dollari (finta BCE: 1 € = 1,0867 USD)
+  await capo.click('#tab-bolla');
+  await capo.click('[data-b="nuova"][data-tipo="import"]');
+  await capo.fill('[data-f="riferimento"]', 'Fattura di prova');
+  await capo.selectOption('[data-f="valuta"]', 'USD');
+  await capo.waitForSelector('#b-cambio >> text=1 € = 1,0867 USD');
+  await capo.fill('[data-a="0"][data-f="codice"]', '8712003090');
+  await capo.selectOption('[data-a="0"][data-f="origine"]', 'CN');
+  await capo.fill('[data-a="0"][data-f="valore"]', '10.867,00');
+  await capo.fill('[data-a="0"][data-f="netto"]', '1200');
+  await capo.waitForSelector('[data-a="0"][data-f="quantita"]');
+  ok(await capo.isVisible('#b-esito >> text=Scegli il codice addizionale del produttore per il dazio antidumping.'),
+    'bolla: senza il codice del produttore il totale non c\'è e si dice perché');
+  await capo.fill('[data-a="0"][data-f="quantita"]', '100');
+  await capo.selectOption('[data-a="0"][data-addizionale]', 'B999');
+  await capo.waitForSelector('#b-esito >> text=Totale tributi');
+  // 10.867 USD = 10.000,00 €; dazio 14 % = 1.400,00; antidumping 48,5 % = 4.850,00; IVA 22 % di 16.250,00 = 3.575,00
+  const bolla = (await capo.innerText('#b-esito')).replace(/\s+/g, ' ');
+  ok(/10\.000,00 €/.test(bolla) && /Dazio 14 % 1\.400,00 €/.test(bolla) && /Antidumping \(B999\) 48,5 % 4\.850,00 €/.test(bolla) &&
+    /IVA all'importazione 3\.575,00 €/.test(bolla) && /Totale tributi 9\.825,00 €/.test(bolla), 'bolla: valore in dogana, dazio, antidumping, IVA e totale');
+  await capo.click('[data-b="salva"]'); await capo.waitForSelector('#b-msg >> text=Bolla salvata.');
+  // stampa: solo il foglio della simulazione
+  await capo.emulateMedia({ media: 'print' });
+  await capo.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  ok(await capo.isVisible('#bolla-stampa >> text=SIMULAZIONE') && await capo.isHidden('#b-esito') && await capo.isVisible('#bolla-stampa >> text=Totale tributi'),
+    'bolla: foglio stampabile con la scritta «simulazione»');
+  await capo.screenshot({ path: out + '/5b-bolla-stampa.png', fullPage: true });
+  await capo.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  await capo.emulateMedia({ media: 'screen' });
+  // «Aggiungi alla bolla» dalla scheda del codice; la bolla salvata si riapre dall'elenco
+  await capo.click('#tab-classifica');
+  await capo.fill('#q', '6403999610'); await capo.press('#q', 'Enter'); await capo.waitForSelector('[data-act="in-bolla"]');
+  await capo.click('[data-act="in-bolla"]');
+  await capo.waitForSelector('[data-a="1"][data-f="codice"]');
+  ok((await capo.inputValue('[data-a="1"][data-f="codice"]')) === '6403999610', 'bolla: articolo aggiunto dalla scheda del codice');
+  await capo.click('[data-b="salva"]'); await capo.waitForSelector('#b-msg >> text=Bolla salvata.');
+  await capo.click('[data-b="chiudi"]');
+  await capo.waitForSelector('#view-bolla >> text=Fattura di prova');
+  await capo.click('[data-b="apri"]'); await capo.waitForSelector('[data-a="1"][data-f="codice"]');
+  ok((await capo.inputValue('[data-a="0"][data-f="codice"]')) === '8712003090', 'bolla: salvata nel profilo e riaperta');
+  await capo.click('[data-b="chiudi"]');
+  // esportazione: niente dazi, valore statistico in euro e documenti
+  await capo.click('[data-b="nuova"][data-tipo="export"]');
+  await capo.fill('[data-a="0"][data-f="codice"]', '8471300000');
+  await capo.selectOption('[data-a="0"][data-f="origine"]', 'US');
+  await capo.fill('[data-a="0"][data-f="valore"]', '2500');
+  await capo.waitForSelector('[data-a="0"][data-f="quantita"]'); await capo.fill('[data-a="0"][data-f="quantita"]', '4');
+  await capo.waitForSelector('#b-esito >> text=Valore statistico totale');
+  ok(/2\.500,00 €/.test(await capo.textContent('#b-esito')), 'bolla d\'esportazione: valore statistico');
+  await capo.click('[data-b="chiudi"]'); await capo.click('#tab-gestione');
+
   // password dimenticata: link preparato dall'amministratore
   await capo.click('button[data-v="utenti"]');
   // selettore stabile: la tabella si ridisegna quando arrivano i dati, un riferimento all'elemento si perderebbe

@@ -21,6 +21,7 @@
     <nav class="schede" aria-label="Sezioni">
       <a href="#classifica" id="tab-classifica" aria-current="page" data-ico="cerca">Classifica</a>
       <a href="#nomenclatura" id="tab-nomenclatura" data-ico="albero">Nomenclatura</a>
+      <a href="#bolla" id="tab-bolla" data-ico="pacco">Bolla</a>
       <a href="#profilo" id="tab-profilo" data-ico="utente">Profilo</a>
       <a href="#gestione" id="tab-gestione" data-ico="gestione" hidden>Gestione</a>
     </nav>
@@ -69,6 +70,7 @@
       </div>
     </section>
     <!-- ======================= PROFILO ======================= -->
+    <section id="view-bolla" class="sezione" aria-labelledby="tab-bolla" hidden></section>
     <section id="view-profilo" class="sezione" aria-labelledby="tab-profilo" hidden></section>
 
     <!-- ======================= GESTIONE (amministratori) ======================= -->
@@ -87,7 +89,9 @@
 <script src="{{DATI}}nomenclatura.js"></script>
 <script src="{{DATI}}rif.js"></script>
 <script src="/static/js/sinonimi.js"></script>
+<script src="/static/js/calcolo.js"></script>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/bolla.js"></script>
 <script src="/static/js/profilo.js"></script>
 <script src="/static/js/gestione.js"></script>
 <script src="/static/js/attiva-ia.js"></script>

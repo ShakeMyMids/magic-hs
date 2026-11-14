@@ -160,6 +160,27 @@ SCHEMA = [
     ALTER TABLE storico ADD COLUMN condivisa INTEGER NOT NULL DEFAULT 0;
     CREATE INDEX storico_condivisa ON storico(condivisa, id);
     """,
+    # versione 5: bolle simulate (importazione ed esportazione) e cambi doganali del mese presi dalla BCE
+    """
+    CREATE TABLE bolle (
+        id INTEGER PRIMARY KEY,
+        utente_id INTEGER NOT NULL REFERENCES utenti(id) ON DELETE CASCADE,
+        tipo TEXT NOT NULL CHECK (tipo IN ('import', 'export')),
+        riferimento TEXT NOT NULL DEFAULT '',
+        dati TEXT NOT NULL,
+        creata TEXT NOT NULL,
+        modificata TEXT NOT NULL
+    );
+    CREATE INDEX bolle_utente ON bolle(utente_id, modificata);
+    CREATE TABLE cambi_doganali (
+        valuta TEXT NOT NULL,
+        mese TEXT NOT NULL,
+        tasso TEXT NOT NULL,
+        giorno TEXT NOT NULL,
+        preso TEXT NOT NULL,
+        PRIMARY KEY (valuta, mese)
+    );
+    """,
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
