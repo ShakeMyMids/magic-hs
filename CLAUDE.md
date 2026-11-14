@@ -16,12 +16,15 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   `/api/accedi`, `/api/esci`, `/api/io/password`, `/api/reimposta-password` (link dell'amministratore). Comuni: profilo,
   storico (colonna `condivisa` dalla preferenza `condividi`), preferiti (`/api/preferiti/cambi`: differenze con la versione
   precedente dei dati, da `taric/cambi.py`), archivio aziendale (`/api/archivio`), sinonimi (`/api/sinonimi`), parole senza
-  risultati (`/api/ricerche-vuote`, anonime), IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
+  risultati (`/api/ricerche-vuote`, anonime), bolle simulate (`/api/bolle`, personali) e cambio doganale del mese
+  (`/api/cambio`), IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
   `ia`, `impostazioni`, `backup`, `copia-esterna`, dati TARIC (con lo stato della copia esterna), `ricerca` e `sinonimi`,
   registro. `/api/salute` per Render. Middleware: compressione gzip e cache lunga per i file con `?v=`. Gli errori si restituiscono come
   `{"errore": "<messaggio italiano>", "codice": "<codice>"}`.
 - `taric/config.py`: configurazione dalle variabili d'ambiente (`TARIC_*`, `GEMINI_API_KEY`, `MAGIC_HS_*`,
-  `RENDER_EXTERNAL_URL` per `config.indirizzo`, `MAGIC_HS_COPIA_*` per la copia esterna).
+  `RENDER_EXTERNAL_URL` per `config.indirizzo`, `MAGIC_HS_COPIA_*` per la copia esterna, `MAGIC_HS_BCE_URL` per i cambi).
+- `taric/valute.py`: cambio doganale del mese per la bolla (penultimo mercoledì del mese precedente, art. 146 Reg. UE
+  2015/2447), dalla BCE in CSV (`TIME_PERIOD`, `OBS_VALUE`), tenuto nella tabella `cambi_doganali`.
 - `taric/ricerca.py`: le regole della ricerca di `app.js` (`piano`, `radice`) lato server, per controllare che i termini
   di un sinonimo esistano nella nomenclatura (`presente`). `taric/cambi.py`: cosa cambia per un codice tra due versioni.
 - `taric/copia.py`: copia settimanale del database in un archivio compatibile S3 (firma AWS Signature V4 con httpx, senza
@@ -66,7 +69,11 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; sopra i
   risultati l'archivio aziendale e, prima di chiedere all'IA una descrizione già classificata, la proposta di riprenderla;
   le ricerche senza risultati vanno a `/api/ricerche-vuote`; albero della nomenclatura; misure con il calcolo degli
-  importi `calcolaDazio` e la stampa, stili `@media print` in fondo ad `app.css`), `js/profilo.js` (anche gli avvisi
+  importi e la stampa, stili `@media print` in fondo ad `app.css`; `misureBolla()` per la bolla), `js/calcolo.js` (calcoli
+  senza pagina, `window.TARIC_CALCOLO` e modulo di node: dazi, condizioni con i documenti, regimi, codice addizionale del
+  produttore per famiglia, ripartizione al centesimo, `calcolaImport`/`calcolaExport`; ogni cosa incerta diventa un blocco
+  con il motivo, mai una stima; si prova con `node tests/prova_calcolo.js`), `js/bolla.js` (sezione Bolla: elenco, intestazione,
+  articoli, tributi, documenti della casella 44, foglio `#bolla-stampa` con `body.stampa-bolla`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
   (Utenti, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Registro), `js/attiva-ia.js` (festa alla prima «Prova» riuscita
   dell'amministratore: `T.festaIA`, scena `T.festa()` di `disegni.js`, animazioni `.festa` in `app.css` con lo stato
@@ -92,12 +99,14 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 ```bash
 pip install -r requirements-dev.txt
 python -m pytest -q tests
+node tests/prova_calcolo.js
 ```
 
 `tests/test_sinonimi.py` controlla che ogni termine di `js/sinonimi.js` esista nel testo italiano della nomenclatura:
 per un nuovo sinonimo scegli parole o espressioni del testo ufficiale. I test usano `conftest.Sito` (il sito con l'amministratore `CAPO`, `registra`/`accedi`/`capo`/`collega`/`riavvia`; `ia=False`
 ed `extra` per altri servizi IA, `versioni` per i dati già installati) con i finti servizio IA e GitHub (`FintoClaude`,
-`FintoGitHub` con dati pronti e fonte, `FintoS3` per la copia esterna, che ricalcola la firma); `sito_claude` è il sito
+`FintoGitHub` con dati pronti e fonte, `FintoS3` per la copia esterna, che ricalcola la firma, `FintoBCE` per i cambi);
+`sito_claude` è il sito
 con Claude. `tests/test_copia.py` controlla la firma con l'esempio della documentazione AWS e con firme calcolate da
 botocore. Prova nel browser (Playwright, finto servizio
 IA): `tests/sito_di_prova.sh` e `tests/e2e_sito.js`, che GitHub esegue a ogni modifica (job `browser` di
