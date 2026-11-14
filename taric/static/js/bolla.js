@@ -11,6 +11,14 @@
   var VALUTE = ['EUR', 'USD', 'CNY', 'GBP', 'CHF', 'JPY', 'TRY', 'INR', 'KRW', 'HKD', 'CAD', 'AUD', 'SGD', 'THB', 'MYR', 'IDR', 'PHP',
     'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'NOK', 'DKK', 'ISK', 'ILS', 'MXN', 'BRL', 'ZAR', 'NZD'];
   var IVA = [[22, '22 %'], [10, '10 %'], [5, '5 %'], [4, '4 %'], [0, 'non dovuta']];
+  var INCOTERM = [['EXW', 'franco fabbrica'], ['FCA', 'franco vettore'], ['FAS', 'franco lungo bordo'], ['FOB', 'franco a bordo'],
+    ['CFR', 'costo e nolo'], ['CIF', 'costo, assicurazione e nolo'], ['CPT', 'trasporto pagato fino a'], ['CIP', 'trasporto e assicurazione pagati fino a'],
+    ['DAP', 'reso al luogo di destinazione'], ['DPU', 'reso al luogo di destinazione scaricato'], ['DDP', 'reso sdoganato']];
+  function completa(d) {                    // bolle salvate prima dei campi nuovi
+    ['nolo', 'assicurazione', 'inoltro', 'trasporto', 'oltre'].forEach(function (x) { d[x] = d[x] || { importo: '', valuta: 'EUR' }; });
+    d.articoli = d.articoli || [];
+    return d;
+  }
 
   function app() { return T.app; }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -26,11 +34,12 @@
 
   function nuovoArticolo(paese) {
     return { codice: '', descrizione: '', origine: paese || '', valore: '', aggiunte: '', deduzioni: '', netto: '', lordo: '', quantita: '', quantitaDazio: '',
-      regime: 'base', addizionali: [], documenti: [], iva: 22 };
+      regime: 'base', addizionali: [], documenti: [], iva: 22, ivaMotivo: '', dazioManuale: '', altriManuale: '' };
   }
   function nuovaBolla(tipo) {
     return { id: null, tipo: tipo, riferimento: '', dati: { data: oggiIso(), valuta: 'EUR', nolo: { importo: '', valuta: 'EUR' }, assicurazione: { importo: '', valuta: 'EUR' },
-      ripartizione: 'valore', inoltro: { importo: '', valuta: 'EUR' }, paese: '', articoli: [] } };
+      ripartizione: 'valore', inoltro: { importo: '', valuta: 'EUR' }, trasporto: { importo: '', valuta: 'EUR' }, oltre: { importo: '', valuta: 'EUR' },
+      paese: '', mittente: '', destinatario: '', dichiarante: '', incoterm: '', luogo: '', cambioManuale: '', articoli: [] } };
   }
 
   vista.bolla = {
@@ -57,8 +66,7 @@
   }
   function apri(id) {
     T.api('GET', '/api/bolle/' + id).then(function (r) {
-      st.b = { id: r.id, tipo: r.tipo, riferimento: r.riferimento, dati: r.dati };
-      dati().articoli = dati().articoli || [];
+      st.b = { id: r.id, tipo: r.tipo, riferimento: r.riferimento, dati: completa(r.dati) };
       st.salvata = true; st.msg = ''; disegna(); caricaCambio();
     }, function (e) { st.msg = e.errore || 'Bolla non disponibile.'; st.msgOk = false; disegna(); });
   }
@@ -80,7 +88,7 @@
     st.cambi[k] = { attesa: true };
     disegnaCambio();
     T.api('GET', '/api/cambio?valuta=' + encodeURIComponent(dati().valuta) + '&data=' + encodeURIComponent(dati().data))
-      .then(function (r) { st.cambi[k] = r; }, function (e) { st.cambi[k] = { errore: e.errore || 'Cambio non disponibile.' }; })
+      .then(function (r) { st.cambi[k] = r; }, function (e) { st.cambi[k] = { errore: e.errore || 'Cambio non disponibile.', codice: e.codice || '' }; })
       .then(function () { disegnaCambio(); calcola(); });
   }
   function cambioAttuale() { return st.b && dati().valuta !== 'EUR' ? st.cambi[chiaveCambio()] : null; }
@@ -90,6 +98,8 @@
     var v = dati().valuta, r = cambioAttuale();
     if (v === 'EUR') c.innerHTML = '<p class="nota">Valori in euro: nessun cambio.</p>';
     else if (!r || r.attesa) c.innerHTML = '<p class="nota">Cerco il cambio doganale…</p>';
+    else if (r.errore && r.codice === 'valuta_non_quotata') c.innerHTML = '<p class="avviso">' + esc(r.errore) + '</p><div class="b-campi">' +
+      '<label>Cambio scritto a mano: 1 € = … ' + esc(v) + '<input class="campo" data-f="cambioManuale" value="' + esc(dati().cambioManuale || '') + '" inputmode="decimal" autocomplete="off" placeholder="per esempio 4,0712"></label></div>';
     else if (r.errore) c.innerHTML = '<p class="errore">' + esc(r.errore) + ' <button class="link" type="button" data-b="riprova-cambio">Riprova</button></p>';
     else c.innerHTML = '<p class="esito-ok">1 € = ' + esc(nIt(r.tasso, 4)) + ' ' + esc(v) + ' · cambio doganale di ' + esc(meseIt(r.mese)) + ' (' + esc(r.fonte) + ')</p>';
   }
@@ -105,9 +115,11 @@
     return app().misureBolla(a.codice, imp() ? 'import' : 'export', paese, giorno());
   }
   function contesto() {
-    var cambi = {}, r = cambioAttuale();
+    var cambi = {}, r = cambioAttuale(), man = K.numeroIt(dati().cambioManuale);
     if (r && r.tasso) cambi[dati().valuta] = { tasso: r.tasso };
-    return { misure: misure, cambi: cambi, nomeMisura: function (m) { return app().tipoMisura(m.t); } };
+    else if (r && r.codice === 'valuta_non_quotata' && man > 0) cambi[dati().valuta] = { tasso: man, manuale: true };
+    return { misure: misure, cambi: cambi, dataDati: app().dati().iso, fmtDazio: function (d) { return d ? app().fmtDazio(d) : 'esente'; },
+      nomeMisura: function (m) { return app().tipoMisura(m.t); } };
   }
   function calcola() {
     clearTimeout(st.timer);
@@ -116,6 +128,7 @@
     st.ultimo = imp() ? K.calcolaImport(dati(), ctx) : K.calcolaExport(dati(), ctx);
     var e = el.querySelector('#b-esito');
     if (e) e.innerHTML = imp() ? esitoImport(st.ultimo) : esitoExport(st.ultimo);
+    segnaConflitti(st.ultimo);
     var s = el.querySelector('#b-stato');
     if (s) s.textContent = st.salvata ? '' : 'modifiche non salvate';
   }
@@ -163,6 +176,9 @@
     return h + '</div></div>';
   }
 
+  function testo(etichetta, f, valore) {
+    return '<label>' + etichetta + '<textarea class="campo" rows="2" maxlength="300" data-f="' + f + '" placeholder="nome, indirizzo, EORI">' + esc(valore || '') + '</textarea></label>';
+  }
   function campo(etichetta, f, valore, extra) {
     return '<label>' + etichetta + '<input class="campo" data-f="' + f + '" value="' + esc(valore === undefined || valore === null ? '' : valore) + '"' + (extra || '') + '></label>';
   }
@@ -183,10 +199,26 @@
     var d = dati(), h = '<div class="b-campi">' +
       campo('Riferimento (fattura, pratica)', 'riferimento', st.b.riferimento, ' maxlength="120" autocomplete="off"') +
       '<label>Data prevista della bolla<input class="campo" type="date" data-f="data" value="' + esc(d.data || '') + '"></label>' +
-      '<label>Valuta della fattura<select class="campo" data-f="valuta">' + VALUTE.map(function (c) { return '<option' + (d.valuta === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
-      (VALUTE.indexOf(d.valuta) < 0 ? '<option selected>' + esc(d.valuta) + '</option>' : '') + '</select></label>' +
+      '<label>Valuta della fattura<input class="campo" data-f="valuta" list="b-valute" value="' + esc(d.valuta) + '" maxlength="3" autocomplete="off" autocapitalize="characters"></label>' +
+      '<datalist id="b-valute">' + VALUTE.map(function (c) { return '<option value="' + c + '"></option>'; }).join('') + '</datalist>' +
       '<label>' + (imp() ? 'Origine predefinita' : 'Destinazione') + '<select class="campo" data-f="paese">' + opzioniPaesi(d.paese) + '</select></label></div>' +
       '<div id="b-cambio"></div>';
+    h += '<div class="b-campi">' +
+      testo(imp() ? 'Esportatore o fornitore (casella 2)' : 'Esportatore (casella 2)', 'mittente', d.mittente) +
+      testo(imp() ? 'Importatore (casella 8)' : 'Destinatario (casella 8)', 'destinatario', d.destinatario) +
+      testo('Dichiarante o rappresentante (casella 14)', 'dichiarante', d.dichiarante) +
+      '<label>Resa (casella 20)<select class="campo" data-f="incoterm"><option value="">non indicata</option>' + INCOTERM.map(function (x) {
+        return '<option value="' + x[0] + '"' + (d.incoterm === x[0] ? ' selected' : '') + '>' + x[0] + ' · ' + x[1] + '</option>';
+      }).join('') + '</select></label>' +
+      campo('Luogo convenuto', 'luogo', d.luogo, ' maxlength="80" autocomplete="off"') + '</div>';
+    if (!imp()) {
+      h += '<div class="b-campi">' +
+        '<label>Trasporto e assicurazione fino al confine<span class="con-valuta"><input class="campo" data-f="trasporto.importo" inputmode="decimal" autocomplete="off" value="' + esc(d.trasporto.importo) + '" placeholder="0,00">' + sceltaValuta('trasporto.valuta', d.trasporto) + '</span></label>' +
+        '<label>Spese oltre il confine comprese nel prezzo<span class="con-valuta"><input class="campo" data-f="oltre.importo" inputmode="decimal" autocomplete="off" value="' + esc(d.oltre.importo) + '" placeholder="0,00">' + sceltaValuta('oltre.valuta', d.oltre) + '</span></label>' +
+        '<label>Ripartizione sugli articoli<select class="campo" data-f="ripartizione"><option value="valore"' + (d.ripartizione !== 'massa' ? ' selected' : '') + '>in base al valore</option>' +
+        '<option value="massa"' + (d.ripartizione === 'massa' ? ' selected' : '') + '>in base alla massa lorda</option></select></label></div>' +
+        '<p class="nota">Il valore statistico è quello al confine italiano: si aggiunge il trasporto fino al confine se non è nel prezzo, si toglie quello oltre il confine se è compreso.</p>';
+    }
     if (imp()) {
       h += '<div class="b-campi">' +
         '<label>Trasporto fino al confine UE<span class="con-valuta"><input class="campo" data-f="nolo.importo" inputmode="decimal" autocomplete="off" value="' + esc(d.nolo.importo) + '" placeholder="0,00">' + sceltaValuta('nolo.valuta', d.nolo) + '</span></label>' +
@@ -213,7 +245,11 @@
       '</div><div class="b-desc nota" data-desc="' + k + '"></div><div class="b-opz" data-opz="' + k + '"></div>';
     if (imp()) h += '<details class="piu"><summary>Altri elementi del valore in dogana</summary><div class="b-campi">' +
       '<label>Da aggiungere (' + esc(dati().valuta) + ')<input class="campo" ' + f('aggiunte') + ' value="' + v('aggiunte') + '" inputmode="decimal" autocomplete="off" placeholder="commissioni, imballaggi, diritti di licenza…"></label>' +
-      '<label>Da togliere (' + esc(dati().valuta) + ')<input class="campo" ' + f('deduzioni') + ' value="' + v('deduzioni') + '" inputmode="decimal" autocomplete="off" placeholder="trasporto dopo il confine UE compreso nel prezzo…"></label></div></details>';
+      '<label>Da togliere (' + esc(dati().valuta) + ')<input class="campo" ' + f('deduzioni') + ' value="' + v('deduzioni') + '" inputmode="decimal" autocomplete="off" placeholder="trasporto dopo il confine UE compreso nel prezzo…"></label></div></details>' +
+      '<details class="piu"' + (a.dazioManuale || a.altriManuale ? ' open' : '') + '><summary>Correzioni a mano</summary><div class="b-campi">' +
+      '<label>Aliquota del dazio (%)<input class="campo" ' + f('dazioManuale') + ' value="' + v('dazioManuale') + '" inputmode="decimal" autocomplete="off" placeholder="vuoto: quella del TARIC"></label>' +
+      '<label>Antidumping e altri dazi (€)<input class="campo" ' + f('altriManuale') + ' value="' + v('altriManuale') + '" inputmode="decimal" autocomplete="off" placeholder="vuoto: quelli del TARIC"></label></div>' +
+      '<p class="nota">Quello che scrivi qui sostituisce il calcolo e sul foglio risulta «inserito a mano»; se il TARIC dà un altro importo la bolla lo segnala.</p></details>';
     return h + '</div></div>';
   }
 
@@ -237,9 +273,9 @@
     }
     if (imp()) {
       var reg = K.regimi(M.righe, g), trovato = false;
-      h += '<label class="largo">Regime tariffario (casella 36)<select class="campo" data-a="' + k + '" data-f="regime">' + reg.map(function (r) {
+      h += '<label class="largo">Preferenza (casella 36)<select class="campo" data-a="' + k + '" data-f="regime">' + reg.map(function (r) {
         var sel = r.id === (a.regime || 'base'); if (sel) trovato = true;
-        return '<option value="' + esc(r.id) + '"' + (sel ? ' selected' : '') + '>' + esc(nomeRegime(r)) + '</option>';
+        return '<option value="' + esc(r.id) + '"' + (sel ? ' selected' : '') + '>' + esc((r.preferenza ? r.preferenza + ' · ' : '') + nomeRegime(r)) + '</option>';
       }).join('') + (trovato ? '' : '<option value="' + esc(a.regime) + '" selected>regime scelto non più valido: scegline un altro</option>') + '</select></label>';
       // un codice addizionale per famiglia (antidumping, compensativo, addizionale): quello del produttore
       K.famiglie(M.righe, g).forEach(function (fa) {
@@ -250,9 +286,17 @@
       var regScelto = reg.filter(function (r) { return r.id === (a.regime || 'base'); })[0];
       var conCodice = regScelto ? regScelto.misure.filter(function (m) { return m.add; }) : [];
       if (conCodice.length) h += sceltaCodice(k, a, 'Codice addizionale del dazio', conCodice);
-      h += '<label>IVA<select class="campo" data-a="' + k + '" data-f="iva">' + IVA.map(function (x) {
+      h += '<label>IVA (B00)<select class="campo" data-a="' + k + '" data-f="iva">' + IVA.map(function (x) {
         return '<option value="' + x[0] + '"' + (Number(a.iva === undefined ? 22 : a.iva) === x[0] ? ' selected' : '') + '>' + x[1] + '</option>';
       }).join('') + '</select></label>';
+      if (Number(a.iva) === 0) h += '<label class="largo">Perché l\'IVA non è dovuta<input class="campo" data-a="' + k + '" data-f="ivaMotivo" value="' + esc(a.ivaMotivo || '') + '" maxlength="200" autocomplete="off" placeholder="per esempio dichiarazione d\'intento n. …"></label>';
+      // codici addizionali scelti prima che non valgono più (cambiati codice, origine o data)
+      var validi = {};
+      M.righe.forEach(function (m) { if (m.add && K.valida(m, g)) validi[m.add] = true; });
+      var vecchi = (a.addizionali || []).filter(function (c) { return !validi[c]; });
+      if (vecchi.length) h += '<p class="nota largo">Codici addizionali non più validi: ' + vecchi.map(function (c) {
+        return '<b>' + esc(c) + '</b> <button class="link" type="button" data-b="togli-cod" data-a="' + k + '" data-c="' + esc(c) + '">togli</button>';
+      }).join(' · ') + '</p>';
     }
     h += '</div>' + documenti(a, k, M, g);
     box.innerHTML = h;
@@ -329,21 +373,41 @@
     return '<div class="b-blocchi"><p class="et">' + T.icona('attenzione') + 'Da completare o verificare prima del totale</p><ul>' +
       R.blocchi.map(function (b) { return '<li>' + (b.articolo ? '<b>Articolo ' + b.articolo + '</b>: ' : '') + esc(b.testo) + '</li>'; }).join('') + '</ul></div>';
   }
+  function conflittiHtml(R) {
+    if (!R.conflitti || !R.conflitti.length) return '';
+    return '<div class="b-conflitti"><p class="et">' + T.icona('attenzione') + 'Conflitti tra i campi<span class="dx">' + R.conflitti.length + '</span></p><ul>' +
+      R.conflitti.map(function (c) { return '<li>' + (c.articolo ? '<b>Articolo ' + c.articolo + '</b>: ' : '<b>Intestazione</b>: ') + esc(c.testo) + '</li>'; }).join('') + '</ul></div>';
+  }
+  /* bordo rosso sui campi in conflitto */
+  function segnaConflitti(R) {
+    Array.prototype.forEach.call(el.querySelectorAll('.in-conflitto'), function (x) { x.classList.remove('in-conflitto'); });
+    ((R && R.conflitti) || []).forEach(function (c) {
+      if (!c.campo) return;
+      var sel = c.articolo ? (c.campo === 'addizionali' ? '[data-a="' + (c.articolo - 1) + '"][data-addizionale]' : '[data-a="' + (c.articolo - 1) + '"][data-f="' + c.campo + '"]')
+        : '[data-f="' + c.campo + '"]:not([data-a])';
+      Array.prototype.forEach.call(el.querySelectorAll(sel), function (x) { x.classList.add('in-conflitto'); });
+    });
+  }
   function avvertenzeHtml(R) {
-    var av = [];
+    var av = (R.avvisi || []).map(function (a) { return '<li><b>Intestazione</b>: ' + esc(a.testo) + '</li>'; });
     R.articoli.forEach(function (r) { r.avvertenze.forEach(function (t) { av.push('<li><b>Articolo ' + r.n + '</b>: ' + esc(prima(t)) + '</li>'); }); });
     return av.length ? '<div class="b-avvisi"><p class="et">Da tenere presente</p><ul>' + av.join('') + '</ul></div>' : '';
   }
-  function nomeTributo(t) { return prima(t.tipo) + (t.misura && t.misura.add ? ' (' + t.misura.add + ')' : ''); }
+  function nomeTributo(t) {
+    var nome = t.tipo === 'altri dazi' ? 'Antidumping e altri dazi' : prima(t.tipo);
+    return (t.codice ? t.codice + ' ' : '') + nome + (t.misura && t.misura.add ? ' (' + t.misura.add + ')' : '') + (t.manuale ? ' · a mano' : '');
+  }
+  function aliquotaTributo(t) { return t.manuale ? (t.aliquotaManuale || 'importo a mano') : (t.espressione ? app().fmtDazio(t.espressione) : 'esente'); }
   function esitoImport(R) {
-    var h = blocchiHtml(R);
+    var h = blocchiHtml(R) + conflittiHtml(R);
     if (!R.articoli.length) return h + '<p class="vuoto">Aggiungi un articolo.</p>';
-    h += '<div class="scorri"><table class="tab b-tab"><thead><tr><th>Art.</th><th>Codice</th><th class="n">Valore in dogana</th><th>Tributi</th><th class="n">Base IVA</th><th class="n">IVA</th></tr></thead><tbody>' +
+    h += '<div class="scorri"><table class="tab b-tab"><thead><tr><th>Art.</th><th>Codice</th><th class="n">Valore in dogana</th><th>Tributi</th><th class="n">Base IVA</th><th class="n">IVA (B00)</th></tr></thead><tbody>' +
       R.articoli.map(function (r) {
-        return '<tr' + (r.completo ? '' : ' class="incompleto"') + '><td>' + r.n + '</td><td data-l="Codice">' + esc(r.codice ? app().grp(String(r.codice).replace(/\D/g, '')) : '–') + '</td>' +
+        return '<tr' + (r.completo ? '' : ' class="incompleto"') + '><td>' + r.n + '</td><td data-l="Codice">' + esc(r.codice ? app().grp(String(r.codice).replace(/\D/g, '')) : '–') +
+          (r.preferenza ? '<span class="piccolo">casella 36: ' + esc(r.preferenza) + '</span>' : '') + '</td>' +
           '<td class="n" data-l="Valore in dogana">' + euro(r.valoreDogana) + (r.quotaNolo ? '<span class="piccolo">di cui trasporto e assicurazione ' + euro(r.quotaNolo) + '</span>' : '') + '</td>' +
           '<td data-l="Tributi">' + (r.tributi.length ? r.tributi.map(function (t) {
-            return '<div class="b-trib"><span>' + esc(nomeTributo(t)) + ' <span class="piccolo">' + esc(t.espressione ? app().fmtDazio(t.espressione) : 'esente') + '</span></span><b>' + euro(t.importo) + '</b></div>';
+            return '<div class="b-trib' + (t.manuale ? ' manuale' : '') + '"><span>' + esc(nomeTributo(t)) + ' <span class="piccolo">' + esc(aliquotaTributo(t)) + '</span></span><b>' + euro(t.importo) + '</b></div>';
           }).join('') : '–') + '</td>' +
           '<td class="n" data-l="Base IVA">' + euro(r.baseIva) + '</td><td class="n" data-l="IVA">' + (r.iva === null || r.iva === undefined ? '–' : euro(r.iva) + '<span class="piccolo">' + (r.aliquota ? r.aliquota + ' %' : 'non dovuta') + '</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -357,13 +421,14 @@
     return h + avvertenzeHtml(R);
   }
   function esitoExport(R) {
-    var h = blocchiHtml(R);
+    var h = blocchiHtml(R) + conflittiHtml(R);
     if (!R.articoli.length) return h + '<p class="vuoto">Aggiungi un articolo.</p>';
     h += '<div class="scorri"><table class="tab b-tab"><thead><tr><th>Art.</th><th>Codice</th><th class="n">Valore statistico</th><th>Documenti</th></tr></thead><tbody>' +
       R.articoli.map(function (r) {
         var c = r.controlli || [], mancano = c.filter(function (x) { return x.esito === 'manca' || x.esito === 'vietata'; }).length;
         return '<tr' + (r.completo ? '' : ' class="incompleto"') + '><td>' + r.n + '</td><td data-l="Codice">' + esc(r.codice ? app().grp(String(r.codice).replace(/\D/g, '')) : '–') + '</td>' +
-          '<td class="n" data-l="Valore statistico">' + euro(r.valore) + '</td><td data-l="Documenti">' + (!c.length ? 'nessun controllo' : mancano ? mancano + ' da sistemare' : 'a posto') + '</td></tr>';
+          '<td class="n" data-l="Valore statistico">' + euro(r.valore) + (r.quotaAggiunta ? '<span class="piccolo">più trasporto fino al confine ' + euro(r.quotaAggiunta) + '</span>' : '') +
+          (r.quotaTolta ? '<span class="piccolo">meno spese oltre il confine ' + euro(r.quotaTolta) + '</span>' : '') + '</td><td data-l="Documenti">' + (!c.length ? 'nessun controllo' : mancano ? mancano + ' da sistemare' : 'a posto') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     if (R.totali) h += '<table class="tab b-totali"><tbody><tr class="evid"><td><b>Valore statistico totale</b></td><td class="n"><b>' + euro(R.totali.valore) + '</b></td></tr></tbody></table>';
     h += '<p class="nota">All\'esportazione il TARIC non prevede dazi: contano i divieti, le licenze e i documenti di ogni articolo.</p>';
@@ -378,6 +443,14 @@
       '<h1>' + (imp() ? 'Bolla d\'importazione simulata (immissione in libera pratica)' : 'Bolla d\'esportazione simulata') + '</h1>' +
       '<p>' + (st.b.riferimento ? 'Riferimento: <b>' + esc(st.b.riferimento) + '</b> · ' : '') + 'Data prevista: <b>' + esc(dataIt(d.data)) + '</b> · Dati TARIC al ' + esc(app().dati().it) +
       ' · Valuta: ' + esc(d.valuta) + (c && c.tasso ? ' · Cambio: 1 € = ' + esc(nIt(c.tasso, 4)) + ' ' + esc(d.valuta) + ' (' + esc(c.fonte) + ')' : '') + '</p>';
+    var sogg = [['Casella 2', d.mittente], ['Casella 8', d.destinatario], ['Casella 14', d.dichiarante]].filter(function (x) { return x[1]; });
+    if (sogg.length) h += '<p>' + sogg.map(function (x) { return x[0] + ': <b>' + esc(x[1]).replace(/\n/g, ', ') + '</b>'; }).join(' · ') + '</p>';
+    if (d.incoterm) h += '<p>Resa (casella 20): <b>' + esc(d.incoterm + (d.luogo ? ' ' + d.luogo : '')) + '</b></p>';
+    if (c && c.codice === 'valuta_non_quotata' && K.numeroIt(d.cambioManuale) > 0)
+      h += '<p>Cambio inserito a mano: 1 € = ' + esc(d.cambioManuale) + ' ' + esc(d.valuta) + ' (la BCE non pubblica questa valuta)</p>';
+    if (R.conflitti && R.conflitti.length) h += '<div class="b-st-conflitti"><b>Conflitti da risolvere</b><ul>' + R.conflitti.map(function (x) {
+      return '<li>' + (x.articolo ? 'Articolo ' + x.articolo + ': ' : '') + esc(x.testo) + '</li>'; }).join('') + '</ul></div>';
+    if (!imp() && (R.aggiuntaEur || R.toltaEur)) h += '<p>Trasporto fino al confine aggiunto: ' + euro(R.aggiuntaEur) + ' · spese oltre il confine tolte: ' + euro(R.toltaEur) + '</p>';
     if (imp()) h += '<p>Trasporto e assicurazione fino al confine UE: ' + euro(R.noloEur) + ' (ripartiti in base ' + (d.ripartizione === 'massa' ? 'alla massa lorda' : 'al valore') + ') · Spese fino a destinazione: ' + euro(R.inoltroEur) + '</p>';
     h += '</div>';
     R.articoli.forEach(function (r) {
@@ -390,16 +463,16 @@
       if (a.descrizione) righe.splice(2, 0, ['Merce', a.descrizione]);
       if (r.unitaSup) righe.push(['Unità supplementari (41)', (a.quantita || '–') + ' ' + r.unitaSup]);
       if (imp()) {
-        righe.push(['Regime tariffario (36)', r.regime ? nomeRegime(r.regime) : '–']);
+        righe.push(['Preferenza (36)', r.regime ? (r.preferenza ? r.preferenza + ' · ' : '') + nomeRegime(r.regime) : '–']);
         if ((a.addizionali || []).length) righe.push(['Codici addizionali', a.addizionali.join(', ')]);
         righe.push(['Valore in dogana', euro(r.valoreDogana) + (r.quotaNolo ? ' (di cui trasporto e assicurazione ' + euro(r.quotaNolo) + ')' : '')]);
       } else righe.push(['Valore statistico (46)', euro(r.valore)]);
       if ((a.documenti || []).length) righe.push(['Documenti dichiarati (44)', a.documenti.join(', ')]);
       h += '<div class="b-st-art"><h2>Articolo ' + r.n + '</h2><table class="tab"><tbody>' + righe.map(function (x) { return '<tr><th>' + esc(x[0]) + '</th><td>' + esc(x[1]) + '</td></tr>'; }).join('') + '</tbody></table>';
       if (imp() && r.tributi.length) h += '<table class="tab"><thead><tr><th>Tributo (47)</th><th>Base</th><th>Aliquota</th><th class="n">Importo</th></tr></thead><tbody>' +
-        r.tributi.map(function (t) { return '<tr><td>' + esc(nomeTributo(t)) + '</td><td>valore in dogana</td><td>' + esc(t.espressione ? app().fmtDazio(t.espressione) : 'esente') + '</td><td class="n">' + euro(t.importo) + '</td></tr>'; }).join('') +
-        (r.iva !== null && r.iva !== undefined ? '<tr><td>IVA</td><td>' + euro(r.baseIva) + '</td><td>' + (r.aliquota ? r.aliquota + ' %' : 'non dovuta') + '</td><td class="n">' + euro(r.iva) + '</td></tr>' : '') + '</tbody></table>';
-      var note = r.blocchi.concat(r.avvertenze);
+        r.tributi.map(function (t) { return '<tr><td>' + esc(nomeTributo(t)) + (t.manuale ? ' (inserito a mano)' : '') + '</td><td>valore in dogana</td><td>' + esc(aliquotaTributo(t)) + '</td><td class="n">' + euro(t.importo) + '</td></tr>'; }).join('') +
+        (r.iva !== null && r.iva !== undefined ? '<tr><td>B00 IVA' + (r.aliquota === 0 && a.ivaMotivo ? ' (non dovuta: ' + esc(a.ivaMotivo) + ')' : '') + '</td><td>' + euro(r.baseIva) + '</td><td>' + (r.aliquota ? r.aliquota + ' %' : 'non dovuta') + '</td><td class="n">' + euro(r.iva) + '</td></tr>' : '') + '</tbody></table>';
+      var note = r.blocchi.concat(r.avvertenze);          // i conflitti sono già in alto
       (r.controlli || []).forEach(function (x) { if (x.esito === 'da_verificare') note.push(app().tipoMisura(x.misura.t) + ': da verificare su AIDA'); });
       if (note.length) h += '<ul class="b-st-note">' + note.map(function (t) { return '<li>' + esc(prima(t)) + '</li>'; }).join('') + '</ul>';
       h += '</div>';
@@ -430,7 +503,7 @@
   }
   el.addEventListener('input', function (ev) {
     var t = ev.target, f = t.getAttribute('data-f');
-    if (!st.b || !f || t.tagName === 'SELECT' || t.type === 'date') return;
+    if (!st.b || !f || t.tagName === 'SELECT' || t.type === 'date' || f === 'valuta') return;      // la valuta vale a fine scrittura
     var k = t.getAttribute('data-a');
     if (k !== null) dati().articoli[+k][f] = t.value; else imposta(f, t.value);
     st.salvata = false;
@@ -467,14 +540,19 @@
       var art = dati().articoli[+k];
       art[f] = f === 'codice' ? String(v).replace(/\D/g, '') : v;
       if (f === 'codice') t.value = art.codice;
-      if (f === 'codice' || f === 'origine' || f === 'regime') disegnaOpzioni(+k);
+      if (f === 'codice' || f === 'origine' || f === 'regime' || f === 'iva') disegnaOpzioni(+k);
       calcola(); return;
+    }
+    if (f === 'valuta') {
+      v = String(v).trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(v)) { t.value = dati().valuta; messaggio('Valuta: scrivi il codice di tre lettere (per esempio USD).', false); return; }
+      t.value = v;
     }
     imposta(f, v);
     if (f === 'valuta') {                                   // le spese seguono la valuta della fattura o restano in euro
-      ['nolo', 'assicurazione', 'inoltro'].forEach(function (x) {
-        var s = dati()[x];
-        if (s.valuta !== 'EUR' || (x !== 'inoltro' && !String(s.importo || '').trim())) s.valuta = v;   // nolo e assicurazione ancora vuoti: in valuta
+      ['nolo', 'assicurazione', 'inoltro', 'trasporto', 'oltre'].forEach(function (x) {
+        var s = dati()[x] = dati()[x] || { importo: '', valuta: 'EUR' };
+        if (s.valuta !== 'EUR' || (x !== 'inoltro' && !String(s.importo || '').trim())) s.valuta = v;   // spese ancora vuote: in valuta
       });
       disegna(); caricaCambio(); return;
     }
@@ -506,6 +584,11 @@
     else if (azione === 'aggiungi') { dati().articoli.push(nuovoArticolo(dati().paese)); st.salvata = false; disegna(); var u = el.querySelectorAll('.articolo'); if (u.length) u[u.length - 1].querySelector('.codice').focus(); }
     else if (azione === 'togli') { dati().articoli.splice(+b.getAttribute('data-a'), 1); st.salvata = false; disegna(); }
     else if (azione === 'riprova-cambio') { delete st.cambi[chiaveCambio()]; caricaCambio(); }
+    else if (azione === 'togli-cod') {
+      var ar = dati().articoli[+b.getAttribute('data-a')], cod = b.getAttribute('data-c');
+      ar.addizionali = (ar.addizionali || []).filter(function (x) { return x !== cod; });
+      st.salvata = false; disegnaOpzioni(+b.getAttribute('data-a')); calcola();
+    }
   });
   window.addEventListener('beforeunload', function (ev) { if (st.b && !st.salvata) { ev.preventDefault(); ev.returnValue = ''; } });
   T.bolla = { stato: function () { return st; } };                 // per le prove nel browser

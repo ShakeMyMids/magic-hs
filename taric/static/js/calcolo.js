@@ -155,6 +155,34 @@
   var PREFERENZIALI = { 141: 1, 142: 1, 143: 1, 145: 1, 146: 1 };
   var CONTINGENTI = { 122: 1, 123: 1, 143: 1, 146: 1, 147: 1 };
   var USO_FINALE = { 105: 1, 115: 1, 123: 1, 145: 1, 146: 1 };
+  /* codici della casella 36 (D.E. 4/17, allegato B del Reg. UE 2015/2447): prima cifra 1 erga omnes, 2 SPG, 3 altre
+     preferenze, 4 unioni doganali; ultime due 00 nessun caso particolare, 10 sospensione, 19 sospensione con certificato
+     AESA (aeronavigabilità), 20 contingente. Le varianti con certificato (18, 25, 28, 50) non si ricavano dalle misure. */
+  var GRUPPI_SPG = { 2005: 1, 2020: 1, 2027: 1 };                     // SPG: EBA, regime generale, SPG+
+  var CASO_PREFERENZA = { 103: '00', 112: '10', 115: '10', 117: '10', 119: '19', 122: '20', 123: '20',
+    141: '10', 142: '00', 143: '20', 145: '00', 146: '20', 106: '00', 147: '20' };
+  function codicePreferenza(tipo, origine) {
+    var caso = CASO_PREFERENZA[tipo];
+    if (!caso) return '';
+    var prima = tipo === 106 || tipo === 147 ? '4' : PREFERENZIALI[tipo] ? (GRUPPI_SPG[origine] ? '2' : '3') : '1';
+    return prima + caso;
+  }
+  /* codici del tipo di tributo (D.E. 4/3): A00 dazio, A30/A35 antidumping definitivo/provvisorio, A40/A45 compensativo
+     definitivo/provvisorio, B00 IVA; i dazi addizionali (695, 696) non hanno un codice proprio nell'elenco */
+  var CODICE_TRIBUTO = { 551: 'A35', 552: 'A30', 553: 'A45', 554: 'A40' };
+  function codiceTributo(t) {
+    if (t.tipo === 'dazio') return 'A00';
+    if (t.tipo === 'IVA') return 'B00';
+    return t.misura ? (CODICE_TRIBUTO[t.misura.t] || '') : '';
+  }
+  var UE = 'AT BE BG CY CZ DE DK EE ES FI FR GR HR HU IE IT LT LU LV MT NL PL PT RO SE SI SK'.split(' ');
+  /* Incoterms 2020: chi paga il trasporto principale */
+  var INCOTERM = { EXW: 'aggiungi', FCA: 'aggiungi', FAS: 'aggiungi', FOB: 'aggiungi',
+    CFR: 'compreso', CPT: 'compreso', CIF: 'compreso', CIP: 'compreso', DAP: 'oltre', DPU: 'oltre', DDP: 'oltre' };
+  var EUROF = (function () { try { return new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }); } catch (e) { return null; } })();
+  function euroTesto(v) { return (EUROF ? EUROF.format(v) : v.toFixed(2).replace('.', ',')) + ' €'; }
+  function vuoto(s) { return s === undefined || s === null || String(s).trim() === ''; }
+
   // dazi che si aggiungono: antidumping e compensativi (provvisori e definitivi), dazi addizionali
   var AGGIUNTIVI = { 551: 'antidumping provvisorio', 552: 'antidumping', 553: 'compensativo provvisorio', 554: 'compensativo', 695: 'dazio addizionale', 696: 'dazio addizionale' };
   /* famiglie di dazi aggiuntivi: per ognuna si dichiara un solo codice addizionale, quello del produttore; una misura
@@ -213,7 +241,10 @@
       visti[id].misure.push(m);
     });
     out.forEach(function (r) {
+      r.preferenza = r.id === 'base' ? '100' : codicePreferenza(r.tipo, r.origine);
       if (PREFERENZIALI[r.tipo]) r.avvertenze.push('serve la prova dell\'origine preferenziale');
+      if (CONTINGENTI[r.tipo] && r.misure.some(function (m) { return /cert:/.test(m.cond || ''); }))
+        r.avvertenze.push('il contingente chiede un certificato: il codice della casella 36 può essere ' + r.preferenza.charAt(0) + '25 invece di ' + r.preferenza + ', verifica');
       if (r.tipo === 106) r.avvertenze.push('serve il documento di circolazione dell\'unione doganale');
       if (CONTINGENTI[r.tipo]) r.avvertenze.push('solo se il contingente ' + (r.contingente ? 'n. ' + r.contingente.slice(0, 2) + '.' + r.contingente.slice(2) + ' ' : '') + 'ha ancora disponibilità');
       if (USO_FINALE[r.tipo]) r.avvertenze.push('serve l\'autorizzazione all\'uso finale');
@@ -281,9 +312,12 @@
      Ogni importo è in euro al centesimo. Risultato: {articoli: [...], totali, blocchi: [{articolo, testo}]} */
   function calcolaImport(bolla, ctx) {
     var giorno = parseInt(String(bolla.data || '').replace(/-/g, ''), 10);
-    var blocchi = [], arts = bolla.articoli || [];
+    var blocchi = [], conflitti = [], avvisi = [], arts = bolla.articoli || [];
     var nomeMisura = ctx.nomeMisura || function (m) { return 'misura ' + m.t; };
+    var fmtDazio = ctx.fmtDazio || function (d) { return d || 'esente'; };
     function blocca(n, testo) { blocchi.push({ articolo: n, testo: testo }); }
+    function conflitto(n, testo, campo) { conflitti.push({ articolo: n, testo: testo, campo: campo || '' }); }
+    controlliTestata(bolla, ctx, giorno, conflitto, avvisi, 'import');
     if (!(giorno > 19000101)) blocca(0, 'Indica la data della bolla.');
     var cambi = ctx.cambi || {};
     var valutaF = bolla.valuta || 'EUR';
@@ -295,8 +329,17 @@
       if (isNaN(e)) { blocca(0, quale + ': importo non valido o cambio mancante.'); return 0; }
       return e;
     }
-    var noloEur = conv(bolla.nolo, 'Trasporto fino al confine UE') + conv(bolla.assicurazione, 'Assicurazione');
+    var soloNolo = conv(bolla.nolo, 'Trasporto fino al confine UE'), soloAss = conv(bolla.assicurazione, 'Assicurazione');
+    var noloEur = soloNolo + soloAss;
     var inoltroEur = conv(bolla.inoltro, 'Spese di inoltro fino a destinazione');
+    /* Incoterm (casella 20) e spese: il trasporto fino al confine UE va nel valore solo se non è già nel prezzo */
+    var inc = INCOTERM[bolla.incoterm], conNolo = soloNolo > 0, conAss = soloAss > 0;
+    if (inc === 'aggiungi' && !conNolo) conflitto(0, 'Con ' + bolla.incoterm + ' il trasporto fino al confine UE non è nel prezzo: va aggiunto, ma il campo è vuoto.', 'nolo.importo');
+    if (inc === 'compreso' && conNolo) conflitto(0, 'Con ' + bolla.incoterm + ' il trasporto fino al luogo convenuto è già nel prezzo: aggiungendolo lo conti due volte.', 'nolo.importo');
+    if ((bolla.incoterm === 'CIF' || bolla.incoterm === 'CIP') && conAss) conflitto(0, 'Con ' + bolla.incoterm + ' anche l\'assicurazione è già nel prezzo: aggiungendola la conti due volte.', 'assicurazione.importo');
+    if (inc === 'oltre' && (conNolo || conAss)) conflitto(0, 'Con ' + bolla.incoterm + ' il prezzo comprende il trasporto fino a destinazione: non va aggiunto.', 'nolo.importo');
+    if (inc === 'oltre' || inc === 'compreso') avvisi.push({ articolo: 0, testo: 'Con ' + bolla.incoterm + ', se il luogo convenuto è oltre il confine UE, la parte di trasporto dopo il confine indicata a parte in fattura si toglie dal valore (campo «Da togliere» degli articoli).' });
+    if (bolla.incoterm === 'DDP') avvisi.push({ articolo: 0, testo: 'Con DDP il prezzo può comprendere dazi e IVA all\'importazione, che non fanno parte del valore in dogana: se ci sono, toglili.' });
 
     var valoriF = arts.map(function (a) { return numeroIt(a.valore); });
     var pesi = bolla.ripartizione === 'massa' ? arts.map(function (a) { var v = numeroIt(a.lordo); return isNaN(v) ? numeroIt(a.netto) : v; }) : valoriF;
@@ -305,8 +348,10 @@
     var quoteInoltro = ripartisci(inoltroEur, pesi.map(function (p) { return isNaN(p) ? 0 : p; }));
 
     var out = arts.map(function (a, k) {
-      var n = k + 1, r = { n: n, codice: a.codice, tributi: [], avvertenze: [], blocchi: [] };
+      var n = k + 1, r = { n: n, codice: a.codice, tributi: [], avvertenze: [], blocchi: [], conflitti: [] };
       function b(testo) { if (r.blocchi.indexOf(testo) < 0) { r.blocchi.push(testo); blocca(n, testo); } }
+      function cf(testo, campo) { r.conflitti.push(testo); conflitto(n, testo, campo); }
+      controlliArticolo(a, cf, 'import');
       var M = ctx.misure(a);
       if (!M || M.errore) { b(M && M.errore ? M.errore : 'Misure del codice non disponibili.'); return r; }
       if (isNaN(valoriF[k])) b('Indica il valore in fattura.');
@@ -328,7 +373,8 @@
       r.regimi = tutti;
       if (!scelto) { b('Il regime tariffario scelto non vale per questa origine o questa data: scegline un altro.'); scelto = tutti[0]; }
       r.regime = scelto;
-      var dazioBase = null;
+      r.preferenza = scelto.preferenza;
+      var dazioBase = null, bloccoDazio = '', bloccoAggiuntivi = [];
       if (!scelto.misure.length) b('Per questo codice non c\'è un dazio paesi terzi nei dati.');
       else {
         var conCod = scelto.misure.filter(function (m) { return m.add && (a.addizionali || []).indexOf(m.add) >= 0; });
@@ -340,7 +386,7 @@
           else {
             var d0 = dazioMisura(m0, docs, c);
             if (d0.importo !== undefined) { dazioBase = d0.importo; r.tributi.push({ tipo: 'dazio', misura: m0, espressione: d0.espressione, importo: d0.importo }); }
-            else b('Dazio: ' + (d0.manca ? MANCA[d0.manca] + '.' : 'non calcolabile qui (' + d0.no + ').'));
+            else bloccoDazio = 'Dazio: ' + (d0.manca ? MANCA[d0.manca] + '.' : 'non calcolabile qui (' + d0.no + ').');
           }
           r.avvertenze = r.avvertenze.concat(scelto.avvertenze);
         }
@@ -351,21 +397,75 @@
       famiglie(M.righe, giorno).forEach(function (f) { fam[f.famiglia] = f; });
       gruppiAggiuntivi(M.righe, giorno).forEach(function (g) {
         if (g.tipo === 555) { r.avvertenze.push('Dazio antidumping o compensativo con riscossione sospesa (' + g.legale + '): non si paga, ma verifica se serve una garanzia.'); return; }
-        if (NON_CALCOLABILI_TIPI[g.tipo]) { b('C\'è un ' + NON_CALCOLABILI_TIPI[g.tipo] + ': non calcolabile qui, verifica su AIDA.'); return; }
+        var ba = function (testo) { if (bloccoAggiuntivi.indexOf(testo) < 0) bloccoAggiuntivi.push(testo); };
+        if (NON_CALCOLABILI_TIPI[g.tipo]) { ba('C\'è un ' + NON_CALCOLABILI_TIPI[g.tipo] + ': non calcolabile qui, verifica su AIDA.'); return; }
         var f = fam[g.famiglia], scelti = f.codici.filter(function (c) { return (a.addizionali || []).indexOf(c) >= 0; });
         if (scelti.length > 1) { b('Indica un solo codice addizionale del produttore per ' + f.nome + '.'); return; }
         var conCodice = g.misure.filter(function (m) { return m.add && m.add === scelti[0]; });
         var senza = g.misure.filter(function (m) { return !m.add; });
-        if (!conCodice.length && !scelti.length && g.codici.length) { b('Scegli il codice addizionale del produttore per ' + f.nome + '.'); return; }
+        if (!conCodice.length && !scelti.length && g.codici.length) { ba('Scegli il codice addizionale del produttore per ' + f.nome + '.'); return; }
         var scelte = conCodice.length ? conCodice : senza;
         if (!scelte.length) return;                               // misura per altri produttori: non si applica
-        if (scelte.length > 1) { b('Più misure valgono insieme per ' + f.nome + ' (' + g.legale + '): verifica su AIDA.'); return; }
+        if (scelte.length > 1) { ba('Più misure valgono insieme per ' + f.nome + ' (' + g.legale + '): verifica su AIDA.'); return; }
         var m = scelte[0], ap2 = applicabile(m, docs);
         if (!ap2.ok) return;                                      // la misura vale solo con un documento non dichiarato
         var d = dazioMisura(m, docs, c);
         if (d.importo !== undefined) r.tributi.push({ tipo: AGGIUNTIVI[g.tipo], misura: m, espressione: d.espressione, importo: d.importo });
-        else b(AGGIUNTIVI[g.tipo].charAt(0).toUpperCase() + AGGIUNTIVI[g.tipo].slice(1) + ': ' + (d.manca ? MANCA[d.manca] + '.' : 'non calcolabile qui (' + d.no + ').'));
+        else ba(AGGIUNTIVI[g.tipo].charAt(0).toUpperCase() + AGGIUNTIVI[g.tipo].slice(1) + ': ' + (d.manca ? MANCA[d.manca] + '.' : 'non calcolabile qui (' + d.no + ').'));
       });
+
+      /* correzioni a mano: sostituiscono il calcolo, ma se il TARIC dà un altro importo è un conflitto */
+      var tar = r.tributi.filter(function (x) { return x.tipo === 'dazio'; })[0];
+      if (!vuoto(a.dazioManuale)) {
+        var pm = numeroIt(a.dazioManuale);
+        if (isNaN(pm)) b('Dazio a mano: aliquota non valida.');
+        else if (r.valoreDogana === null) b('Dazio a mano: manca il valore in dogana.');
+        else {
+          var im = tributo(r.valoreDogana * pm / 100), testoPm = String(a.dazioManuale).trim().replace('.', ',') + ' %';
+          if (tar && Math.abs(tar.importo - im) >= 0.005)
+            cf('Dazio: hai scritto ' + testoPm + ' (' + euroTesto(im) + '), ma con il codice ' + r.preferenza + ' nella casella 36 il TARIC dà ' + fmtDazio(tar.espressione) + ' (' + euroTesto(tar.importo) + ').', 'dazioManuale');
+          if (bloccoDazio) r.avvertenze.push('Dazio inserito a mano al posto di quello non calcolabile qui: non verificato.');
+          r.tributi = r.tributi.filter(function (x) { return x.tipo !== 'dazio'; });
+          r.tributi.unshift({ tipo: 'dazio', manuale: true, espressione: '', aliquotaManuale: testoPm, importo: im, tariffa: tar || null });
+          dazioBase = im; bloccoDazio = '';
+        }
+      }
+      if (bloccoDazio) b(bloccoDazio);
+      if (!vuoto(a.altriManuale)) {
+        var am = numeroIt(a.altriManuale);
+        if (isNaN(am)) b('Antidumping e altri dazi a mano: importo non valido.');
+        else {
+          var calcolati = r.tributi.filter(function (x) { return x.tipo !== 'dazio'; }), sc = somma(calcolati.map(function (x) { return x.importo; }));
+          if (!bloccoAggiuntivi.length && Math.abs(sc - am) >= 0.005)
+            cf('Antidumping e altri dazi: hai scritto ' + euroTesto(am) + ', ma il TARIC dà ' + euroTesto(sc) + '.', 'altriManuale');
+          if (bloccoAggiuntivi.length) r.avvertenze.push('Antidumping e altri dazi inseriti a mano al posto di quelli non calcolabili qui: non verificati.');
+          r.tributi = r.tributi.filter(function (x) { return x.tipo === 'dazio'; });
+          r.tributi.push({ tipo: 'altri dazi', manuale: true, espressione: '', importo: tributo(am), calcolati: calcolati });
+          bloccoAggiuntivi = [];
+        }
+      }
+      bloccoAggiuntivi.forEach(b);
+      r.tributi.forEach(function (x) { x.codice = codiceTributo(x); });
+
+      /* preferenze: utile o inutile? */
+      if (r.valoreDogana !== null && tar && !tar.manuale) {
+        if (scelto.id === 'base') {
+          tutti.forEach(function (x) {
+            if (!(PREFERENZIALI[x.tipo] || x.tipo === 106) || CONTINGENTI[x.tipo] || USO_FINALE[x.tipo]) return;
+            var mp = x.misure.filter(function (m) { return !m.add && !m.cond; })[0];
+            var dp = mp ? dazioMisura(mp, docs, c) : null;
+            if (dp && dp.importo !== undefined && dp.importo < tar.importo)
+              r.avvertenze.push('Con il codice ' + x.preferenza + ' nella casella 36 (origine preferenziale, con la prova dell\'origine) il dazio sarebbe ' + euroTesto(dp.importo) + ' invece di ' + euroTesto(tar.importo) + '.');
+          });
+        } else if (PREFERENZIALI[scelto.tipo] || scelto.tipo === 106) {
+          var mb = (tutti[0].misure || []).filter(function (m) { return !m.add && !m.cond; })[0], db = mb ? dazioMisura(mb, docs, c) : null;
+          if (db && db.importo === 0) r.avvertenze.push('Il dazio paesi terzi è già esente: la preferenza (codice ' + r.preferenza + ') non cambia il dazio.');
+        }
+      }
+      // codici addizionali che non valgono più per codice, origine e data
+      var validi = {};
+      M.righe.forEach(function (m) { if (m.add && valida(m, giorno)) validi[m.add] = true; });
+      (a.addizionali || []).forEach(function (cod) { if (!validi[cod]) cf('Il codice addizionale ' + cod + ' non vale per questo codice, origine e data: toglilo.', 'addizionali'); });
 
       /* IVA all'importazione: valore in dogana + dazi + spese di inoltro fino a destinazione */
       r.quotaInoltro = quoteInoltro[k] || 0;
@@ -377,6 +477,7 @@
         r.iva = tributo(r.baseIva * aliquota / 100);
       } else { r.baseIva = null; r.iva = null; }
       r.aliquota = aliquota;
+      if (aliquota === 0 && vuoto(a.ivaMotivo)) cf('IVA non dovuta: indica il motivo (per esempio dichiarazione d\'intento).', 'ivaMotivo');
       r.unitaSup = M.unitaSup || '';
       if (r.unitaSup && isNaN(numeroIt(a.quantita))) b('Indica la quantità in unità supplementari (' + r.unitaSup + ').');
       r.controlli = controlli(M.righe, giorno, docs);
@@ -396,24 +497,69 @@
       tot.iva = somma(out.map(function (r) { return r.iva; }));
       tot.totale = somma(Object.keys(tot.dazi).map(function (k) { return tot.dazi[k]; }).concat([tot.iva]));
     }
-    return { articoli: out, totali: completo ? tot : null, blocchi: blocchi, noloEur: arrotonda(noloEur), inoltroEur: arrotonda(inoltroEur) };
+    return { articoli: out, totali: completo ? tot : null, blocchi: blocchi, conflitti: conflitti, avvisi: avvisi,
+      noloEur: arrotonda(noloEur), inoltroEur: arrotonda(inoltroEur) };
+  }
+
+  /* conflitti dell'intestazione comuni alle due bolle: data rispetto ai dati TARIC, cambio scritto a mano */
+  function controlliTestata(bolla, ctx, giorno, conflitto, avvisi, flusso) {
+    var dati = parseInt(String(ctx.dataDati || '').replace(/-/g, ''), 10);
+    if (giorno > 19000101 && dati > 19000101) {
+      if (giorno < dati) conflitto(0, 'La data della bolla è precedente ai dati TARIC del ' + dataIt(dati) + ': le misure finite prima di quel giorno non ci sono. Per una data passata verifica su AIDA.', 'data');
+      else if (giorno - dati > 200) avvisi.push({ articolo: 0, testo: 'La data della bolla è oltre il mese dei dati TARIC (' + dataIt(dati) + '): fino ad allora le misure possono cambiare.' });
+    }
+    var v = bolla.valuta || 'EUR', cb = (ctx.cambi || {})[v];
+    if (cb && cb.manuale) avvisi.push({ articolo: 0, testo: 'Cambio di ' + v + ' scritto a mano (la BCE non lo pubblica): per le Dogane vale il cambio giornaliero della Banca d\'Italia.' });
+    if (flusso === 'export' && UE.indexOf(bolla.paese) >= 0) conflitto(0, 'La destinazione predefinita è un paese dell\'Unione: non è un\'esportazione.', 'paese');
+  }
+  function dataIt(n) { var s = String(n); return s.slice(6, 8) + '/' + s.slice(4, 6) + '/' + s.slice(0, 4); }
+  /* conflitti tra i campi di un articolo che non dipendono dalle misure */
+  function controlliArticolo(a, cf, flusso) {
+    var netto = numeroIt(a.netto), lordo = numeroIt(a.lordo);
+    if (!isNaN(netto) && !isNaN(lordo) && netto > lordo) cf('La massa netta (casella 38) supera la massa lorda (casella 35).', 'netto');
+    if (UE.indexOf(a.origine) >= 0) cf(flusso === 'import' ? 'L\'origine è un paese dell\'Unione: la merce di origine UE non si importa come merce estera, controlla l\'origine.' : 'La destinazione è un paese dell\'Unione: non è un\'esportazione.', 'origine');
   }
   var MANCA = { valore: 'manca il valore in dogana', kg: 'indica la massa netta', qta: 'indica la quantità' };
 
-  /* Bolla d'esportazione: niente tributi; valore statistico in euro, documenti e restrizioni per articolo. */
+  /* Bolla d'esportazione: niente tributi; valore statistico in euro (prezzo più trasporto e assicurazione fino al confine
+     italiano, meno le spese oltre il confine comprese nel prezzo), documenti e restrizioni per articolo. */
   function calcolaExport(bolla, ctx) {
-    var giorno = parseInt(String(bolla.data || '').replace(/-/g, ''), 10), blocchi = [], cambi = ctx.cambi || {}, valutaF = bolla.valuta || 'EUR';
+    var giorno = parseInt(String(bolla.data || '').replace(/-/g, ''), 10), blocchi = [], conflitti = [], avvisi = [], cambi = ctx.cambi || {}, valutaF = bolla.valuta || 'EUR';
     var nomeMisura = ctx.nomeMisura || function (m) { return 'misura ' + m.t; };
+    var arts = bolla.articoli || [];
+    function conflitto(n, testo, campo) { conflitti.push({ articolo: n, testo: testo, campo: campo || '' }); }
     if (!(giorno > 19000101)) blocchi.push({ articolo: 0, testo: 'Indica la data della bolla.' });
     if (valutaF !== 'EUR' && !(cambi[valutaF] && cambi[valutaF].tasso > 0)) blocchi.push({ articolo: 0, testo: 'Manca il cambio doganale di ' + valutaF + ' per il mese della bolla.' });
-    var out = (bolla.articoli || []).map(function (a, k) {
-      var n = k + 1, r = { n: n, codice: a.codice, avvertenze: [], blocchi: [] };
+    controlliTestata(bolla, ctx, giorno, conflitto, avvisi, 'export');
+    function conv(x, quale) {
+      var testo = x && x.importo !== undefined && x.importo !== null ? String(x.importo).trim() : '';
+      if (!testo) return 0;
+      var e = euroDa(numeroIt(testo), (x && x.valuta) || valutaF, cambi);
+      if (isNaN(e)) { blocchi.push({ articolo: 0, testo: quale + ': importo non valido o cambio mancante.' }); return 0; }
+      return e;
+    }
+    var aggEur = conv(bolla.trasporto, 'Trasporto e assicurazione fino al confine'), dedEur = conv(bolla.oltre, 'Spese oltre il confine');
+    var inc = INCOTERM[bolla.incoterm];
+    if (bolla.incoterm === 'EXW' && !aggEur) conflitto(0, 'Con EXW il trasporto fino al confine non è nel prezzo: va aggiunto al valore statistico, ma il campo è vuoto.', 'trasporto.importo');
+    if ((inc === 'compreso' || inc === 'oltre') && !dedEur) conflitto(0, 'Con ' + bolla.incoterm + ' il prezzo comprende il trasporto oltre il confine: va tolto dal valore statistico, ma il campo è vuoto.', 'oltre.importo');
+    if ((inc === 'compreso' || inc === 'oltre') && aggEur) conflitto(0, 'Con ' + bolla.incoterm + ' il trasporto è già nel prezzo: aggiungendolo lo conti due volte.', 'trasporto.importo');
+    var valoriF = arts.map(function (a) { return numeroIt(a.valore); });
+    var pesi = bolla.ripartizione === 'massa' ? arts.map(function (a) { var v = numeroIt(a.lordo); return isNaN(v) ? numeroIt(a.netto) : v; }) : valoriF;
+    if (bolla.ripartizione === 'massa' && pesi.some(function (p) { return isNaN(p); }) && (aggEur || dedEur)) blocchi.push({ articolo: 0, testo: 'Per ripartire le spese in base alla massa serve la massa lorda di ogni articolo.' });
+    var qa = ripartisci(aggEur, pesi.map(function (p) { return isNaN(p) ? 0 : p; })), qd = ripartisci(dedEur, pesi.map(function (p) { return isNaN(p) ? 0 : p; }));
+    var out = arts.map(function (a, k) {
+      var n = k + 1, r = { n: n, codice: a.codice, avvertenze: [], blocchi: [], conflitti: [] };
       function b(t) { r.blocchi.push(t); blocchi.push({ articolo: n, testo: t }); }
+      function cf(testo, campo) { r.conflitti.push(testo); conflitto(n, testo, campo); }
+      controlliArticolo(a, cf, 'export');
       var M = ctx.misure(a);
       if (!M || M.errore) { b(M && M.errore ? M.errore : 'Misure del codice non disponibili.'); return r; }
       var v = euroDa(numeroIt(a.valore), valutaF, cambi);
       if (isNaN(numeroIt(a.valore))) b('Indica il valore.');
-      r.valore = isNaN(v) ? null : arrotonda(v);
+      r.prezzo = isNaN(v) ? null : arrotonda(v);
+      r.quotaAggiunta = qa[k] || 0; r.quotaTolta = qd[k] || 0;
+      r.valore = isNaN(v) ? null : arrotonda(v + r.quotaAggiunta - r.quotaTolta);
+      if (r.valore !== null && r.valore < 0) b('Il valore statistico risulta negativo: controlla le spese.');
       r.unitaSup = M.unitaSup || '';
       if (r.unitaSup && isNaN(numeroIt(a.quantita))) b('Indica la quantità in unità supplementari (' + r.unitaSup + ').');
       r.controlli = controlli(M.righe, giorno, a.documenti || []);
@@ -425,7 +571,8 @@
       return r;
     });
     var completo = !blocchi.length;
-    return { articoli: out, blocchi: blocchi, totali: completo ? { valore: somma(out.map(function (r) { return r.valore; })) } : null };
+    return { articoli: out, blocchi: blocchi, conflitti: conflitti, avvisi: avvisi, aggiuntaEur: arrotonda(aggEur), toltaEur: arrotonda(dedEur),
+      totali: completo ? { valore: somma(out.map(function (r) { return r.valore; })) } : null };
   }
 
   /* ------------------------------------------------------------------ cambio doganale */
@@ -445,7 +592,7 @@
     opzioni: opzioni, num: num, isNum: isNum, numeroIt: numeroIt, cent: cent, arrotonda: arrotonda, tributo: tributo, somma: somma, ripartisci: ripartisci,
     calcolaDazio: calcolaDazio, unitaQuantita: unitaQuantita, parseCond: parseCond, valutaCondizioni: valutaCondizioni,
     regimi: regimi, gruppiAggiuntivi: gruppiAggiuntivi, famiglie: famiglie, controlli: controlli, calcolaImport: calcolaImport, calcolaExport: calcolaExport,
-    giornoCambio: giornoCambio, euroDa: euroDa, valida: valida
+    giornoCambio: giornoCambio, euroDa: euroDa, valida: valida, codicePreferenza: codicePreferenza, codiceTributo: codiceTributo, UE: UE, INCOTERM: INCOTERM
   };
   if (typeof module === 'object' && module.exports) module.exports = API;
   else radice.TARIC_CALCOLO = API;

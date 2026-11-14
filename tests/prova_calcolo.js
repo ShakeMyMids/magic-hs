@@ -239,4 +239,105 @@ prova('bolla d\'esportazione: valore statistico in euro e documenti', () => {
   assert(r.totali === null && /vietata/.test(r.blocchi[0].testo));
 });
 
+/* ---------------------------------------------------------------- codici e conflitti tra i campi */
+const SENZA_SPESE = { nolo: {}, assicurazione: {}, inoltro: {} };
+const testi = (lista) => lista.map(x => x.testo);
+
+prova('codici della casella 36 (preferenza) e della casella 47 (tributo)', () => {
+  uguale([K.codicePreferenza(103, '1011'), K.codicePreferenza(112, '1011'), K.codicePreferenza(119, '1011'), K.codicePreferenza(122, 'AR')],
+    ['100', '110', '119', '120']);
+  uguale([K.codicePreferenza(142, 'VN'), K.codicePreferenza(143, 'CA'), K.codicePreferenza(141, '5500')], ['300', '320', '310']);
+  uguale([K.codicePreferenza(142, '2020'), K.codicePreferenza(143, '2027'), K.codicePreferenza(142, '2005')], ['200', '220', '200']);
+  uguale([K.codicePreferenza(106, 'TR'), K.codicePreferenza(147, 'TR'), K.codicePreferenza(552, 'CN')], ['400', '420', '']);
+  uguale(K.regimi(SCARPE, 20261114).map(x => x.preferenza), ['100', '110', '300']);
+  const r = K.calcolaImport(bolla([Object.assign({}, BICI_ART, { addizionali: ['B999'] })], SENZA_SPESE), ctx);
+  uguale(r.articoli[0].tributi.map(t => t.codice), ['A00', 'A30']);
+  uguale(r.articoli[0].preferenza, '100');
+});
+
+prova('conflitto: codice 300 (preferenza) con un dazio scritto a mano diverso da quello del TARIC', () => {
+  // scarpe dal Vietnam, valore 5000,00 €: con la preferenza il TARIC dà esente; a mano 8 % = 400,00 €
+  const art = Object.assign({}, SCARPE_ART, { valore: '5500', dazioManuale: '8' });
+  let r = K.calcolaImport(bolla([art], SENZA_SPESE), ctx);
+  uguale(r.conflitti.map(x => [x.articolo, x.campo, x.testo]), [[1, 'dazioManuale',
+    'Dazio: hai scritto 8 % (400,00 €), ma con il codice 300 nella casella 36 il TARIC dà esente (0,00 €).']]);
+  uguale(r.articoli[0].tributi.map(t => [t.codice, t.manuale || false, t.importo]), [['A00', true, 400]]);   // conta quello scritto
+  assert(r.totali);                                                                                            // il totale c'è, il conflitto resta segnalato
+  r = K.calcolaImport(bolla([Object.assign({}, art, { dazioManuale: '0' })], SENZA_SPESE), ctx);
+  uguale(r.conflitti, []);
+  // con il dazio paesi terzi (100) invece l'8 % è giusto
+  r = K.calcolaImport(bolla([Object.assign({}, art, { regime: 'base' })], SENZA_SPESE), ctx);
+  uguale(r.conflitti, []);
+  assert(r.articoli[0].avvertenze.indexOf('Con il codice 300 nella casella 36 (origine preferenziale, con la prova dell\'origine) il dazio sarebbe 0,00 € invece di 400,00 €.') >= 0);
+});
+
+prova('dazi a mano al posto di quelli non calcolabili, segnati come non verificati', () => {
+  let r = K.calcolaImport(bolla([{ codice: '0805102200', origine: 'MA', valore: '1100', netto: '900', iva: 4, dazioManuale: '16' }], Object.assign({ data: '2026-12-10' }, SENZA_SPESE)), ctx);
+  uguale(r.blocchi, []);
+  uguale(r.articoli[0].tributi[0].importo, 160);
+  assert(r.articoli[0].avvertenze.indexOf('Dazio inserito a mano al posto di quello non calcolabile qui: non verificato.') >= 0);
+  // antidumping senza codice del produttore: a mano sblocca il totale; con il codice scelto, un importo diverso è un conflitto
+  r = K.calcolaImport(bolla([Object.assign({}, BICI_ART, { addizionali: [], altriManuale: '4850' })], SENZA_SPESE), ctx);
+  uguale(r.blocchi, []);
+  uguale(r.articoli[0].tributi.map(t => [t.tipo, t.importo]), [['dazio', 1400], ['altri dazi', 4850]]);
+  r = K.calcolaImport(bolla([Object.assign({}, BICI_ART, { addizionali: ['B999'], altriManuale: '5.000' })], SENZA_SPESE), ctx);
+  uguale(testi(r.conflitti), ['Antidumping e altri dazi: hai scritto 5.000,00 €, ma il TARIC dà 4.850,00 €.']);
+  r = K.calcolaImport(bolla([Object.assign({}, BICI_ART, { dazioManuale: 'abc' })], SENZA_SPESE), ctx);
+  uguale(testi(r.blocchi), ['Dazio a mano: aliquota non valida.']);
+});
+
+prova('conflitti: Incoterm e spese di trasporto', () => {
+  const art = Object.assign({}, BICI_ART, { addizionali: ['B999'] });
+  let r = K.calcolaImport(bolla([art], Object.assign({ incoterm: 'FOB' }, SENZA_SPESE)), ctx);
+  uguale(r.conflitti.map(x => [x.campo, x.testo]), [['nolo.importo', 'Con FOB il trasporto fino al confine UE non è nel prezzo: va aggiunto, ma il campo è vuoto.']]);
+  r = K.calcolaImport(bolla([art], { incoterm: 'FOB' }), ctx);                     // con nolo e assicurazione
+  uguale(r.conflitti, []);
+  r = K.calcolaImport(bolla([art], { incoterm: 'CIF' }), ctx);
+  uguale(testi(r.conflitti), ['Con CIF il trasporto fino al luogo convenuto è già nel prezzo: aggiungendolo lo conti due volte.',
+    'Con CIF anche l\'assicurazione è già nel prezzo: aggiungendola la conti due volte.']);
+  r = K.calcolaImport(bolla([art], { incoterm: 'CFR', nolo: {}, assicurazione: { importo: '55', valuta: 'USD' } }), ctx);
+  uguale(r.conflitti, []);                                                         // con CFR l'assicurazione si aggiunge
+  r = K.calcolaImport(bolla([art], Object.assign({ incoterm: 'DDP' }, SENZA_SPESE)), ctx);
+  uguale(r.conflitti, []);
+  uguale(r.avvisi.length, 2);
+  r = K.calcolaImport(bolla([art], { incoterm: 'DAP' }), ctx);
+  uguale(testi(r.conflitti), ['Con DAP il prezzo comprende il trasporto fino a destinazione: non va aggiunto.']);
+});
+
+prova('conflitti: masse, origine UE, IVA non dovuta, codici addizionali, data e cambio a mano', () => {
+  const r = K.calcolaImport(bolla([
+    Object.assign({}, BICI_ART, { netto: '1400', lordo: '1300', addizionali: ['B999', 'ZZ99'], iva: 0 }),
+    Object.assign({}, SCARPE_ART, { origine: 'DE', iva: 0, ivaMotivo: 'dichiarazione d\'intento n. 12' })
+  ], Object.assign({ data: '2026-10-20' }, SENZA_SPESE)), Object.assign({ dataDati: '2026-11-01' }, ctx));
+  uguale(r.conflitti.map(x => [x.articolo, x.campo]), [[0, 'data'], [1, 'netto'], [1, 'addizionali'], [1, 'ivaMotivo'], [2, 'origine']]);
+  uguale(r.conflitti[0].testo, 'La data della bolla è precedente ai dati TARIC del 01/11/2026: le misure finite prima di quel giorno non ci sono. Per una data passata verifica su AIDA.');
+  uguale(r.conflitti[2].testo, 'Il codice addizionale ZZ99 non vale per questo codice, origine e data: toglilo.');
+  const m = K.calcolaImport(bolla([BICI_ART], SENZA_SPESE), Object.assign({}, ctx, { cambi: { USD: { tasso: 1.1, manuale: true } } }));
+  uguale(testi(m.avvisi), ['Cambio di USD scritto a mano (la BCE non lo pubblica): per le Dogane vale il cambio giornaliero della Banca d\'Italia.']);
+});
+
+prova('preferenza inutile: il dazio paesi terzi è già esente', () => {
+  const ctx3 = { misure: () => ({ righe: [M(103, '1011', ''), M(142, 'CH', '')] }), cambi: {} };
+  const r = K.calcolaImport({ data: '2026-11-14', valuta: 'EUR', articoli: [{ codice: '1', origine: 'CH', valore: '100', regime: '142-CH-' }] }, ctx3);
+  uguale(r.articoli[0].avvertenze.slice(-1), ['Il dazio paesi terzi è già esente: la preferenza (codice 300) non cambia il dazio.']);
+});
+
+prova('esportazione: valore statistico con il trasporto fino al confine e Incoterm', () => {
+  const ctxE = { misure: () => ({ righe: [M(109, '1011', 'NAR')], unitaSup: 'p/st' }), cambi: { USD: { tasso: 1.08 } } };
+  const base = { data: '2026-11-14', valuta: 'USD', articoli: [{ codice: '8471300000', origine: 'US', valore: '10.800', quantita: '10' }, { codice: '8471300000', origine: 'US', valore: '5.400', quantita: '5' }] };
+  // EXW: 10.800 USD = 10.000 €; trasporto fino al confine 300 € ripartito sul valore 2:1
+  let r = K.calcolaExport(Object.assign({ incoterm: 'EXW', trasporto: { importo: '300', valuta: 'EUR' } }, base), ctxE);
+  uguale(r.articoli.map(a => a.valore), [10200, 5100]);
+  uguale([r.totali.valore, r.conflitti], [15300, []]);
+  r = K.calcolaExport(Object.assign({ incoterm: 'EXW' }, base), ctxE);
+  uguale(r.conflitti.map(x => x.campo), ['trasporto.importo']);
+  // CIF: il trasporto oltre il confine va tolto
+  r = K.calcolaExport(Object.assign({ incoterm: 'CIF', oltre: { importo: '600', valuta: 'EUR' } }, base), ctxE);
+  uguale([r.articoli.map(a => a.valore), r.conflitti], [[9600, 4800], []]);
+  r = K.calcolaExport(Object.assign({ incoterm: 'CIF' }, base), ctxE);
+  uguale(r.conflitti.map(x => x.campo), ['oltre.importo']);
+  r = K.calcolaExport(Object.assign({ paese: 'FR' }, base, { articoli: [{ codice: '8471300000', origine: 'FR', valore: '1', quantita: '1' }] }), ctxE);
+  uguale(r.conflitti.map(x => [x.articolo, x.campo]), [[0, 'paese'], [1, 'origine']]);
+});
+
 console.log(n + ' prove superate');
