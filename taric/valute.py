@@ -1,14 +1,19 @@
 """Cambio doganale del mese per la bolla simulata, dai cambi di riferimento della Banca centrale europea.
 
-Regola (art. 146 del Reg. di esecuzione UE 2015/2447, per gli Stati con l'euro): per tutto un mese si usa il cambio
-pubblicato dalla BCE il penultimo mercoledi' del mese precedente; se quel giorno non c'e' un cambio, l'ultimo pubblicato
-prima. La BCE esprime i cambi in unita' di valuta per 1 euro (per esempio 1,0867 USD).
+Regola (art. 146 del Reg. di esecuzione UE 2015/2447, per gli Stati con l'euro): «il tasso di cambio pubblicato il
+penultimo mercoledi' di ogni mese»; «se in quel giorno non e' stato pubblicato alcun tasso di cambio, si applica il tasso
+piu' recente pubblicato»; vale «per un mese, a decorrere dal primo giorno del mese successivo». La BCE esprime i cambi in
+unita' di valuta per 1 euro (per esempio 1,1234 USD), come l'elenco mensile dell'Agenzia delle Dogane. Per le valute che
+la BCE non pubblica l'Agenzia delle Dogane indica il cambio giornaliero della Banca d'Italia.
+
+Il giorno stesso il cambio esce nel pomeriggio (verso le 16): prima non c'e' ancora, e non si prende quello del giorno
+avanti, che varrebbe per tutto il mese.
 
 I cambi presi si tengono nella tabella cambi_doganali: per un mese passato non cambiano piu'. Il servizio della BCE si
 interroga con un indirizzo come
   https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?startPeriod=2026-10-07&endPeriod=2026-10-21&format=csvdata
-che risponde in CSV con, tra le altre, le colonne TIME_PERIOD e OBS_VALUE (MAGIC_HS_BCE_URL cambia l'indirizzo di base,
-per le prove)."""
+che risponde in CSV con, tra le altre, le colonne TIME_PERIOD e OBS_VALUE; senza cambi nel periodo risponde 200 senza
+righe, per una valuta che non esiste 404 (MAGIC_HS_BCE_URL cambia l'indirizzo di base, per le prove)."""
 from __future__ import annotations
 
 import csv
@@ -60,8 +65,8 @@ class CambiDoganali:
         except httpx.HTTPError as e:
             raise ErroreCambio(503, f"La BCE non risponde ({type(e).__name__}): riprova tra poco.", "bce_non_raggiungibile") from None
         if r.status_code == 404:
-            raise ErroreCambio(404, f"La BCE non pubblica un cambio di riferimento per {valuta}: per questa valuta il cambio "
-                                    "doganale va preso dall'Agenzia delle Dogane.", "valuta_non_quotata")
+            raise ErroreCambio(404, f"La BCE non pubblica un cambio di riferimento per {valuta}: per questa valuta l'Agenzia "
+                                    "delle Dogane indica il cambio giornaliero della Banca d'Italia.", "valuta_non_quotata")
         if r.status_code != 200:
             raise ErroreCambio(503, f"La BCE risponde {r.status_code}: riprova tra poco.", "bce_non_raggiungibile")
         migliore: tuple[dt.date, Decimal] | None = None
@@ -94,6 +99,9 @@ class CambiDoganali:
                 raise ErroreCambio(409, f"Il cambio doganale di {nome_mese} si fissa il {data_it(rif)}: fino ad allora non si conosce.",
                                    "cambio_non_fissato")
             tasso, preso_il = self._dalla_bce(valuta, rif)
+            if preso_il < rif and rif == (oggi or dt.date.today()):
+                raise ErroreCambio(409, f"Il cambio doganale di {nome_mese} si fissa oggi, {data_it(rif)}: la BCE lo pubblica "
+                                        "nel pomeriggio, riprova più tardi.", "cambio_non_fissato")
             with self.db.transazione() as c:
                 c.execute("INSERT OR REPLACE INTO cambi_doganali(valuta, mese, tasso, giorno, preso) VALUES (?, ?, ?, ?, ?)",
                           (valuta, mese, str(tasso), preso_il.isoformat(), iso()))

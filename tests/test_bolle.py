@@ -45,10 +45,36 @@ def test_cambio_del_giorno_prima_se_quel_mercoledi_manca(sito: Sito):
     assert (r["tasso"], r["giorno"], r["riferimento"]) == (1.0835, "2026-10-20", "2026-10-21")
 
 
+def test_cambio_non_ancora_pubblicato_il_giorno_stesso(sito: Sito, tmp_path):
+    # il penultimo mercoledì, prima delle 16, la BCE ha solo il cambio del giorno avanti: non si prende e non si tiene
+    import httpx
+    from taric.db import Database
+    from taric.valute import CambiDoganali, ErroreCambio
+    del sito.bce.cambi["USD"]["2026-10-21"]
+    cambi = CambiDoganali(Database(tmp_path / "prova.db"), "https://bce.test/EXR", httpx.Client(transport=httpx.MockTransport(sito.bce)))
+    try:
+        cambi.tasso("USD", dt.date(2026, 11, 3), oggi=dt.date(2026, 10, 21))
+        raise AssertionError("doveva fermarsi")
+    except ErroreCambio as e:
+        assert (e.stato, e.codice) == (409, "cambio_non_fissato") and "si fissa oggi, 21/10/2026" in e.messaggio
+    sito.bce.cambi["USD"]["2026-10-21"] = "1.1234"         # pubblicato nel pomeriggio
+    assert cambi.tasso("USD", dt.date(2026, 11, 3), oggi=dt.date(2026, 10, 21))["tasso"] == 1.1234
+    # il giorno dopo, se quel mercoledì la BCE non ha pubblicato, vale il cambio più recente (art. 146, par. 2)
+    del sito.bce.cambi["USD"]["2026-09-23"]
+    assert cambi.tasso("USD", dt.date(2026, 10, 3), oggi=dt.date(2026, 9, 24))["giorno"] == "2026-09-22"
+
+
+def test_cambio_periodo_senza_cambi(sito: Sito):
+    c = sito.capo()
+    sito.bce.cambi["CNY"] = {}
+    r = c.get("/api/cambio", params={"valuta": "CNY", "data": "2026-11-14"})
+    assert r.status_code == 404 and r.json()["codice"] == "valuta_non_quotata" and "prima del 21/10/2026" in r.json()["errore"]
+
+
 def test_cambio_errori(sito: Sito):
     c = sito.capo()
     r = c.get("/api/cambio", params={"valuta": "XAU", "data": "2026-11-14"})
-    assert r.status_code == 404 and r.json()["codice"] == "valuta_non_quotata" and "Agenzia delle Dogane" in r.json()["errore"]
+    assert r.status_code == 404 and r.json()["codice"] == "valuta_non_quotata" and "Banca d'Italia" in r.json()["errore"]
     r = c.get("/api/cambio", params={"valuta": "USD", "data": "2099-03-10"})
     assert r.status_code == 409 and r.json()["codice"] == "cambio_non_fissato" and "si fissa il 18/02/2099" in r.json()["errore"]
     assert c.get("/api/cambio", params={"valuta": "US", "data": "2026-11-14"}).status_code == 422

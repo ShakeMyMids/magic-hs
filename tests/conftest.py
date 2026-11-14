@@ -129,7 +129,8 @@ class FintoS3:
 
 class FintoBCE:
     """Servizio dei cambi della BCE: /service/data/EXR/D.<VALUTA>.EUR.SP00.A in CSV (colonne come quelle vere, tra cui
-    TIME_PERIOD e OBS_VALUE). cambi = {valuta: {giorno: tasso}}; guasto = True simula la BCE irraggiungibile."""
+    TIME_PERIOD e OBS_VALUE; risposte provate con la BCE vera il 14/11/2026). cambi = {valuta: {giorno: tasso}};
+    guasto = True simula la BCE irraggiungibile."""
 
     def __init__(self) -> None:
         self.cambi = {"USD": {"2026-10-19": "1.0810", "2026-10-20": "1.0835", "2026-10-21": "1.0867", "2026-10-22": "1.0901",
@@ -144,9 +145,11 @@ class FintoBCE:
             raise httpx.ConnectError("finta BCE spenta", request=req)
         valuta = req.url.path.rsplit("/", 1)[-1].split(".")[1]
         da, a = req.url.params["startPeriod"], req.url.params["endPeriod"]
-        righe = [(g, v) for g, v in sorted(self.cambi.get(valuta, {}).items()) if da <= g <= a]
-        if not righe:
-            return httpx.Response(404, text="No results found.")
+        if valuta not in self.cambi:                           # come la BCE vera: serie che non esiste
+            return httpx.Response(404, json={"status": 404, "title": "Not Found", "detail": "No Series was returned for the query"})
+        righe = [(g, v) for g, v in sorted(self.cambi[valuta].items()) if da <= g <= a]
+        if not righe:                                          # come la BCE vera: periodo senza cambi, 200 senza niente
+            return httpx.Response(200, text="")
         testa = "KEY,FREQ,CURRENCY,CURRENCY_DENOM,EXR_TYPE,EXR_SUFFIX,TIME_PERIOD,OBS_VALUE,OBS_STATUS,TITLE"
         corpo = "\n".join(f"EXR.D.{valuta}.EUR.SP00.A,D,{valuta},EUR,SP00,A,{g},{v},A,Euro/{valuta}" for g, v in righe)
         return httpx.Response(200, text=testa + "\n" + corpo + "\n", headers={"content-type": "text/csv"})

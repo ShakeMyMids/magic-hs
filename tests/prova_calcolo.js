@@ -31,6 +31,16 @@ prova('arrotondamento al centesimo senza errori di virgola mobile', () => {
   uguale(K.somma([0.1, 0.2]), 0.3);
 });
 
+prova('tributo: al centesimo, ma mai sotto un centesimo se è dovuto (istruzioni ADM, casella 47)', () => {
+  uguale(K.tributo(0.004), 0.01);
+  uguale(K.tributo(0.005), 0.01);
+  uguale(K.tributo(1.005), 1.01);
+  uguale(K.tributo(1.004), 1);
+  uguale(K.tributo(0), 0);
+  uguale(K.calcolaDazio('1.700 %', { valore: 0.2 }).importo, 0.01);   // 0,0034 € di dazio: un centesimo
+  uguale(K.calcolaDazio('', { valore: 0.2 }).importo, 0);              // esente: zero
+});
+
 prova('ripartizione al centesimo: la somma delle parti è il totale', () => {
   uguale(K.ripartisci(100, [1, 1, 1]), [33.34, 33.33, 33.33]);
   uguale(K.ripartisci(550, [11000, 5500]), [366.67, 183.33]);
@@ -90,6 +100,9 @@ prova('giorno del cambio doganale: penultimo mercoledì del mese precedente', ()
   uguale(K.giornoCambio('2026-03'), '2026-02-18');    // febbraio 2026: 4, 11, 18, 25
   uguale(K.giornoCambio('2027-01'), '2026-12-23');    // dicembre 2026: 2, 9, 16, 23, 30
   uguale(K.giornoCambio('2026-09'), '2026-08-19');    // agosto 2026: 5, 12, 19, 26
+  // gli elenchi mensili dell'Agenzia delle Dogane: ottobre 2026 USD 1,1411 e novembre 2026 USD 1,1234, i cambi BCE
+  // del 23/09/2026 e del 21/10/2026
+  uguale(K.giornoCambio('2026-10'), '2026-09-23');
 });
 
 /* ---------------------------------------------------------------- bolla d'importazione */

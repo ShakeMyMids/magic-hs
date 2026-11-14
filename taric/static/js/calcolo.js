@@ -31,6 +31,9 @@
      (1,005 * 100 = 100,49999… diventa 101) */
   function cent(v) { var x = Number((Math.abs(v) * 100).toPrecision(15)); return (v < 0 ? -1 : 1) * Math.round(x); }
   function arrotonda(v) { return cent(v) / 100; }
+  /* importo di un tributo (casella 47): al centesimo, la metà per eccesso; un importo sotto il centesimo diventa comunque
+     un centesimo (istruzioni dell'Agenzia delle Dogane per la compilazione delle dichiarazioni, casella 47) */
+  function tributo(v) { var c = cent(v); return (c === 0 && v > 0 ? 1 : c) / 100; }
   function somma(lista) { return lista.reduce(function (s, v) { return s + cent(v); }, 0) / 100; }
 
   /* Ripartisce un importo (euro, al centesimo) in proporzione ai pesi; la somma delle parti è esattamente il totale
@@ -86,7 +89,7 @@
     var tot = calcola(parti.base);
     if (parti.MIN.length) tot = Math.max(tot, calcola(parti.MIN));
     if (parti.MAX.length) tot = Math.min(tot, calcola(parti.MAX));
-    return manca ? { manca: manca } : { importo: arrotonda(tot) };
+    return manca ? { manca: manca } : { importo: tributo(tot) };
   }
   /* l'unità di quantità che servirebbe (pezzi, paia, litri...), se una delle espressioni ne usa una */
   function unitaQuantita(stringhe) {
@@ -371,7 +374,7 @@
       var aliquota = a.iva === undefined || a.iva === '' ? 22 : Number(a.iva);
       if (r.valoreDogana !== null && dazioBase !== null) {
         r.baseIva = arrotonda(r.valoreDogana + dazi + r.quotaInoltro);
-        r.iva = arrotonda(r.baseIva * aliquota / 100);
+        r.iva = tributo(r.baseIva * aliquota / 100);
       } else { r.baseIva = null; r.iva = null; }
       r.aliquota = aliquota;
       r.unitaSup = M.unitaSup || '';
@@ -439,7 +442,7 @@
 
   var API = {
     PAROLE: PAROLE, MASSA: MASSA, QUANTITA: QUANTITA, NON_CALCOLABILI: NON_CALCOLABILI, AGGIUNTIVI: AGGIUNTIVI, SOLO_E_COMMERCE: SOLO_E_COMMERCE,
-    opzioni: opzioni, num: num, isNum: isNum, numeroIt: numeroIt, cent: cent, arrotonda: arrotonda, somma: somma, ripartisci: ripartisci,
+    opzioni: opzioni, num: num, isNum: isNum, numeroIt: numeroIt, cent: cent, arrotonda: arrotonda, tributo: tributo, somma: somma, ripartisci: ripartisci,
     calcolaDazio: calcolaDazio, unitaQuantita: unitaQuantita, parseCond: parseCond, valutaCondizioni: valutaCondizioni,
     regimi: regimi, gruppiAggiuntivi: gruppiAggiuntivi, famiglie: famiglie, controlli: controlli, calcolaImport: calcolaImport, calcolaExport: calcolaExport,
     giornoCambio: giornoCambio, euroDa: euroDa, valida: valida
