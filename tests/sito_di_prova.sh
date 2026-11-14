@@ -12,6 +12,7 @@ TARIC_CONFIG="$CARTELLA/nessuno.env" TARIC_DATI="$CARTELLA/dati" MAGIC_HS_AMMINI
 TARIC_IA_FORNITORE=openai TARIC_IA_URL=http://127.0.0.1:9100/v1 TARIC_IA_MODELLO=finto-modello TARIC_IA_CHIAVE=chiave-finta \
 TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati TARIC_FONTE_URL="http://127.0.0.1:9100/fonte/{mese}.zip" \
 MAGIC_HS_COPIA_URL=http://127.0.0.1:9100/s3/magic-hs MAGIC_HS_COPIA_CHIAVE=chiave-s3-finta MAGIC_HS_COPIA_SEGRETO=segreto-finto \
+MAGIC_HS_BCE_URL=http://127.0.0.1:9100/bce \
 PYTHONPATH="$RADICE" python -m taric server --porta 8810 > "$CARTELLA/sito.log" 2>&1 &
 for _ in $(seq 120); do
   if curl -sf http://127.0.0.1:8810/api/stato | grep -q '"dati_pronti":true'; then echo "sito di prova pronto"; exit 0; fi

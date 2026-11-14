@@ -4,19 +4,41 @@
   «chiave-finta».
 - GitHub: la pagina /github/releases/tags/dati con i dati pronti indicati sulla riga di comando (archivi
   dati-AAAA-MM-01.zip, per esempio fatti con strumenti/dati_mese.py).
+- Cambi della BCE per la bolla simulata: /bce/D.<VALUTA>.EUR.SP00.A?startPeriod=...&endPeriod=...&format=csvdata, in CSV
+  con le colonne TIME_PERIOD e OBS_VALUE, un cambio fisso per ogni giorno feriale (USD 1.0867, CNY 7.7341, GBP 0.8712);
+  le altre valute rispondono 404 come la BCE (MAGIC_HS_BCE_URL=http://127.0.0.1:9100/bce).
 - Archivio S3 per la copia esterna del database: PUT e GET sotto /s3/ (MAGIC_HS_COPIA_URL=http://127.0.0.1:9100/s3/magic-hs),
   accetta solo la chiave «chiave-s3-finta» e il contenuto con l'impronta dichiarata; GET /s3/ elenca gli oggetti.
 Uso: python tests/finto_claude.py 9100 [dati-AAAA-MM-01.zip ...], poi il sito con TARIC_IA_FORNITORE=openai,
 TARIC_IA_URL=http://127.0.0.1:9100/v1, TARIC_IA_CHIAVE=chiave-finta e TARIC_DATI_URL=http://127.0.0.1:9100/github/releases/tags/dati
 (vedi README, «Sviluppo», e tests/e2e_sito.js)."""
+import datetime
 import hashlib
 import json
 import sys
+from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 DATI: dict[str, bytes] = {}            # nome dell'archivio -> contenuto
 S3: dict[str, bytes] = {}              # percorso -> contenuto (copia esterna del database)
+CAMBI = {"USD": "1.0867", "CNY": "7.7341", "GBP": "0.8712"}
+
+
+def cambi_bce(percorso: str) -> tuple[int, str]:
+    parti = urlsplit(percorso)
+    valuta = parti.path.rsplit("/", 1)[-1].split(".")[1]
+    q = parse_qs(parti.query)
+    da, a = datetime.date.fromisoformat(q["startPeriod"][0]), datetime.date.fromisoformat(q["endPeriod"][0])
+    if valuta not in CAMBI:
+        return 404, "No results found."
+    righe = ["KEY,FREQ,CURRENCY,CURRENCY_DENOM,EXR_TYPE,EXR_SUFFIX,TIME_PERIOD,OBS_VALUE"]
+    g = da
+    while g <= a:
+        if g.weekday() < 5:
+            righe.append(f"EXR.D.{valuta}.EUR.SP00.A,D,{valuta},EUR,SP00,A,{g.isoformat()},{CAMBI[valuta]}")
+        g += datetime.timedelta(days=1)
+    return 200, "\n".join(righe) + "\n"
 
 
 def rispondi(prompt: str) -> object:
@@ -54,6 +76,14 @@ class Gestore(BaseHTTPRequestHandler):
             b = DATI[self.path[13:]]
             self.send_response(200)
             self.send_header("content-type", "application/octet-stream")
+            self.send_header("content-length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+        elif self.path.startswith("/bce/"):
+            stato, testo = cambi_bce(self.path)
+            b = testo.encode()
+            self.send_response(stato)
+            self.send_header("content-type", "text/csv")
             self.send_header("content-length", str(len(b)))
             self.end_headers()
             self.wfile.write(b)

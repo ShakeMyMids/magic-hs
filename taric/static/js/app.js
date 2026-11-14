@@ -476,7 +476,10 @@ function chiediCapitolo(ch) {
   if (MIS[ch]) return 'ok';
   if (statoCap[ch]) return statoCap[ch];
   statoCap[ch] = 'attesa';
-  caricaScript(BASE_DATI + 'm/' + ch + '.js', function (ok) { statoCap[ch] = (ok && MIS[ch]) ? 'ok' : 'errore'; renderEsito(); });
+  caricaScript(BASE_DATI + 'm/' + ch + '.js', function (ok) {
+    statoCap[ch] = (ok && MIS[ch]) ? 'ok' : 'errore'; renderEsito();
+    if (T.viste && T.viste.bolla && T.viste.bolla.capitolo) T.viste.bolla.capitolo(ch);
+  });
   if (!NOTE && !noteChieste) {
     noteChieste = true;
     caricaScript(BASE_DATI + 'note.js', function (ok) { NOTE = window.TARIC_NOTE || null; if (ok && NOTE) renderEsito(); });
@@ -568,10 +571,8 @@ var QUAL = {
   A: 'di alcole totale', C: '(migliaia)', E: 'peso netto sgocciolato', G: 'lordo', I: 'di biodiesel', M: 'di sostanza secca',
   P: 'di materia lattica', R: 'qualità tipo', S: 'di zucchero greggio', T: 'di materia lattica secca', Z: 'per 1 % di saccarosio'
 };
-var PAROLE = {
-  MAX: 'max', MIN: 'min', NIHIL: 'nessun dazio', EA: 'elemento agricolo', EAR: 'elemento agricolo ridotto',
-  ADSZ: 'dazio add. zucchero', ADSZR: 'dazio add. zucchero ridotto', ADFM: 'dazio add. farina', ADFMR: 'dazio add. farina ridotto'
-};
+/* calcoli comuni con la bolla: js/calcolo.js */
+var K = window.TARIC_CALCOLO, PAROLE = K.PAROLE;
 /* supplementary units: TARIC measurement code -> customs abbreviation used in box 41 */
 var UNITA_SUP = {
   NAR: 'p/st', NPR: 'pa', MIL: '1 000 p/st', CEN: '100 p/st', LTR: 'l', LPA: 'l alc. 100 %', MTR: 'm', MTK: 'm2', MTQ: 'm3', 'MTQ C': '1 000 m³',
@@ -579,7 +580,7 @@ var UNITA_SUP = {
   KNS: 'kg H2O2', KUR: 'kg U', KMA: 'kg met.am.', GFI: 'gi F/S', CTM: 'c/k', NCL: 'ce/el', CCT: 'ct/l', TJO: 'TJ', MWH: '1 000 kWh', TCE: 't CO2 eq.'
 };
 
-function num(s) { return parseFloat(String(s).replace(/,/g, '')); }
+var num = K.num, isNum = K.isNum;
 function nIt(v, min, max) { try { return v.toLocaleString('it-IT', { minimumFractionDigits: min, maximumFractionDigits: max }); } catch (e) { return String(v); } }
 function unita(u, q) {
   if (u === 'ASV' && q === 'X') return '% vol/hl';
@@ -587,7 +588,6 @@ function unita(u, q) {
   if (q) s += ' ' + (QUAL[q] || q);
   return s;
 }
-function isNum(x) { return /^[\d,]*\.?\d+$/.test(x); }
 /* "12.800 % + 176.800 EUR DTN" -> "12,8 % + 176,80 EUR/100 kg" ; unknown tokens are passed through untouched */
 function fmtDazio(str) {
   var t = String(str || '').replace(/\+/g, ' + ').trim().split(/\s+/), out = [], i = 0;
@@ -612,18 +612,7 @@ function fmtDazio(str) {
   }
   return out.join(' ');
 }
-/* condition list, as written in the Duty column: "B cert: C-644 (29):; B (09):" */
-function parseCond(txt) {
-  var out = [];
-  String(txt || '').replace(/^Cond:\s*/, '').split(';').forEach(function (p) {
-    p = p.trim(); if (!p) return;
-    var m = /^([A-Z]{1,2}) (.*?)\((\d\d)\):(.*)$/.exec(p);
-    if (!m) { out.push({ tipo: '?', raw: p, cert: '', soglia: '', az: '', dazio: '' }); return; }
-    var mid = m[2].trim(), c = /^cert: (\S)-(\S{3})$/.exec(mid);
-    out.push({ tipo: m[1], cert: c ? c[1] + c[2] : '', soglia: c ? '' : mid, az: m[3], dazio: m[4].trim() });
-  });
-  return out;
-}
+var parseCond = K.parseCond;
 function condDi(m) { return /^Cond:/.test(m.duty) ? m.duty : m.cond; }
 function effetto(p) { return p.dazio ? fmtDazio(p.dazio) : (AZIONI[p.az] || ('esito ' + p.az + ' (vedi TARIC)')); }
 function fmtSoglia(s, tipo) {
@@ -668,10 +657,10 @@ function percentuali(m) {
 function certDi(m) { var o = []; parseCond(condDi(m)).forEach(function (p) { if (p.cert && o.indexOf(p.cert) < 0) o.push(p.cert); }); return o; }
 
 /* measures that apply to nomenclature row i (the row and its ancestors) for one country and one flow, today */
-function misure(i, flow, paese) {
+function misure(i, flow, paese, giorno) {
   var C = MIS[CODE[i].slice(0, 2)];
   if (!C) return null;
-  var tab = (flow === 'export' ? C.x : C.m) || {}, og = oggiNum(), out = [], altri = 0;
+  var tab = (flow === 'export' ? C.x : C.m) || {}, og = giorno || oggiNum(), out = [], altri = 0;
   pathOf(i).forEach(function (j) {
     if (FLAG[j] === 'g') return;
     var rows = tab[CODE[j]];
@@ -690,6 +679,26 @@ function misure(i, flow, paese) {
     }
   });
   return { righe: out, altri: altri };
+}
+/* per la bolla (js/bolla.js): le misure di un codice dichiarabile per un'origine (importazione) o una destinazione
+   (esportazione) valide nel giorno AAAAMMGG; {attesa} finché il capitolo si carica, {errore} se non si può */
+function misureBolla(codice, flusso, paese, giorno) {
+  codice = String(codice || '').replace(/\D/g, '');
+  if (!/^\d{10}$/.test(codice)) return { errore: 'Scrivi il codice a 10 cifre.' };
+  if (!byCode.has(codice)) return { errore: 'Il codice ' + grp(codice) + ' non è nella nomenclatura dei dati in uso (' + DATA_IT + ').' };
+  var i = byCode.get(codice);
+  if (!isLeaf(i)) return { errore: 'Il codice ' + grp(codice) + ' non è dichiarabile: scegli una sottovoce.' };
+  if (!paese) return { errore: flusso === 'export' ? 'Indica il paese di destinazione.' : 'Indica il paese d\'origine.' };
+  var s = chiediCapitolo(codice.slice(0, 2));
+  if (s === 'attesa') return { attesa: true, errore: 'Carico le misure del capitolo ' + codice.slice(0, 2) + '…' };
+  if (s !== 'ok') return { errore: 'Misure del capitolo ' + codice.slice(0, 2) + ' non disponibili: ricarica la pagina.' };
+  var righe = misure(i, flusso, paese, giorno).righe.filter(function (m) { return !m.fut; });
+  righe.forEach(function (m) { m.nome = TIPI_IT[m.t] || ('misura ' + m.t); });
+  var sup = '';
+  righe.forEach(function (m) { if ((m.t === 109 || (m.t === 110 && flusso !== 'export')) && m.o === '1011') sup = m.duty; });
+  var qta = flusso === 'export' ? '' : unitaQuantita(righe.filter(function (m) { return m.t < 200 || m.t >= 550 && m.t < 700; }).map(function (m) { return m.duty + ' ' + (m.cond || ''); }));
+  return { righe: righe, unitaSupCodice: sup, unitaSup: sup ? (UNITA_SUP[sup] || sup) : '', unitaSupNome: sup ? (UNITA_IT[UNITA_SUP[sup]] || unita(sup, '')) : '',
+    unitaQta: qta, unitaQtaNome: qta ? unita(qta, '') : '', descrizione: descOf(i) };
 }
 function unitaSupplementare(i) {
   var C = MIS[CODE[i].slice(0, 2)];
@@ -711,59 +720,8 @@ function unitaSupplementare(i) {
    quantità, somme con «+», minimi (MIN) e massimi (MAX). Componenti agricole (EA, ADSZ...), qualificatori dell'unità
    (per esempio DTN E, peso netto sgocciolato) e dazi con condizioni restano «non calcolabili qui»: meglio nessun numero
    che uno sbagliato. */
-var MASSA = { DTN: 0.01, KGM: 1, TNE: 0.001, GRM: 1000 };          // quante unità per kg
-var QUANTITA = { MIL: 0.001, CEN: 0.01 };                          // per 1000 e per 100 pezzi
-var NON_CALCOLABILI = { EA: 1, EAR: 1, ADSZ: 1, ADSZR: 1, ADFM: 1, ADFMR: 1 };
-function numeroIt(s) {
-  s = String(s === undefined || s === null ? '' : s).trim().replace(/\s/g, '');
-  if (!s) return NaN;
-  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
-  var v = Number(s);
-  return isFinite(v) && v >= 0 ? v : NaN;
-}
-/* {importo} oppure {manca: 'valore'|'kg'|'qta'} oppure {no: motivo} */
-function calcolaDazio(str, c) {
-  var t = String(str || '').replace(/\+/g, ' + ').trim().split(/\s+/), parti = { base: [], MIN: [], MAX: [] }, dove = 'base', i = 0;
-  if (!t[0]) return { no: 'nessun dazio indicato' };
-  if (/^Cond:/.test(str)) return { no: 'dipende dalle condizioni o dai documenti' };
-  while (i < t.length) {
-    var x = t[i];
-    if (x === '+') { i++; continue; }
-    if (x === 'MIN' || x === 'MAX') { dove = x; i++; continue; }
-    if (x === 'NIHIL') { parti[dove].push({ v: 0, tipo: '%' }); i++; continue; }
-    if (NON_CALCOLABILI[x]) return { no: 'contiene un elemento agricolo o un dazio addizionale variabile' };
-    if (!isNum(x)) return { no: 'espressione non prevista' };
-    var v = num(x), nx = t[i + 1];
-    if (nx === '%') { parti[dove].push({ v: v, tipo: '%' }); i += 2; continue; }
-    if (nx !== 'EUR' && nx !== 'EUC') return { no: 'espressione non prevista' };
-    var u = t[i + 2], q = t[i + 3];
-    if (!u || !/^[A-Z]{3}$/.test(u) || PAROLE[u]) return { no: 'importo per spedizione, non per merce' };
-    if (q && /^[A-Z]$/.test(q)) return { no: 'dipende da ' + unita(u, q) };
-    parti[dove].push({ v: v, tipo: 'eur', u: u });
-    i += 3;
-  }
-  var manca = '';
-  function somma(lista) {
-    return lista.reduce(function (s, p) {
-      if (p.tipo === '%') { if (isNaN(c.valore)) { manca = manca || 'valore'; return s; } return s + c.valore * p.v / 100; }
-      if (MASSA[p.u]) { if (isNaN(c.kg)) { manca = manca || 'kg'; return s; } return s + p.v * c.kg * MASSA[p.u]; }
-      if (isNaN(c.qta) || c.unitaQta !== p.u) { manca = manca || 'qta'; return s; }
-      return s + p.v * c.qta * (QUANTITA[p.u] || 1);
-    }, 0);
-  }
-  var tot = somma(parti.base);
-  if (parti.MIN.length) tot = Math.max(tot, somma(parti.MIN));
-  if (parti.MAX.length) tot = Math.min(tot, somma(parti.MAX));
-  return manca ? { manca: manca } : { importo: Math.round(tot * 100) / 100 };
-}
-/* l'unità di quantità che servirebbe (pezzi, paia, litri...), se una delle espressioni ne usa una */
-function unitaQuantita(stringhe) {
-  for (var k = 0; k < stringhe.length; k++) {
-    var m = /\b(?:EUR|EUC) ([A-Z]{3})\b(?! [A-Z]\b)/g, x;
-    while ((x = m.exec(stringhe[k] || ''))) if (!MASSA[x[1]] && !PAROLE[x[1]]) return x[1];
-  }
-  return '';
-}
+var numeroIt = K.numeroIt, calcolaDazio = K.calcolaDazio, unitaQuantita = K.unitaQuantita;
+K.opzioni.nomeUnita = function (u, q) { return unita(u, q); };
 var EURO = (function () { try { return new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }); } catch (e) { return null; } })();
 function euro(v) { return (EURO ? EURO.format(v) : nIt(v, 2, 2)) + ' €'; }        // 2.376,00 € (anche le migliaia)
 function aggiornaCalcolo() {
@@ -1103,7 +1061,8 @@ function renderEsito() {
   h += '<div class="fila"><button class="btn sm" type="button" data-act="copia" data-c="' + esc(sel.code) + '">' + T.icona('copia') + 'Copia codice</button>' +
     '<button class="btn sm" type="button" data-act="stampa">' + T.icona('documento') + 'Stampa o PDF</button>' +
     (i >= 0 ? '<button class="btn sm" type="button" data-act="apri" data-i="' + i + '">' + T.icona('libro') + 'Vedi nella nomenclatura</button>' : '') +
-    (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' : '') + '</div>';
+    (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' +
+      '<button class="btn sm" type="button" data-act="in-bolla" data-c="' + esc(sel.code) + '">' + T.icona('pacco') + 'Aggiungi alla bolla</button>' : '') + '</div>';
   var fineCod = (D.fine && D.fine[sel.code]) || 0;
   if (i >= 0 && fineCod) h += '<p class="avviso">' + (fineCod < oggiNum() ? 'Questo codice ha cessato di valere il ' : 'Questo codice cessa di valere il ') + dataIt(fineCod) + '.</p>';
   h += '</div>';
@@ -1333,7 +1292,7 @@ function apriNellAlbero(i) {
 }
 
 /* ---------- views ---------- */
-var VISTE = ['classifica', 'nomenclatura', 'profilo', 'gestione'];
+var VISTE = ['classifica', 'nomenclatura', 'bolla', 'profilo', 'gestione'];
 function vista(v) {
   if (VISTE.indexOf(v) < 0 || (v === 'gestione' && !(state.utente && state.utente.ruolo === 'amministratore'))) v = 'classifica';
   state.view = v;
@@ -1376,6 +1335,7 @@ document.addEventListener('click', function (ev) {
   }
   else if (act === 'traduci') traduci();
   else if (act === 'stampa') window.print();
+  else if (act === 'in-bolla' && T.viste && T.viste.bolla) { T.viste.bolla.aggiungi(t.getAttribute('data-c'), state.country, state.flow); vista('bolla'); window.scrollTo(0, 0); }
   else if (act === 'preferito') {
     var pc = t.getAttribute('data-c'), cera = state.preferiti[pc];
     if (cera) delete state.preferiti[pc]; else state.preferiti[pc] = { nota: '' };
@@ -1481,6 +1441,12 @@ T.app = {
   aggiornaIo: aggiornaIo,
   caricaSinonimi: caricaSinonimi,
   tipoMisura: function (t) { return TIPI_IT[t] || ('misura ' + t); },
+  misureBolla: misureBolla,
+  certificato: function (c) { return (RIF.cert && RIF.cert[c]) || ''; },
+  addizionale: function (c) { return (RIF.add && RIF.add[c]) || ''; },
+  frequenti: function () { return FREQUENTI.filter(function (x) { return RIF.aree[x]; }); },
+  euro: euro,
+  grp: grp,
   fmtDazio: fmtDazio,
   nomeArea: nomeArea,
   dataIt: dataIt,

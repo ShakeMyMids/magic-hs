@@ -16,6 +16,8 @@ jobs:
       - run: python -m pytest -q tests
       - name: Controllo sintassi JavaScript
         run: for f in taric/static/js/*.js; do node --check "$f"; done
+      - name: Calcoli della bolla e degli importi (js/calcolo.js)
+        run: node tests/prova_calcolo.js
 
   # prova nel browser (tests/e2e_sito.js): il sito con un finto servizio IA e i dati veri dell'ultimo mese pubblicato
   browser:

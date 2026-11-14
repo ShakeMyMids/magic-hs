@@ -661,6 +661,41 @@ html.con-finestra{overflow:hidden}
 /* ================================================================ stampa (o PDF) della scheda del codice
    Colori chiari su carta bianca qualunque sia il tema, solo la scheda: niente barre, ricerca, pulsanti e disegni. */
 .solo-stampa{display:none}
+/* bolla simulata (js/bolla.js) */
+.st.ambra{background:var(--ambra-tenue);color:var(--ambra)}
+.bolla-barra{align-items:center;margin-bottom:12px}
+.bolla-barra .dx{margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.bolla-titolo{display:inline-flex;align-items:center;gap:10px;margin:0;font:650 19px/1.2 var(--f);color:var(--inchiostro)}
+.b-campi{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:4px 0 10px}
+.b-campi label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--secondario);min-width:0}
+.b-campi label.largo{grid-column:span 2}
+.b-campi .campo{flex:none;width:100%}
+.con-valuta{display:flex;gap:6px}
+.con-valuta .campo:first-child{flex:1 1 auto;width:auto;min-width:0}
+.con-valuta .campo.corto{flex:0 0 86px;width:86px}
+.b-desc{margin:-4px 0 8px}
+.b-doc{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.b-doc .et,.b-blocchi .et,.b-avvisi .et{display:flex;align-items:center;gap:8px;margin:0;font:600 13.5px var(--f);color:var(--secondario)}
+.b-alt{display:flex;flex-direction:column;gap:4px;padding-left:10px;border-left:2px solid var(--linea)}
+.spunta.doc{display:flex;align-items:flex-start;gap:8px;font-size:14px;color:var(--inchiostro);cursor:pointer}
+.spunta.doc input{margin-top:3px;flex:none}
+.b-controlli{margin-top:6px}
+.b-blocchi,.b-avvisi{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:var(--rosso-tenue);color:var(--rosso)}
+.b-avvisi{background:var(--ambra-tenue);color:var(--ambra);margin-top:12px}
+.b-blocchi ul,.b-avvisi ul{margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:3px;font-size:14px}
+.b-blocchi b,.b-avvisi b{color:inherit}
+.b-trib{display:flex;justify-content:space-between;gap:10px}
+.b-trib .piccolo{display:inline;margin-left:4px}
+.b-tab tr.incompleto td{color:var(--secondario)}
+.b-totali{margin-top:12px;max-width:440px;margin-left:auto}
+.b-totali tr.evid td{font-size:16px}
+@media (max-width:640px){
+  .b-campi label.largo{grid-column:auto}
+  .bolla-barra .dx{margin-left:0;justify-content:flex-start}
+  .tab.b-totali tr{display:flex;justify-content:space-between;gap:10px}.tab.b-totali td{width:auto}
+}
+@media (pointer:coarse){.spunta.doc input{width:22px;height:22px;margin-top:0}.spunta.doc{min-height:40px;align-items:center}.articolo .lab .link{display:inline-flex;align-items:center;min-height:42px;padding:0 6px}}
+
 @media print{
   :root:root:root{--fondo:#fff;--carta:#fff;--carta-2:#f2f4f7;--inchiostro:#111;--secondario:#444;--linea:#d3d9df;--linea-forte:#b8c0c9;
     --accento:#1b5584;--accento-forte:#144468;--accento-tenue:#e4ecf4;--timbro:#a4440c;--timbro-tenue:#fbe7d8;--ambra:#7a5410;--ambra-tenue:#f6ecd6;
@@ -676,4 +711,18 @@ html.con-finestra{overflow:hidden}
   .calc-campi .campo,select.campo{border-color:#cfd5dc;background:#fff}
   *,*::before,*::after{animation:none !important;transition:none !important}
   a{color:inherit;text-decoration:none}
+  body.stampa-bolla #view-bolla > :not(#bolla-stampa),body.stampa-bolla #stampa-testa,body.stampa-bolla .piede{display:none !important}
+  body.stampa-bolla #bolla-stampa{display:block;font-size:11.5px;color:#111}
+  #bolla-stampa h1{font:700 17px/1.25 var(--f);margin:2px 0 6px}
+  #bolla-stampa h2{font:650 13.5px/1.2 var(--f);margin:10px 0 4px}
+  #bolla-stampa p{margin:0 0 4px}
+  #bolla-stampa .b-st-sim{display:inline-block;padding:3px 8px;border:1.5px solid #a4440c;border-radius:4px;color:#a4440c;font-weight:700;letter-spacing:.02em}
+  #bolla-stampa .b-st-art{break-inside:avoid;margin-bottom:8px}
+  #bolla-stampa .tab{width:100%;border-collapse:collapse;margin:2px 0 4px}
+  #bolla-stampa .tab th,#bolla-stampa .tab td{padding:3px 6px;border:1px solid #cfd5dc;text-align:left;font-size:11px}
+  #bolla-stampa .tab th{width:32%;background:#f2f4f7;font-weight:600}
+  #bolla-stampa .tab thead th{width:auto}
+  #bolla-stampa .tab .n{text-align:right}
+  #bolla-stampa .b-st-note{margin:2px 0 0;padding-left:16px;color:#7a5410}
+  #bolla-stampa .b-st-piede{margin-top:10px;color:#444;font-size:10.5px}
 }

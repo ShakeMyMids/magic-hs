@@ -58,6 +58,7 @@ class Config:
     copia_regione: str = ""
     copia_chiave: str = ""
     copia_segreto: str = field(default="", repr=False)
+    bce_url: str = "https://data-api.ecb.europa.eu/service/data/EXR"     # cambi della BCE per la bolla (MAGIC_HS_BCE_URL)
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -125,5 +126,6 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         copia_regione=v.get("MAGIC_HS_COPIA_REGIONE", "").strip(),
         copia_chiave=v.get("MAGIC_HS_COPIA_CHIAVE", "").strip(),
         copia_segreto=v.get("MAGIC_HS_COPIA_SEGRETO", "").strip(),
+        bce_url=(v.get("MAGIC_HS_BCE_URL") or Config.bce_url).strip().rstrip("/"),
         extra=v,
     )

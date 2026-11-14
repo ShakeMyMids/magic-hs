@@ -12,6 +12,7 @@ Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'ammini
 - **Archivio aziendale**: sopra i risultati della nomenclatura compaiono le merci **già classificate in azienda**, con il codice scelto e chi l'ha fatto. Se si chiede all'IA una descrizione già classificata, MAGIC HS propone di riprendere quella classificazione, senza una nuova richiesta e senza consumare il limite del mese. Chi preferisce non condividere le proprie toglie la spunta nel Profilo.
 - **Scheda del codice**: descrizione, percorso nella nomenclatura e misure; il **calcolo degli importi** dà una stima di dazio e IVA dal valore in dogana, dalla massa e dalle quantità (le misure che dipendono da condizioni o da prezzi d'entrata restano «non calcolabili»). **Stampa o PDF** prepara un foglio pulito, con data e versione dei dati, da allegare alla pratica.
 - **Nomenclatura**: l'albero delle sezioni, dei capitoli e delle voci, da sfogliare.
+- **Bolla** simulata, d'importazione o d'esportazione, con più articoli (anche con «Aggiungi alla bolla» dalla scheda del codice): valore in dogana, dazio, antidumping e compensativi, IVA, documenti della casella 44 e riepilogo; si salva nel profilo e si stampa come foglio «simulazione». Le regole sono più sotto, in *Bolla simulata*.
 - **Telefono e tablet**: le sezioni passano nella barra in basso, i pulsanti sono grandi per il dito e la pagina si adatta anche in orizzontale.
 - **Installa** (in alto, e nel Profilo): crea il collegamento sul desktop del computer o l'icona sulla schermata Home del telefono, e MAGIC HS si apre come un'app nella sua finestra. Con Chrome, Edge e i telefoni Android il tasto apre la finestra d'installazione del browser; su iPhone e iPad, Safari per Mac e Firefox mostra i passi da fare.
 - **Misure per paese**: dazi (anche preferenziali, antidumping e contingenti), condizioni, certificati e documenti del riquadro 44 e unità supplementari. Valgono per importazione ed esportazione.
@@ -84,6 +85,21 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
 
 *Gestione → Intelligenza artificiale* mostra classificazioni, richieste e token del mese (con la parte letta dalla cache) per tutti e per persona. La spesa esatta è nella fatturazione di Google Cloud.
 
+## Bolla simulata
+
+Serve a preparare e controllare una bolla prima di farla in AIDA. **Non è una dichiarazione** e non sostituisce AIDA. I calcoli sono in `taric/static/js/calcolo.js` e hanno prove automatiche (`tests/prova_calcolo.js`).
+
+- **Misure del giorno della bolla**: si usano quelle valide alla data prevista, per l'origine (o la destinazione) di ogni articolo. Le misure del commercio elettronico (dazio da 3 € e tassa di gestione) non toccano la bolla ordinaria e restano fuori.
+- **Cambio doganale**: per tutto un mese vale il cambio pubblicato dalla BCE il penultimo mercoledì del mese precedente; se quel giorno la BCE non lo pubblica, il più recente pubblicato prima (art. 146 del Reg. UE 2015/2447, art. 53 del Reg. UE 952/2013). È lo stesso dell'elenco mensile dell'Agenzia delle Dogane (*Cambi doganali*). Il server lo prende dalla BCE e lo tiene; il penultimo mercoledì lo prende solo dopo la pubblicazione, nel pomeriggio. Nella bolla e nel foglio stampato compaiono il tasso e il giorno. Per le valute che la BCE non pubblica l'Agenzia delle Dogane indica il cambio giornaliero della Banca d'Italia.
+- **Valore in dogana** di ogni articolo: prezzo in fattura, più trasporto e assicurazione fino al confine UE (se non sono già nel prezzo), più gli altri elementi da aggiungere, meno quelli da togliere, al cambio del mese. Trasporto e assicurazione si ripartiscono sugli articoli in base al valore o alla massa lorda, al centesimo: la somma delle quote è esattamente il totale. Il luogo d'introduzione è il porto di primo arrivo per il mare e l'ufficio doganale di entrata per strada e ferrovia (art. 137 del Reg. UE 2015/2447); per il trasporto aereo la quota da indicare è quella dell'allegato 23-01 dello stesso regolamento (art. 138).
+- **Dazio**: quello dei paesi terzi, oppure la riduzione scelta (preferenza con la prova dell'origine, sospensione, contingente se ancora disponibile). Una misura senza dazio scritto vale 0 %, come nel TARIC.
+- **Antidumping, compensativi e dazi addizionali**: si sceglie il codice addizionale del produttore; vale solo la misura che lo contiene. Il documento D008 (fattura commerciale conforme) e gli altri documenti che cambiano il dazio si spuntano nell'articolo.
+- **IVA**: sulla somma di valore in dogana, dazi e spese dal confine UE fino a destinazione indicate nel documento di trasporto (art. 69 del DPR 633/1972); aliquota scelta per articolo (22, 10, 5, 4 % o non dovuta).
+- **Arrotondamento**: al centesimo per articolo e per tributo (la metà per eccesso); un tributo dovuto sotto il centesimo vale comunque un centesimo (istruzioni dell'Agenzia delle Dogane per la casella 47); i totali sono le somme.
+- **Documenti (casella 44)**: per ogni controllo (CITES, prodotti della foca, gas fluorurati…) si vede quali documenti bastano; si spuntano quelli che si presentano.
+- **Il totale non compare** finché qualcosa non è certo: prezzo d'entrata o altre soglie, componenti agricole, codice del produttore non scelto, cambio non ancora fissato, divieti. Ogni blocco dice cosa manca o cosa verificare.
+- **Fuori dalla simulazione**: accise, misure nazionali, saldo dei contingenti, misure cambiate dopo la data dei dati TARIC, validità della prova dell'origine.
+
 ## Dati TARIC
 
 - **Fonte**: le estrazioni mensili della Commissione europea (DG TAXUD), gruppo CIRCABC «TARIC and Quota data and information». Il flusso GitHub *Dati TARIC* (`.github/workflows/dati.yml`) prepara ogni mese i dati con gli stessi controlli del sito (`strumenti/dati_mese.py`) e li pubblica nella pre-release `dati`; il server li scarica da lì. Altrimenti scarica l'estrazione dalla copia pubblicata dal progetto [taric-opendata](https://github.com/rousseauxy/taric-opendata) e la prepara lui.
@@ -108,7 +124,7 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
   - HSTS e cookie `Secure` su HTTPS;
   - nessuna pagina dentro la cornice di altri siti.
 - **Chiavi** (IA e copia esterna): solo nelle variabili del servizio su Render, mai nei browser né nel repository. La copia esterna è firmata (AWS Signature V4) e va solo su HTTPS.
-- **Dati di ciascuno**: i preferiti si vedono solo dal proprio account. Le classificazioni sono condivise con i colleghi nell'archivio aziendale (descrizione, codice, risultato e nome di chi l'ha fatta), a meno di togliere la spunta nel Profilo; quelle fatte prima di questa funzione restano personali. L'amministratore vede l'uso dell'IA e le parole cercate senza risultati, senza sapere chi le ha cercate.
+- **Dati di ciascuno**: i preferiti e le bolle simulate si vedono solo dal proprio account. Le classificazioni sono condivise con i colleghi nell'archivio aziendale (descrizione, codice, risultato e nome di chi l'ha fatta), a meno di togliere la spunta nel Profilo; quelle fatte prima di questa funzione restano personali. L'amministratore vede l'uso dell'IA e le parole cercate senza risultati, senza sapere chi le ha cercate.
 - **Archivi caricati** e dati TARIC scaricati: trattati come non fidati, con nomi e dimensioni controllati; i dati si installano solo se superano i controlli.
 - **Chi può modificare il repository** su GitHub può cambiare il sito: proteggi l'account con l'autenticazione a due fattori.
 - **Font**: locali (licenza SIL OFL), quindi nessun servizio di terzi caricato dalle pagine.
@@ -117,7 +133,8 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q tests                       # sito, IA, dati, backup, ricerca, archivio, copia esterna
+python -m pytest -q tests                       # sito, IA, dati, backup, ricerca, archivio, copia esterna, bolle
+node tests/prova_calcolo.js                     # calcoli della bolla e degli importi
 TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.py   # con un'estrazione vera (circa un minuto)
 ```
 
@@ -125,7 +142,7 @@ Il sito si avvia anche in locale: `TARIC_DATI=prova/dati MAGIC_HS_AMMINISTRATORI
 
 Prova nel browser (Playwright), la stessa che GitHub esegue a ogni modifica:
 1. prendi i dati di un mese dalla pagina `dati` (oppure preparali con `python strumenti/dati_mese.py AAAA-MM dati-AAAA-MM-01.zip`);
-2. `tests/sito_di_prova.sh dati-AAAA-MM-01.zip prova-sito` avvia i finti servizio IA, GitHub e archivio S3 (`tests/finto_claude.py`) e il sito sulla porta 8810, e aspetta i dati;
+2. `tests/sito_di_prova.sh dati-AAAA-MM-01.zip prova-sito` avvia i finti servizio IA, GitHub, BCE e archivio S3 (`tests/finto_claude.py`) e il sito sulla porta 8810, e aspetta i dati;
 3. lancia `node tests/e2e_sito.js http://localhost:8810 shots-sito`.
 
 Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.
