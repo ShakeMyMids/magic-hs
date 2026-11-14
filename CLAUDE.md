@@ -72,7 +72,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   importi e la stampa, stili `@media print` in fondo ad `app.css`; `misureBolla()` per la bolla), `js/calcolo.js` (calcoli
   senza pagina, `window.TARIC_CALCOLO` e modulo di node: dazi, condizioni con i documenti, regimi, codice addizionale del
   produttore per famiglia, ripartizione al centesimo, `calcolaImport`/`calcolaExport`; ogni cosa incerta diventa un blocco
-  con il motivo, mai una stima; si prova con `node tests/prova_calcolo.js`), `js/bolla.js` (sezione Bolla: elenco, intestazione,
+  con il motivo, mai una stima; i `conflitti` tra i campi (con il `campo` da evidenziare) non bloccano il totale; codici della
+  casella 36 con `codicePreferenza` e della 47 con `codiceTributo`; si prova con `node tests/prova_calcolo.js`), `js/bolla.js` (sezione Bolla: elenco, intestazione,
   articoli, tributi, documenti della casella 44, foglio `#bolla-stampa` con `body.stampa-bolla`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
   (Utenti, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Registro), `js/attiva-ia.js` (festa alla prima «Prova» riuscita

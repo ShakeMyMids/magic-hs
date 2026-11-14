@@ -218,7 +218,7 @@ async function accedi(p, email, password) {
   await capo.click('#tab-bolla');
   await capo.click('[data-b="nuova"][data-tipo="import"]');
   await capo.fill('[data-f="riferimento"]', 'Fattura di prova');
-  await capo.selectOption('[data-f="valuta"]', 'USD');
+  await capo.fill('[data-f="valuta"]', 'USD'); await capo.press('[data-f="valuta"]', 'Tab');
   await capo.waitForSelector('#b-cambio >> text=1 € = 1,0867 USD');
   await capo.fill('[data-a="0"][data-f="codice"]', '8712003090');
   await capo.selectOption('[data-a="0"][data-f="origine"]', 'CN');
@@ -234,6 +234,13 @@ async function accedi(p, email, password) {
   const bolla = (await capo.innerText('#b-esito')).replace(/\s+/g, ' ');
   ok(/10\.000,00 €/.test(bolla) && /Dazio 14 % 1\.400,00 €/.test(bolla) && /Antidumping \(B999\) 48,5 % 4\.850,00 €/.test(bolla) &&
     /IVA all'importazione 3\.575,00 €/.test(bolla) && /Totale tributi 9\.825,00 €/.test(bolla), 'bolla: valore in dogana, dazio, antidumping, IVA e totale');
+  // conflitto tra i campi: resa FOB senza il trasporto fino al confine UE; il campo del trasporto si colora
+  await capo.selectOption('[data-f="incoterm"]', 'FOB');
+  await capo.waitForSelector('#b-esito >> text=Conflitti tra i campi');
+  ok(await capo.isVisible('#b-esito >> text=Con FOB il trasporto fino al confine UE non è nel prezzo') &&
+    await capo.evaluate(() => document.querySelector('[data-f="nolo.importo"]').classList.contains('in-conflitto')), 'bolla: conflitto tra resa (FOB) e trasporto, con il campo evidenziato');
+  await capo.selectOption('[data-f="incoterm"]', '');
+  await capo.fill('[data-f="mittente"]', 'Fornitore di prova Ltd, Shenzhen');
   await capo.click('[data-b="salva"]'); await capo.waitForSelector('#b-msg >> text=Bolla salvata.');
   // stampa: solo il foglio della simulazione
   await capo.emulateMedia({ media: 'print' });
@@ -249,6 +256,18 @@ async function accedi(p, email, password) {
   await capo.click('[data-act="in-bolla"]');
   await capo.waitForSelector('[data-a="1"][data-f="codice"]');
   ok((await capo.inputValue('[data-a="1"][data-f="codice"]')) === '6403999610', 'bolla: articolo aggiunto dalla scheda del codice');
+  // il caso del codice 300: preferenza Vietnam (esente) con un dazio dell'8 % scritto a mano
+  await capo.selectOption('[data-a="1"][data-f="origine"]', 'VN');
+  await capo.fill('[data-a="1"][data-f="valore"]', '1.086,70'); await capo.fill('[data-a="1"][data-f="netto"]', '30');
+  await capo.waitForSelector('[data-a="1"][data-f="quantita"]'); await capo.fill('[data-a="1"][data-f="quantita"]', '40');
+  await capo.selectOption('[data-a="1"][data-f="regime"]', '142-VN-');
+  ok((await capo.textContent('[data-a="1"][data-f="regime"] option:checked')).startsWith('300 · '), 'bolla: la preferenza mostra il codice della casella 36 (300)');
+  await capo.click('.articolo[data-art="1"] summary:has-text("Correzioni a mano")');
+  await capo.fill('[data-a="1"][data-f="dazioManuale"]', '8');
+  await capo.waitForSelector('#b-esito >> text=Dazio: hai scritto 8 % (80,00 €), ma con il codice 300 nella casella 36 il TARIC dà');
+  ok(await capo.evaluate(() => document.querySelector('[data-a="1"][data-f="dazioManuale"]').classList.contains('in-conflitto')), 'bolla: codice 300 con un dazio a mano diverso dal TARIC segnalato come conflitto');
+  await capo.fill('[data-a="1"][data-f="dazioManuale"]', '');
+  await capo.waitForFunction(() => !document.querySelector('#b-esito .b-conflitti'));
   await capo.click('[data-b="salva"]'); await capo.waitForSelector('#b-msg >> text=Bolla salvata.');
   await capo.click('[data-b="chiudi"]');
   await capo.waitForSelector('#view-bolla >> text=Fattura di prova');
@@ -257,12 +276,16 @@ async function accedi(p, email, password) {
   await capo.click('[data-b="chiudi"]');
   // esportazione: niente dazi, valore statistico in euro e documenti
   await capo.click('[data-b="nuova"][data-tipo="export"]');
+  // dirham degli Emirati: la BCE non lo pubblica, il cambio si scrive a mano (1 € = 4 AED)
+  await capo.fill('[data-f="valuta"]', 'aed'); await capo.press('[data-f="valuta"]', 'Tab');
+  await capo.waitForSelector('[data-f="cambioManuale"]'); await capo.fill('[data-f="cambioManuale"]', '4');
   await capo.fill('[data-a="0"][data-f="codice"]', '8471300000');
-  await capo.selectOption('[data-a="0"][data-f="origine"]', 'US');
+  await capo.selectOption('[data-a="0"][data-f="origine"]', 'AE');
   await capo.fill('[data-a="0"][data-f="valore"]', '2500');
   await capo.waitForSelector('[data-a="0"][data-f="quantita"]'); await capo.fill('[data-a="0"][data-f="quantita"]', '4');
   await capo.waitForSelector('#b-esito >> text=Valore statistico totale');
-  ok(/2\.500,00 €/.test(await capo.textContent('#b-esito')), 'bolla d\'esportazione: valore statistico');
+  const esp = await capo.innerText('#b-esito');
+  ok(/625,00 €/.test(esp) && /Cambio di AED scritto a mano/.test(esp), 'bolla d\'esportazione: valore statistico con un cambio scritto a mano');
   await capo.click('[data-b="chiudi"]'); await capo.click('#tab-gestione');
 
   // password dimenticata: link preparato dall'amministratore

@@ -97,6 +97,20 @@ Serve a preparare e controllare una bolla prima di farla in AIDA. **Non è una d
 - **IVA**: sulla somma di valore in dogana, dazi e spese dal confine UE fino a destinazione indicate nel documento di trasporto (art. 69 del DPR 633/1972); aliquota scelta per articolo (22, 10, 5, 4 % o non dovuta).
 - **Arrotondamento**: al centesimo per articolo e per tributo (la metà per eccesso); un tributo dovuto sotto il centesimo vale comunque un centesimo (istruzioni dell'Agenzia delle Dogane per la casella 47); i totali sono le somme.
 - **Documenti (casella 44)**: per ogni controllo (CITES, prodotti della foca, gas fluorurati…) si vede quali documenti bastano; si spuntano quelli che si presentano.
+- **Codici**: per ogni articolo la bolla indica il codice della casella 36 (preferenza: 100 dazio paesi terzi, 110 sospensione, 120 contingente, 2xx SPG, 3xx altre preferenze come 300 e 320, 4xx unione doganale) e quello di ogni tributo della casella 47 (A00 dazio, A30/A35 antidumping, A40/A45 compensativi, B00 IVA), dall'allegato B del Reg. UE 2015/2447. Le varianti con certificato (x18, x25, x28, x50) non si ricavano dalle misure: quando un contingente chiede un certificato la bolla lo ricorda.
+- **Soggetti e resa**: esportatore o fornitore (casella 2), importatore o destinatario (casella 8), dichiarante (casella 14) e Incoterm con il luogo (casella 20); vanno sul foglio stampato.
+- **A mano, solo dove serve**: il cambio, per le valute che la BCE non pubblica (per le Dogane vale il cambio giornaliero della Banca d'Italia); l'aliquota del dazio e l'importo di antidumping e altri dazi, che sostituiscono il calcolo e risultano «inserito a mano». Al posto di un dazio non calcolabile (prezzo d'entrata) restano «non verificati».
+- **Conflitti tra i campi**: la bolla li elenca in alto e colora il campo, senza bloccare il totale. Per esempio:
+  - un dazio scritto a mano diverso da quello del TARIC per il codice della casella 36 (codice 300 con la preferenza a 0 % e dazio all'8 %);
+  - la resa e il trasporto (FOB senza trasporto fino al confine, CIF o DAP con il trasporto aggiunto);
+  - massa netta maggiore della lorda;
+  - origine o destinazione nell'Unione;
+  - IVA non dovuta senza il motivo;
+  - codici addizionali che non valgono più per codice, origine e data;
+  - una data della bolla precedente ai dati TARIC.
+
+  Ricorda anche quando una preferenza farebbe risparmiare o, al contrario, non cambia niente.
+- **Esportazione**: il valore statistico è quello al confine italiano: si aggiunge il trasporto fino al confine se non è nel prezzo, si toglie quello oltre il confine se è compreso.
 - **Il totale non compare** finché qualcosa non è certo: prezzo d'entrata o altre soglie, componenti agricole, codice del produttore non scelto, cambio non ancora fissato, divieti. Ogni blocco dice cosa manca o cosa verificare.
 - **Fuori dalla simulazione**: accise, misure nazionali, saldo dei contingenti, misure cambiate dopo la data dei dati TARIC, validità della prova dell'origine.
 
