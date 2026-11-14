@@ -670,6 +670,12 @@ html.con-finestra{overflow:hidden}
 .b-campi label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--secondario);min-width:0}
 .b-campi .largo{grid-column:span 2}
 .b-campi textarea.campo{resize:vertical;min-height:62px}
+/* campo data: Safari su iPhone gli dà una larghezza minima e un'altezza sue e centra il testo; qui segue gli altri campi */
+.campo[type="date"]{-webkit-appearance:none;appearance:none;display:block;width:100%;min-width:0;max-width:100%;
+  height:calc(1.3em + 22px);text-align:left}
+.campo[type="date"]::-webkit-date-and-time-value{text-align:left;margin:0}
+.campo[type="date"]::-webkit-datetime-edit{padding:0}
+#b-stato:empty{display:none}
 .campo.in-conflitto,select.campo.in-conflitto{border-color:var(--timbro);box-shadow:0 0 0 3px var(--timbro-tenue)}
 .b-conflitti{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:var(--timbro-tenue);color:var(--timbro)}
 .b-conflitti .et{display:flex;align-items:center;gap:8px;margin:0;font:600 13.5px var(--f)}
