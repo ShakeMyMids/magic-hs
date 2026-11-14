@@ -481,16 +481,19 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
   background:linear-gradient(180deg,var(--d-cielo) 0%,color-mix(in srgb,var(--d-cielo) 40%,var(--carta)) 72%,var(--carta) 100%)}
 /* due composizioni (js/disegni.js): larga, oppure compatta nei riquadri stretti; la scena intera, mai tagliata */
 .scena-svg{display:block;width:100%;height:auto}
+/* nitidezza: la scena è quasi sempre rimpicciolita di una quantità non intera; i bordi diritti (container, scafo,
+   banchina, binari, nervature) seguono i pixel invece di sfumare. Curve e diagonali restano smussate. */
+.scena-svg rect,.scena-svg line{shape-rendering:crispEdges}
 .scena-stretta{display:none}
 @container (max-width:640px){.scena-larga{display:none}.scena-stretta{display:block}}
 .accesso .scena{margin:-28px -28px 4px}
 @media (max-width:560px){.scena{margin:-16px -16px 0;border-radius:16px 16px 0 0}.accesso .scena{margin:-22px -18px 0}}
 .d-t{fill:var(--d-tratto)}
 .d-c1{fill:var(--d-cont-1)} .d-c2{fill:var(--d-cont-2)} .d-c3{fill:var(--d-cont-3)}
-.d-nervo{stroke:rgba(0,0,0,.16);stroke-width:1.3}
+.d-nervo{stroke:rgba(0,0,0,.2);stroke-width:1.3}
 .d-mozzo{fill:var(--carta)} .d-oblo{fill:var(--d-cielo)}
 .d-mare{fill:var(--d-mare)} .d-banchina{fill:var(--carta-2)}
-.d-onda{fill:none;stroke:var(--d-tratto);stroke-width:2;stroke-linecap:round;opacity:.3}
+.d-onda{fill:none;stroke:var(--d-tratto);stroke-width:2;stroke-linecap:round;opacity:.42}
 .d-nuvola{fill:var(--d-nuvola)}
 .d-scia{fill:none;stroke:var(--d-tratto);stroke-width:2;stroke-linecap:round;stroke-dasharray:2 9;opacity:.45}
 .d-gru path{fill:none;stroke:var(--d-tratto);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
@@ -506,14 +509,15 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .in-viaggio .s-nave{animation:dondola 2.6s ease-in-out infinite alternate}
 @keyframes viaggio{0%{transform:translateX(var(--da));opacity:0}12%{opacity:1}85%{opacity:1}100%{transform:translateX(var(--a));opacity:0}}
 @keyframes dondola{from{transform:translateY(0)}to{transform:translateY(2.5px)}}
-/* scena viva (prima pagina e accesso): nuvole e onde si muovono piano, la nave dondola, l'aereo plana; treno e camion
-   arrivano una volta all'apertura */
+/* scena viva (prima pagina e accesso): le nuvole si muovono piano; onde, nave e aereo si muovono qualche volta
+   all'apertura e poi si fermano nella posizione di partenza (numero pari di andate e ritorni): un disegno che si sposta
+   di frazioni di pixel ha i bordi sempre sfumati. Treno e camion arrivano una volta. */
 .vivo .d-nuvola-g{animation:nuvola 18s ease-in-out infinite alternate}
 .vivo .d-nuvola-g + .d-nuvola-g{animation-duration:24s;animation-direction:alternate-reverse}
-.vivo .d-onda{animation:onde 4s ease-in-out infinite alternate}
-.vivo .s-nave{animation:dondola 3.2s ease-in-out infinite alternate}
-.vivo .s-aereo{animation:plana 6s ease-in-out infinite alternate}
-.vivo .d-scia{animation:scia 1.8s linear infinite}
+.vivo .d-onda{animation:onde 4s ease-in-out 4 alternate}
+.vivo .s-nave{animation:dondola 3.2s ease-in-out 4 alternate}
+.vivo .s-aereo{animation:plana 6s ease-in-out 2 alternate}
+.vivo .d-scia{animation:scia 1.8s linear 6}
 .vivo .s-camion{animation:arriva 1.5s .25s var(--dolce) backwards}
 .vivo .s-treno{animation:arriva 1.7s .45s var(--dolce) backwards}
 @keyframes nuvola{to{transform:translateX(30px)}}
