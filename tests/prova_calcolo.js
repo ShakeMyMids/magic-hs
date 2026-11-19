@@ -165,7 +165,7 @@ prova('bolla: biciclette dalla Cina (antidumping B999) e scarpe dal Vietnam con 
   uguale(b.tributi.map(t => [t.tipo, t.importo]), [['dazio', 0]]);
   uguale([b.quotaInoltro, b.baseIva, b.iva], [66.67, 5250, 1155]);
   assert(b.avvertenze.indexOf('serve la prova dell\'origine preferenziale') >= 0);
-  uguale(r.totali, { valoreDogana: 15550, dazi: { dazio: 1451.33, antidumping: 5027.83 }, iva: 4890.42, totale: 11369.58 });
+  uguale(r.totali, { valoreDogana: 15550, dazi: { dazio: 1451.33, antidumping: 5027.83 }, iva: 4890.42, totale: 11369.58 , ivaNonPagata: {}, valoreStatistico: 15550 });
   // le misure di sole vendite a distanza (107, 800) non entrano
   assert(!a.tributi.some(t => t.misura.t === 107 || t.misura.t === 800));
   // documenti: la misura 724 chiede Y152 o Y986
@@ -186,7 +186,7 @@ prova('bolla: codice addizionale da scegliere e documento D008 del produttore', 
   r = K.calcolaImport(bolla([Object.assign({}, BICI_ART, { addizionali: ['B772'], documenti: ['D008'] })], { nolo: {}, assicurazione: {}, inoltro: {} }), ctx);
   // valore 10000,00 EUR: dazio 1400,00, antidumping 19,2 % = 1920,00, IVA 22 % di 13320,00 = 2930,40
   uguale(r.articoli[0].tributi.map(t => t.importo), [1400, 1920]);
-  uguale(r.totali, { valoreDogana: 10000, dazi: { dazio: 1400, antidumping: 1920 }, iva: 2930.4, totale: 6250.4 });
+  uguale(r.totali, { valoreDogana: 10000, dazi: { dazio: 1400, antidumping: 1920 }, iva: 2930.4, totale: 6250.4 , ivaNonPagata: {}, valoreStatistico: 10000 });
   r = K.calcolaImport(bolla([Object.assign({}, BICI_ART, { addizionali: ['B772'] })], { nolo: {}, assicurazione: {}, inoltro: {} }), ctx);
   uguale(r.articoli[0].tributi[1].importo, 4850);                       // senza D008: 48,5 %
   r = K.calcolaImport(bolla([Object.assign({}, BICI_ART, { addizionali: ['C329'] })], { nolo: {}, assicurazione: {}, inoltro: {} }), ctx);
@@ -338,6 +338,73 @@ prova('esportazione: valore statistico con il trasporto fino al confine e Incote
   uguale(r.conflitti.map(x => x.campo), ['oltre.importo']);
   r = K.calcolaExport(Object.assign({ paese: 'FR' }, base, { articoli: [{ codice: '8471300000', origine: 'FR', valore: '1', quantita: '1' }] }), ctxE);
   uguale(r.conflitti.map(x => [x.articolo, x.campo]), [[0, 'paese'], [1, 'origine']]);
+});
+
+/* ---------------------------------------------------------------- dati della dichiarazione (tracciato ADM H1 EUCDM 6.2) */
+const BICI_B999 = Object.assign({}, BICI_ART, { addizionali: ['B999'] });
+
+prova('IVA non pagata con dichiarazione d\'intento: B00 liquidata e 406 detratta (circolare ADM 22/2022)', () => {
+  // 10000,00 € di valore, dazio 1400, antidumping 4850, base IVA 16250, IVA 22 % = 3575
+  let r = K.calcolaImport(bolla([Object.assign({}, BICI_B999, { ivaNonPagata: '406', ivaMotivo: 'n. 2026/123 del 02/01/2026' })], SENZA_SPESE), ctx);
+  uguale([r.articoli[0].iva, r.articoli[0].ivaNonPagata], [3575, { codice: '406', importo: 3575 }]);
+  uguale([r.totali.iva, r.totali.ivaNonPagata, r.totali.totale], [3575, { 406: 3575 }, 6250]);
+  uguale(r.conflitti, []);
+  r = K.calcolaImport(bolla([Object.assign({}, BICI_B999, { ivaNonPagata: '406' })], SENZA_SPESE), ctx);
+  uguale(testi(r.conflitti), ['IVA non pagata con dichiarazione d\'intento (406): indica gli estremi della dichiarazione.']);
+  r = K.calcolaImport(bolla([Object.assign({}, BICI_B999, { ivaNonPagata: '407', iva: 0, ivaMotivo: 'oro' })], SENZA_SPESE), ctx);
+  uguale(r.conflitti.map(x => x.campo), ['iva']);
+});
+
+prova('valore statistico franco confine italiano e metodo di valutazione', () => {
+  // la merce entra nell'UE a Rotterdam: 100 € di trasporto fino al confine italiano vanno solo nel valore statistico
+  let r = K.calcolaImport(bolla([BICI_B999], Object.assign({}, SENZA_SPESE, { statSpese: { importo: '100', valuta: 'EUR' } })), ctx);
+  uguale([r.articoli[0].valoreDogana, r.articoli[0].valoreStatistico, r.totali.valoreStatistico], [10000, 10100, 10100]);
+  uguale(r.articoli[0].tributi[0].importo, 1400);                       // il dazio resta sul valore in dogana
+  uguale(r.metodo, '1');
+  r = K.calcolaImport(bolla([BICI_B999], Object.assign({ metodo: '2' }, SENZA_SPESE)), ctx);
+  assert(r.totali === null && /metodo di valutazione 2/.test(r.blocchi[0].testo));
+});
+
+prova('indicatori di valutazione: codice di quattro cifre e proventi senza l\'aggiunta AJ', () => {
+  let r = K.calcolaImport(bolla([BICI_B999], Object.assign({ indicatori: { collegati: true, proventi: true } }, SENZA_SPESE)), ctx);
+  uguale(r.indicatori, '1001');
+  uguale(r.conflitti.map(x => x.campo), ['indicatori.proventi']);
+  assert(r.avvisi.some(x => /collegati \(indicatore 1\)/.test(x.testo)));
+  r = K.calcolaImport(bolla([Object.assign({}, BICI_B999, { aggiunte: '100', codAggiunte: 'AJ' })], Object.assign({ indicatori: { proventi: true } }, SENZA_SPESE)), ctx);
+  uguale(r.conflitti, []);
+  uguale(r.articoli[0].prezzo, arrotondaUSD(11100));                     // l'aggiunta entra nel valore
+});
+function arrotondaUSD(usd) { return K.arrotonda(usd / 1.1); }
+
+prova('tasso di cambio del contratto: avviso e documento 26AO in testata (avviso ADM 29/07/2026)', () => {
+  let r = K.calcolaImport(bolla([BICI_B999], Object.assign({ fattura: 'FT 118/2026' }, SENZA_SPESE)), Object.assign({}, ctx, { cambi: { USD: { tasso: 1.1, contratto: true } } }));
+  uguale(r.documentiTestata, [{ codice: 'N380', numero: 'FT 118/2026' }, { codice: '26AO', numero: 'tasso di cambio del contratto' }]);
+  assert(r.avvisi.some(x => /26AO/.test(x.testo)));
+  r = K.calcolaImport(bolla([BICI_B999], Object.assign({ valuta: 'EUR', tassoContratto: '1,1' }, SENZA_SPESE)), Object.assign({}, ctx, { cambi: {} }));
+  uguale(r.conflitti.map(x => x.campo), ['tassoContratto']);
+});
+
+prova('dazi addizionali con il codice A00', () => {
+  const r = K.calcolaImport(bolla([{ codice: '0805102200', origine: 'MA', valore: '1100', netto: '900', iva: 4 }], SENZA_SPESE), ctx);
+  uguale(r.articoli[0].tributi.map(t => [t.tipo, t.codice]), [['dazio', 'A00'], ['dazio addizionale', 'A00']]);
+});
+
+prova('dati obbligatori per AIDA che mancano: elencati, senza bloccare il totale', () => {
+  let r = K.calcolaImport(bolla([BICI_B999], SENZA_SPESE), ctx);
+  assert(r.totali);
+  uguale(r.mancanti.map(x => x.campo), ['mittente', 'destinatario', 'dichiarante', 'incoterm', 'paeseSpedizione', 'provincia', 'modoTrasporto',
+    'container', 'natura', 'ubicazione', 'docTrasporto.numero', 'fattura', 'descrizione', 'colliTipo']);
+  const completa = Object.assign({}, SENZA_SPESE, { mittente: 'Fornitore Ltd', destinatario: 'Importatore Srl', dichiarante: 'Importatore Srl', incoterm: 'FOB',
+    paeseSpedizione: 'CN', provincia: 'MI', modoTrasporto: '1', container: '1', natura: '11', ubicazione: 'Porto di Genova', fattura: 'FT 1',
+    docTrasporto: { tipo: 'N705', numero: 'MSCU123' }, nolo: { importo: '500', valuta: 'USD' } });
+  r = K.calcolaImport(bolla([Object.assign({}, BICI_B999, { descrizione: 'Biciclette', colliTipo: 'CT', colliNumero: '100', colliMarchi: 'MHS 1-100' })], completa), ctx);
+  uguale(r.mancanti, []);
+  r = K.calcolaImport(bolla([Object.assign({}, BICI_B999, { aggiunte: '50' })], Object.assign({ rappresentante: 'Spedizioni Spa' }, SENZA_SPESE)), ctx);
+  assert(r.mancanti.some(x => x.campo === 'qualifica') && r.mancanti.some(x => x.campo === 'codAggiunte'));
+  // esportazione: ufficio di uscita e numerazione dell'allegato B (colonna B1)
+  const e = K.calcolaExport({ data: '2026-11-14', valuta: 'EUR', articoli: [{ codice: '8471300000', origine: 'US', valore: '1', quantita: '1' }] },
+    { misure: () => ({ righe: [M(109, '1011', 'NAR')], unitaSup: 'p/st' }), cambi: {} });
+  assert(e.mancanti.some(x => x.campo === 'uscita' && /DE 5\/12/.test(x.testo)) && !e.mancanti.some(x => x.campo === 'provincia'));
 });
 
 console.log(n + ' prove superate');

@@ -229,11 +229,22 @@ async function accedi(p, email, password) {
     'bolla: senza il codice del produttore il totale non c\'è e si dice perché');
   await capo.fill('[data-a="0"][data-f="quantita"]', '100');
   await capo.selectOption('[data-a="0"][data-addizionale]', 'B999');
-  await capo.waitForSelector('#b-esito >> text=Totale tributi');
+  await capo.waitForSelector('#b-esito >> text=Totale da pagare');
   // 10.867 USD = 10.000,00 €; dazio 14 % = 1.400,00; antidumping 48,5 % = 4.850,00; IVA 22 % di 16.250,00 = 3.575,00
   const bolla = (await capo.innerText('#b-esito')).replace(/\s+/g, ' ');
   ok(/10\.000,00 €/.test(bolla) && /Dazio 14 % 1\.400,00 €/.test(bolla) && /Antidumping \(B999\) 48,5 % 4\.850,00 €/.test(bolla) &&
-    /IVA all'importazione 3\.575,00 €/.test(bolla) && /Totale tributi 9\.825,00 €/.test(bolla), 'bolla: valore in dogana, dazio, antidumping, IVA e totale');
+    /B00 IVA all'importazione 3\.575,00 €/.test(bolla) && /Totale da pagare 9\.825,00 €/.test(bolla), 'bolla: valore in dogana, dazio, antidumping, IVA e totale');
+  // dati obbligatori della dichiarazione ancora vuoti (tracciato H1): non bloccano il totale e portano al campo
+  await capo.click('#b-esito .b-mancanti summary');
+  await capo.click('#b-esito .b-mancanti button:has-text("Importatore (DE 13 04)")');
+  ok(await capo.evaluate(() => document.activeElement === document.querySelector('[data-f="destinatario"]')), 'bolla: dati obbligatori mancanti elencati, con il clic si va al campo');
+  // IVA non pagata con dichiarazione d'intento: B00 liquidata e detratta con il codice 406
+  await capo.selectOption('[data-a="0"][data-f="ivaNonPagata"]', '406');
+  await capo.waitForSelector('#b-esito >> text=406 IVA non pagata');
+  ok(/Totale da pagare 6\.250,00 €/.test((await capo.innerText('#b-esito')).replace(/\s+/g, ' ')) &&
+    await capo.evaluate(() => document.querySelector('[data-a="0"][data-f="ivaMotivo"]').classList.contains('in-conflitto')), 'bolla: IVA 406 detratta dal totale, e manca il protocollo della dichiarazione');
+  await capo.selectOption('[data-a="0"][data-f="ivaNonPagata"]', '');
+  await capo.waitForFunction(() => !/406 IVA/.test(document.querySelector('#b-esito').innerText));
   // conflitto tra i campi: resa FOB senza il trasporto fino al confine UE; il campo del trasporto si colora
   await capo.selectOption('[data-f="incoterm"]', 'FOB');
   await capo.waitForSelector('#b-esito >> text=Conflitti tra i campi');
@@ -245,8 +256,9 @@ async function accedi(p, email, password) {
   // stampa: solo il foglio della simulazione
   await capo.emulateMedia({ media: 'print' });
   await capo.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
-  ok(await capo.isVisible('#bolla-stampa >> text=SIMULAZIONE') && await capo.isHidden('#b-esito') && await capo.isVisible('#bolla-stampa >> text=Totale tributi'),
-    'bolla: foglio stampabile con la scritta «simulazione»');
+  ok(await capo.isVisible('#bolla-stampa >> text=SIMULAZIONE') && await capo.isHidden('#b-esito') && await capo.isVisible('#bolla-stampa >> text=Totale da pagare') &&
+    await capo.isVisible('#bolla-stampa >> text=Tipo di dichiarazione IM A') && await capo.isVisible('#bolla-stampa >> text=Esportatore (DE 13 01 · c. 2)'),
+    'bolla: foglio stampabile con la scritta «simulazione» e i dati del tracciato H1');
   await capo.screenshot({ path: out + '/5b-bolla-stampa.png', fullPage: true });
   await capo.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   await capo.emulateMedia({ media: 'screen' });

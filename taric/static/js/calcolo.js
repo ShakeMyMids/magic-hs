@@ -167,9 +167,11 @@
     var prima = tipo === 106 || tipo === 147 ? '4' : PREFERENZIALI[tipo] ? (GRUPPI_SPG[origine] ? '2' : '3') : '1';
     return prima + caso;
   }
-  /* codici del tipo di tributo (D.E. 4/3): A00 dazio, A30/A35 antidumping definitivo/provvisorio, A40/A45 compensativo
-     definitivo/provvisorio, B00 IVA; i dazi addizionali (695, 696) non hanno un codice proprio nell'elenco */
-  var CODICE_TRIBUTO = { 551: 'A35', 552: 'A30', 553: 'A45', 554: 'A40' };
+  /* codici del tipo di tributo (DE 14 03 039 000): A00 dazio, A30/A35 antidumping definitivo/provvisorio, A40/A45
+     compensativo definitivo/provvisorio, B00 IVA (allegato B del Reg. 2015/2447); i dazi addizionali (695, 696) sono
+     «altri diritti fissati dalle istituzioni dell'Unione» e vanno con A00 (tabella dei tributi dell'Agenzia delle Dogane).
+     406 e 407: IVA non pagata, da detrarre (dichiarazione d'intento; oro e argento), circolare ADM 22/2022. */
+  var CODICE_TRIBUTO = { 551: 'A35', 552: 'A30', 553: 'A45', 554: 'A40', 695: 'A00', 696: 'A00' };
   function codiceTributo(t) {
     if (t.tipo === 'dazio') return 'A00';
     if (t.tipo === 'IVA') return 'B00';
@@ -332,6 +334,12 @@
     var soloNolo = conv(bolla.nolo, 'Trasporto fino al confine UE'), soloAss = conv(bolla.assicurazione, 'Assicurazione');
     var noloEur = soloNolo + soloAss;
     var inoltroEur = conv(bolla.inoltro, 'Spese di inoltro fino a destinazione');
+    // valore statistico (DE 99 06): valore in dogana più le spese fino al luogo di introduzione in Italia (franco confine
+    // italiano, istruzioni ADM della casella 46), se la merce è entrata nell'UE in un altro paese
+    var statEur = conv(bolla.statSpese, 'Spese fino al confine italiano');
+    if (!vuoto(bolla.metodo) && String(bolla.metodo) !== '1')
+      blocca(0, 'Con il metodo di valutazione ' + bolla.metodo + ' il valore in dogana non è il prezzo in fattura: la simulazione calcola solo il metodo 1 (valore di transazione, art. 70 del codice).');
+    controlliValutazione(bolla, arts, conflitto, avvisi);
     /* Incoterm (casella 20) e spese: il trasporto fino al confine UE va nel valore solo se non è già nel prezzo */
     var inc = INCOTERM[bolla.incoterm], conNolo = soloNolo > 0, conAss = soloAss > 0;
     if (inc === 'aggiungi' && !conNolo) conflitto(0, 'Con ' + bolla.incoterm + ' il trasporto fino al confine UE non è nel prezzo: va aggiunto, ma il campo è vuoto.', 'nolo.importo');
@@ -346,6 +354,7 @@
     if (bolla.ripartizione === 'massa' && pesi.some(function (p) { return isNaN(p); }) && (noloEur || inoltroEur)) blocca(0, 'Per ripartire le spese in base alla massa serve la massa lorda di ogni articolo.');
     var quoteNolo = ripartisci(noloEur, pesi.map(function (p) { return isNaN(p) ? 0 : p; }));
     var quoteInoltro = ripartisci(inoltroEur, pesi.map(function (p) { return isNaN(p) ? 0 : p; }));
+    var quoteStat = ripartisci(statEur, pesi.map(function (p) { return isNaN(p) ? 0 : p; }));
 
     var out = arts.map(function (a, k) {
       var n = k + 1, r = { n: n, codice: a.codice, tributi: [], avvertenze: [], blocchi: [], conflitti: [] };
@@ -472,12 +481,20 @@
       var dazi = somma(r.tributi.map(function (t) { return t.importo; }));
       r.dazi = dazi;
       var aliquota = a.iva === undefined || a.iva === '' ? 22 : Number(a.iva);
+      var nonPagata = a.ivaNonPagata === '406' || a.ivaNonPagata === '407' ? a.ivaNonPagata : '';
+      r.ivaNonPagata = null;
       if (r.valoreDogana !== null && dazioBase !== null) {
         r.baseIva = arrotonda(r.valoreDogana + dazi + r.quotaInoltro);
         r.iva = tributo(r.baseIva * aliquota / 100);
+        // l'IVA non pagata si liquida comunque (B00) e si detrae con il suo codice, in valore assoluto (circolare ADM 22/2022)
+        if (nonPagata && r.iva) r.ivaNonPagata = { codice: nonPagata, importo: r.iva };
       } else { r.baseIva = null; r.iva = null; }
       r.aliquota = aliquota;
-      if (aliquota === 0 && vuoto(a.ivaMotivo)) cf('IVA non dovuta: indica il motivo (per esempio dichiarazione d\'intento).', 'ivaMotivo');
+      r.quotaStat = quoteStat[k] || 0;
+      r.valoreStatistico = r.valoreDogana === null ? null : arrotonda(r.valoreDogana + r.quotaStat);
+      if (aliquota === 0 && vuoto(a.ivaMotivo)) cf('IVA esente o non imponibile: indica il motivo (l\'articolo del DPR 633/72).', 'ivaMotivo');
+      if (nonPagata && aliquota === 0) cf('Con il codice ' + nonPagata + ' l\'IVA si liquida con la sua aliquota (B00) e poi si detrae: scegli l\'aliquota.', 'iva');
+      if (nonPagata === '406' && vuoto(a.ivaMotivo)) cf('IVA non pagata con dichiarazione d\'intento (406): indica gli estremi della dichiarazione.', 'ivaMotivo');
       r.unitaSup = M.unitaSup || '';
       if (r.unitaSup && isNaN(numeroIt(a.quantita))) b('Indica la quantità in unità supplementari (' + r.unitaSup + ').');
       r.controlli = controlli(M.righe, giorno, docs);
@@ -495,10 +512,69 @@
       tot.valoreDogana = somma(out.map(function (r) { return r.valoreDogana; }));
       out.forEach(function (r) { r.tributi.forEach(function (t) { tot.dazi[t.tipo] = somma([tot.dazi[t.tipo] || 0, t.importo]); }); });
       tot.iva = somma(out.map(function (r) { return r.iva; }));
-      tot.totale = somma(Object.keys(tot.dazi).map(function (k) { return tot.dazi[k]; }).concat([tot.iva]));
+      tot.ivaNonPagata = {};
+      out.forEach(function (r) { if (r.ivaNonPagata) tot.ivaNonPagata[r.ivaNonPagata.codice] = somma([tot.ivaNonPagata[r.ivaNonPagata.codice] || 0, r.ivaNonPagata.importo]); });
+      var detratta = somma(Object.keys(tot.ivaNonPagata).map(function (k) { return tot.ivaNonPagata[k]; }));
+      tot.valoreStatistico = somma(out.map(function (r) { return r.valoreStatistico; }));
+      tot.totale = arrotonda(somma(Object.keys(tot.dazi).map(function (k) { return tot.dazi[k]; }).concat([tot.iva])) - detratta);
     }
     return { articoli: out, totali: completo ? tot : null, blocchi: blocchi, conflitti: conflitti, avvisi: avvisi,
-      noloEur: arrotonda(noloEur), inoltroEur: arrotonda(inoltroEur) };
+      mancanti: datiMancanti(bolla, arts, 'import'), documentiTestata: documentiTestata(bolla, ctx),
+      noloEur: arrotonda(noloEur), inoltroEur: arrotonda(inoltroEur), statEur: arrotonda(statEur),
+      indicatori: codiceIndicatori(bolla), metodo: vuoto(bolla.metodo) ? '1' : String(bolla.metodo) };
+  }
+
+  /* indicatori di valutazione (DE 14 07 000 000): quattro cifre 0/1 (allegato B del Reg. 2015/2447) */
+  function codiceIndicatori(bolla) {
+    var i = bolla.indicatori || {};
+    return [i.collegati, i.restrizioni, i.condizioni, i.proventi].map(function (x) { return x ? '1' : '0'; }).join('');
+  }
+  function controlliValutazione(bolla, arts, conflitto, avvisi) {
+    var i = bolla.indicatori || {};
+    if (i.collegati) avvisi.push({ articolo: 0, testo: 'Acquirente e venditore sono collegati (indicatore 1): il valore di transazione si accetta solo se il legame non ha influenzato il prezzo (art. 70, par. 3, del codice doganale).' });
+    if (i.restrizioni) avvisi.push({ articolo: 0, testo: 'Restrizioni per la cessione o l\'utilizzazione delle merci (indicatore 2, art. 70, par. 3, lett. a, del codice): verifica che il valore di transazione sia applicabile.' });
+    if (i.condizioni) avvisi.push({ articolo: 0, testo: 'Vendita o prezzo subordinati a condizioni o prestazioni (indicatore 3, art. 70, par. 3, lett. b, del codice): verifica che il loro valore si possa determinare.' });
+    if (i.proventi && !arts.some(function (a) { return a.codAggiunte === 'AJ' && numeroIt(a.aggiunte) > 0; }))
+      conflitto(0, 'Indicatore 4: una parte dei proventi di rivendita ritorna al venditore, ma nessun articolo ha l\'aggiunta AJ (proventi).', 'indicatori.proventi');
+  }
+  /* documenti di testata (DE 12 03): fattura N380 e, con un tasso di cambio del contratto, il 26AO (avviso ADM 29/07/2026) */
+  function documentiTestata(bolla, ctx) {
+    var out = [];
+    if (!vuoto(bolla.fattura)) out.push({ codice: 'N380', numero: String(bolla.fattura).trim() });
+    var cb = (ctx.cambi || {})[bolla.valuta || 'EUR'];
+    if (cb && cb.contratto) out.push({ codice: '26AO', numero: 'tasso di cambio del contratto' });
+    return out;
+  }
+  /* Dati obbligatori della dichiarazione che la simulazione non usa per i calcoli ma che servono in AIDA: tracciato ADM H1
+     EUCDM 6.2 (obbligatorietà «O») per l'importazione, allegato B del Reg. 2015/2446 (colonna B1, «A») per l'esportazione.
+     Non bloccano il totale. */
+  function datiMancanti(bolla, arts, flusso) {
+    var out = [], imp = flusso === 'import';
+    function m(n, testo, campo) { out.push({ articolo: n, testo: testo, campo: campo }); }
+    if (vuoto(bolla.mittente)) m(0, 'Esportatore (' + (imp ? 'DE 13 01' : 'DE 3/1') + ')', 'mittente');
+    if (imp && vuoto(bolla.destinatario)) m(0, 'Importatore (DE 13 04)', 'destinatario');
+    if (vuoto(bolla.dichiarante)) m(0, 'Dichiarante (' + (imp ? 'DE 13 05' : 'DE 3/17') + ')', 'dichiarante');
+    if (!vuoto(bolla.rappresentante) && vuoto(bolla.qualifica)) m(0, 'Qualifica del rappresentante, diretta o indiretta (' + (imp ? 'DE 13 06 030' : 'DE 3/21') + ')', 'qualifica');
+    if (imp && vuoto(bolla.incoterm)) m(0, 'Condizioni di consegna (DE 14 01)', 'incoterm');
+    if (imp && vuoto(bolla.paeseSpedizione)) m(0, 'Paese di spedizione (DE 16 06)', 'paeseSpedizione');
+    if (imp && vuoto(bolla.provincia)) m(0, 'Provincia di destinazione (DE 16 04)', 'provincia');
+    if (vuoto(bolla.modoTrasporto)) m(0, 'Modo di trasporto alla frontiera (' + (imp ? 'DE 19 03' : 'DE 7/4') + ')', 'modoTrasporto');
+    if (vuoto(bolla.container)) m(0, 'Container sì o no (' + (imp ? 'DE 19 01' : 'DE 7/2') + ')', 'container');
+    if (vuoto(bolla.natura)) m(0, 'Natura della transazione (' + (imp ? 'DE 99 05' : 'DE 8/5') + ')', 'natura');
+    if (vuoto(bolla.ubicazione)) m(0, 'Ubicazione delle merci (' + (imp ? 'DE 16 15' : 'DE 5/23') + ')', 'ubicazione');
+    if (imp && (vuoto(bolla.docTrasporto && bolla.docTrasporto.tipo) || vuoto(bolla.docTrasporto && bolla.docTrasporto.numero))) m(0, 'Documento di trasporto, tipo e numero (DE 12 05)', 'docTrasporto.numero');
+    if (vuoto(bolla.fattura)) m(0, 'Fattura commerciale N380 (' + (imp ? 'DE 12 03' : 'DE 2/3') + ')', 'fattura');
+    if (!imp && vuoto(bolla.uscita)) m(0, 'Ufficio di uscita (DE 5/12)', 'uscita');
+    arts.forEach(function (a, k) {
+      var n = k + 1;
+      if (vuoto(a.descrizione)) m(n, 'Descrizione delle merci (' + (imp ? 'DE 18 05' : 'DE 6/8') + ')', 'descrizione');
+      if (vuoto(a.netto)) m(n, 'Massa netta (' + (imp ? 'DE 18 01' : 'DE 6/1') + ')', 'netto');
+      if (vuoto(a.lordo)) m(n, 'Massa lorda (' + (imp ? 'DE 18 04' : 'DE 6/5') + ')', 'lordo');
+      if (vuoto(a.colliNumero) || vuoto(a.colliTipo) || vuoto(a.colliMarchi)) m(n, 'Colli: tipo, numero e marchi (' + (imp ? 'DE 18 06' : 'DE 6/9-6/11') + ')', vuoto(a.colliTipo) ? 'colliTipo' : vuoto(a.colliNumero) ? 'colliNumero' : 'colliMarchi');
+      if (imp && numeroIt(a.aggiunte) > 0 && vuoto(a.codAggiunte)) m(n, 'Codice dell\'aggiunta al valore (DE 14 04)', 'codAggiunte');
+      if (imp && numeroIt(a.deduzioni) > 0 && vuoto(a.codDeduzioni)) m(n, 'Codice della detrazione dal valore (DE 14 04)', 'codDeduzioni');
+    });
+    return out;
   }
 
   /* conflitti dell'intestazione comuni alle due bolle: data rispetto ai dati TARIC, cambio scritto a mano */
@@ -509,6 +585,8 @@
       else if (giorno - dati > 200) avvisi.push({ articolo: 0, testo: 'La data della bolla è oltre il mese dei dati TARIC (' + dataIt(dati) + '): fino ad allora le misure possono cambiare.' });
     }
     var v = bolla.valuta || 'EUR', cb = (ctx.cambi || {})[v];
+    if (cb && cb.contratto) avvisi.push({ articolo: 0, testo: 'Tasso di cambio fissato dal contratto (DE 14 09): in testata va dichiarato il documento 26AO e l\'accordo va conservato per i controlli (avviso ADM del 29/07/2026).' });
+    if (v === 'EUR' && !vuoto(bolla.tassoContratto)) conflitto(0, 'Con la fattura in euro il tasso di cambio del contratto non si applica.', 'tassoContratto');
     if (cb && cb.manuale) avvisi.push({ articolo: 0, testo: 'Cambio di ' + v + ' scritto a mano (la BCE non lo pubblica): per le Dogane vale il cambio giornaliero della Banca d\'Italia.' });
     if (flusso === 'export' && UE.indexOf(bolla.paese) >= 0) conflitto(0, 'La destinazione predefinita è un paese dell\'Unione: non è un\'esportazione.', 'paese');
   }
@@ -572,6 +650,7 @@
     });
     var completo = !blocchi.length;
     return { articoli: out, blocchi: blocchi, conflitti: conflitti, avvisi: avvisi, aggiuntaEur: arrotonda(aggEur), toltaEur: arrotonda(dedEur),
+      mancanti: datiMancanti(bolla, bolla.articoli || [], 'export'), documentiTestata: documentiTestata(bolla, ctx),
       totali: completo ? { valore: somma(out.map(function (r) { return r.valore; })) } : null };
   }
 
@@ -592,7 +671,8 @@
     opzioni: opzioni, num: num, isNum: isNum, numeroIt: numeroIt, cent: cent, arrotonda: arrotonda, tributo: tributo, somma: somma, ripartisci: ripartisci,
     calcolaDazio: calcolaDazio, unitaQuantita: unitaQuantita, parseCond: parseCond, valutaCondizioni: valutaCondizioni,
     regimi: regimi, gruppiAggiuntivi: gruppiAggiuntivi, famiglie: famiglie, controlli: controlli, calcolaImport: calcolaImport, calcolaExport: calcolaExport,
-    giornoCambio: giornoCambio, euroDa: euroDa, valida: valida, codicePreferenza: codicePreferenza, codiceTributo: codiceTributo, UE: UE, INCOTERM: INCOTERM
+    giornoCambio: giornoCambio, euroDa: euroDa, valida: valida, codicePreferenza: codicePreferenza, codiceTributo: codiceTributo, UE: UE, INCOTERM: INCOTERM,
+    codiceIndicatori: codiceIndicatori, datiMancanti: datiMancanti
   };
   if (typeof module === 'object' && module.exports) module.exports = API;
   else radice.TARIC_CALCOLO = API;
