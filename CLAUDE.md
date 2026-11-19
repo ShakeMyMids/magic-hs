@@ -91,8 +91,10 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   sui preferiti cambiati), `js/gestione.js`
   (Utenti, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Registro), `js/porto.js` (la scena si tocca:
   gruppi `.t-*` di `disegni.js` animati per la durata di una classe; tre tocchi sulla gru o «gioca» scritto fuori dai campi aprono
-  il gioco; «nave», «festa», «magic» e cinque tocchi sul logo; classi `natale` e `capodanno` su `<html>`; `[data-gioca]` nelle
-  pagine d'attesa), `js/gioco.js` (`T.gioco()`, «Carica la nave»: SVG con le variabili `--d-*`, record in `localStorage`
+  il gioco; «nave», «festa», «magic» e cinque tocchi sul logo; l'albero si scuote e fa cadere quello della stagione; `[data-gioca]`
+  nelle pagine d'attesa), `js/calendario.js` (`T.calendario(data)`: stagione per mesi interi e feste italiane, Pasqua calcolata;
+  `T.oggi` e le classi su `<html>`, prima di `disegni.js`, che disegna solo le decorazioni di oggi; colori `--d-*` e cielo
+  `--d-velo-*` della stagione in `app.css`; si prova con `node tests/prova_calendario.js`), `js/gioco.js` (`T.gioco()`, «Carica la nave»: SVG con le variabili `--d-*`, record in `localStorage`
   `magic-hs.gioco`), `T.vignetta()` di `disegni.js` per gli elenchi vuoti, codici recenti di `app.js` (`magic-hs.recenti`),
   `js/attiva-ia.js` (festa alla prima «Prova» riuscita
   dell'amministratore: `T.festaIA`, scena `T.festa()` di `disegni.js`, animazioni `.festa` in `app.css` con lo stato
@@ -119,6 +121,7 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 pip install -r requirements-dev.txt
 python -m pytest -q tests
 node tests/prova_calcolo.js
+node tests/prova_calendario.js
 ```
 
 `tests/test_sinonimi.py` controlla che ogni termine di `js/sinonimi.js` esista nel testo italiano della nomenclatura:

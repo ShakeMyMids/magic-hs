@@ -1,22 +1,16 @@
 /* MAGIC HS - il porto da toccare: piccole sorprese sopra la scena di js/disegni.js, in tutte le pagine che la mostrano.
    - Toccando i mezzi: la nave suona la sirena e sbuffa, la gru appoggia il container sulla nave, l'aereo fa un giro,
-     il camion parte e torna, il treno fa manovra, le nuvole piovono, dal mare si alza un gabbiano.
+     il camion parte e torna, il treno fa manovra, le nuvole piovono, dal mare si alza un gabbiano; l'albero si scuote e
+     dal cielo cade quello della stagione (petali, foglie, neve, coriandoli a Carnevale).
    - Tre tocchi veloci sulla gru aprono il gioco «Carica la nave» (js/gioco.js).
    - Parole scritte fuori dai campi: «gioca» apre il gioco, «nave» fa suonare le navi, «festa» accende i fuochi,
      «magic» fa salpare il logo; cinque tocchi sul logo fanno lo stesso.
-   - Stagioni: a dicembre (fino all'Epifania) l'abete e le luci sulla gru, a Capodanno i fuochi (classi natale e capodanno
-     su <html>, che app.css usa per mostrare le parti nascoste della scena).
+   - Stagioni e feste: js/calendario.js (classi su <html>) e js/disegni.js.
    Ogni gesto aggiunge una classe per la durata dell'animazione (in app.css) e poi la toglie: alla fine tutto è dov'era.
    Con «movimento ridotto» le animazioni durano un istante. */
 (function () {
   'use strict';
   var T = window.TARIC = window.TARIC || {};
-  var radice = document.documentElement;
-
-  // stagioni
-  var oggi = new Date(), mese = oggi.getMonth() + 1, giorno = oggi.getDate();
-  if (mese === 12 || (mese === 1 && giorno <= 6)) radice.classList.add('natale');
-  if (mese === 1 && giorno <= 2) radice.classList.add('capodanno');
 
   /* aggiunge la classe per la durata dell'animazione; un secondo tocco nel frattempo non la riavvia */
   function anima(el, classe, ms) {
@@ -35,14 +29,15 @@
 
   var tocchiGru = [];
   var GESTI = { 't-nave': ['suona', 1900], 't-gru': ['cala', 2900], 't-aereo': ['gira', 1900], 't-camion': ['parte', 3500],
-    't-treno': ['fischia', 2100], 't-nuvola': ['piove', 2400] };
+    't-treno': ['fischia', 2100], 't-nuvola': ['piove', 2400], 't-albero': ['scuote', 1300] };
   document.addEventListener('click', function (ev) {
     var svg = ev.target.closest ? ev.target.closest('.scena-svg') : null;
     if (svg) {
-      var t = ev.target.closest('.t-nave,.t-gru,.t-aereo,.t-camion,.t-treno,.t-nuvola');
+      var t = ev.target.closest('.t-nave,.t-gru,.t-aereo,.t-camion,.t-treno,.t-nuvola,.t-albero');
       if (t) {
         var nome = Object.keys(GESTI).filter(function (k) { return t.classList.contains(k); })[0];
         anima(t, GESTI[nome][0], GESTI[nome][1]);
+        if (nome === 't-albero') anima(svg, 'scrolla', 10000);
         if (nome === 't-gru') {
           var ora = Date.now();
           tocchiGru = tocchiGru.filter(function (x) { return ora - x < 1600; }).concat(ora);

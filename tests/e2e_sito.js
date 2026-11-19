@@ -86,6 +86,25 @@ async function accedi(p, email, password) {
   await capo.keyboard.press('Escape');
   ok(await capo.isHidden('.finestra.gioco'), 'gioco: si chiude con Esc');
 
+  // stagioni e feste (js/calendario.js): con la data del browser spostata, la scena della pagina d'accesso cambia
+  const cs = await b.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light' });
+  const ps = await cs.newPage(); attenzione(ps, 'stagioni');
+  await ps.clock.setFixedTime(new Date('2026-12-24T10:00:00'));
+  await ps.goto(B + '/accedi'); await ps.waitForSelector('.scena-stretta .t-albero');
+  ok(await ps.evaluate(() => ['inverno', 'natale'].every(c => document.documentElement.classList.contains(c)) &&
+    !!document.querySelector('.scena-stretta .t-albero .s-abete') && document.querySelectorAll('.scena-stretta .s-fiocchi .s-cade').length > 5 &&
+    !!document.querySelector('.scena-stretta .s-neve')), 'stagioni: la vigilia di Natale abete, neve e fiocchi');
+  await ps.click('.scena-stretta .t-albero', { force: true });
+  ok(await ps.evaluate(() => document.querySelector('.scena-stretta .t-albero').classList.contains('scuote') &&
+    document.querySelector('.scena-stretta').classList.contains('scrolla')), "stagioni: toccato, l'albero si scuote e nevica");
+  await ps.clock.setFixedTime(new Date('2027-06-02T10:00:00'));
+  await ps.reload(); await ps.waitForSelector('.scena-stretta .t-albero');
+  ok(await ps.evaluate(() => ['estate', 'festa-nazionale', 'repubblica'].every(c => document.documentElement.classList.contains(c)) &&
+    !document.documentElement.classList.contains('natale') && !document.querySelector('.s-abete') && !document.querySelector('.s-cade') &&
+    !!document.querySelector('.scena-stretta .s-pavese') && !!document.querySelector('.scena-stretta .s-frecce') && !!document.querySelector('.scena-stretta .s-sole')),
+    'stagioni: il 2 giugno sole, bandiere sulla gru e Frecce Tricolori');
+  await cs.close();
+
   // prima pagina: ricerca per parola o codice, senza IA
   ok(!(await capo.isChecked('#modo-ia')) && (await capo.textContent('#titolo-q')) === 'Che merce cerchi?' && (await capo.textContent('#vai')).trim() === 'Cerca',
     'prima pagina: ricerca per parole, IA spenta');

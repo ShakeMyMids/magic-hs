@@ -36,7 +36,12 @@ Per chi ha un minuto, senza togliere niente al lavoro:
 - **La scena si tocca**: la nave suona la sirena e sbuffa, la gru appoggia il container sulla nave, l'aereo fa un giro, il camion parte e torna, il treno fa manovra, le nuvole piovono e dal mare si alza un gabbiano. Ogni animazione finisce dov'era cominciata.
 - **«Carica la nave»**: tre tocchi veloci sulla gru (oppure «gioca» scritto fuori dai campi) aprono un piccolo gioco. Si sgancia il container sul posto indicato con un tocco, un clic, la barra spaziatrice o Invio; ogni dieci container la nave salpa. Il record resta nel dispositivo. Lo propongono anche le pagine d'attesa (account da approvare, dati in preparazione).
 - **Parole segrete**, scritte fuori dai campi: «nave» fa suonare le sirene, «festa» accende i fuochi, «magic» fa salpare il logo (come cinque tocchi sul logo).
-- **Stagioni**: a dicembre, fino all'Epifania, un abete sulla banchina e le luci sulla gru; a Capodanno i fuochi. Con il tema scuro, le stelle e le finestre accese.
+- **Stagioni e feste**: la scena segue il calendario (`js/calendario.js`).
+  - In primavera l'albero della banchina fiorisce e cadono petali; d'estate c'è il sole; d'autunno le foglie diventano gialle e rosse e cadono; d'inverno la neve sui container, sulla banchina e sui rami. Toccando l'albero, si scuote e cade quello della stagione.
+  - Natale (fino all'Epifania): l'abete e le luci sulla gru; Capodanno (dal 31 dicembre al 2 gennaio): i fuochi; Befana: la calza appesa alla gru.
+  - San Valentino: cuori dal fumaiolo; Carnevale (dal giovedì al martedì grasso): coriandoli e stelle filanti; 8 marzo: l'albero fiorisce di mimosa; Pasqua e Pasquetta: le uova sulla banchina.
+  - 25 aprile, 1° maggio e 2 giugno: bandierine sulla gru e il tricolore a poppa; il 2 giugno la scia dell'aereo è quella delle Frecce Tricolori. Ferragosto: l'ombrellone; Halloween: la zucca e i pipistrelli.
+  - Con il tema scuro, le stelle e le finestre accese (e niente sole).
 - **Codici recenti** sotto la casella di ricerca, quando è vuota (gli ultimi aperti su questo dispositivo), e vignette disegnate negli elenchi vuoti.
 
 Con «movimento ridotto» attivo nel sistema le animazioni durano un istante.
@@ -179,6 +184,7 @@ Serve a preparare e controllare una bolla prima di farla in AIDA. **Non è una d
 pip install -r requirements-dev.txt
 python -m pytest -q tests                       # sito, IA, dati, backup, ricerca, archivio, copia esterna, bolle
 node tests/prova_calcolo.js                     # calcoli della bolla e degli importi
+node tests/prova_calendario.js                  # stagioni e feste della scena (Pasqua, Carnevale, ...)
 TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.py   # con un'estrazione vera (circa un minuto)
 ```
 
