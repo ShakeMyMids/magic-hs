@@ -136,3 +136,49 @@ def test_file_dei_dati_con_a_capo_unix():
     testo = (RADICE / "taric" / "aggiorna.py").read_text(encoding="utf-8")
     aperture = re.findall(r'open\([^\n]*"w"[^\n]*\)', testo)
     assert aperture and all('newline="\\n"' in a for a in aperture), aperture
+
+
+def test_nomi_dei_file_dell_estrazione():
+    # sulla pagina della Commissione (CIRCABC) gli stessi file compaiono con nomi un po' diversi (verifica del 19/11/2026)
+    from taric.dati import nome_ufficiale
+    casi = {"Duties Import 01-99(1).xlsx": "Duties Import 01-99.xlsx", "Duties Export 01-99 .xlsx": "Duties Export 01-99.xlsx",
+            "BOX 44 codes of the SAD.xlsx": "Box 44 codes of the SAD.xlsx", "Declarable codes (1).xlsx": "Declarable codes.xlsx",
+            "Geographical areas descriptions(1).xlsx": "Geographical areas description.xlsx", "Measure Exclusions.xlsx": "Measure exclusions.xlsx",
+            "Nomenclature IT.xlsx": "Nomenclature IT.xlsx", "Nomenclature DE.XLSX": None, "Legal basis.xlsx": None,
+            "Taric measures 20261104.xlsx": None, "Duties Import 01-99.zip": None, "CCT EURO Exchange rates.xlsx": "CCT Exchange rates.xlsx"}
+    assert {k: nome_ufficiale(k) for k in casi} == casi
+
+
+def test_estrazione_con_lo_stesso_file_due_volte(tmp_path):
+    # vale il caricato per ultimo, con il nome che vuole aggiorna.py
+    from taric.dati import GestoreDati
+    archivio = tmp_path / "estrazione.zip"
+    with zipfile.ZipFile(archivio, "w") as z:
+        z.writestr(zipfile.ZipInfo("Duties Import 01-99(1).xlsx", date_time=(2026, 11, 3, 10, 0, 0)), b"nuovo")
+        z.writestr(zipfile.ZipInfo("Duties Import 01-99.xlsx", date_time=(2026, 11, 1, 8, 0, 0)), b"vecchio")
+        z.writestr(zipfile.ZipInfo("BOX 44 codes of the SAD.xlsx", date_time=(2026, 11, 1, 8, 0, 0)), b"box")
+        z.writestr(zipfile.ZipInfo("Legal basis.xlsx", date_time=(2026, 11, 1, 8, 0, 0)), b"altro")
+    (tmp_path / "x").mkdir()
+    GestoreDati._estrai(archivio, tmp_path / "x")
+    assert sorted(p.name for p in (tmp_path / "x").iterdir()) == ["Box 44 codes of the SAD.xlsx", "Duties Import 01-99.xlsx", "Legal basis.xlsx"]
+    assert (tmp_path / "x" / "Duties Import 01-99.xlsx").read_bytes() == b"nuovo"
+
+
+def test_intestazioni_delle_estrazioni_passate(tmp_path):
+    # fino a maggio 2026 la seconda «Abbrev.» di Geographical areas composition si chiamava «Abbrev._1»: va bene;
+    # qualsiasi altra differenza ferma ancora lo script
+    import openpyxl
+    sys.path.insert(0, str(RADICE / "taric"))
+    import aggiorna
+    attese = aggiorna.ATTESE["Geographical areas composition"]
+    for testa, va in ((attese, True), (attese[:6] + ["Abbrev._1"] + attese[7:], True), (attese[:6] + ["Abbrev._2"] + attese[7:], False)):
+        wb = openpyxl.Workbook()
+        wb.active.append(testa)
+        wb.active.append(["1013"] + [""] * (len(testa) - 1))
+        f = tmp_path / "g.xlsx"
+        wb.save(f)
+        if va:
+            assert aggiorna.righe(f, "Geographical areas composition") == [tuple(["1013"] + [None] * (len(testa) - 1))]
+        else:
+            with pytest.raises(SystemExit):
+                aggiorna.righe(f, "Geographical areas composition")

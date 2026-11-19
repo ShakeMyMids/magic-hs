@@ -316,11 +316,22 @@ async function accedi(p, email, password) {
   ok((await capo.inputValue('[data-a="0"][data-f="codice"]')) === '8712003090', 'bolla: salvata nel profilo e riaperta');
   // revisione di una bolla di una data passata: niente totale, in ogni articolo il TARIC dell'UE di quel giorno
   await capo.fill('[data-f="data"]', '2025-03-10');
-  await capo.waitForSelector('#b-esito >> text=precedente ai dati TARIC di MAGIC HS');
+  await capo.waitForSelector('#b-esito >> text=precedente ai dati TARIC del 01/11/2026');
   const hrefBolla = await capo.getAttribute('[data-opz="0"] a', 'href');
   ok(/SimDate=20250310/.test(hrefBolla) && /Taric=8712003090/.test(hrefBolla) && /Area=CN/.test(hrefBolla) && await capo.isHidden('#b-esito >> text=Totale da pagare'),
     'bolla con una data passata: niente totale e link al TARIC dell\'UE di quel giorno');
-  await capo.click('[data-b="chiudi"]');
+  ok(await capo.isVisible('#b-storico >> text=l\'archivio parte dal 01/09/2025'), 'bolla: prima dell\'archivio lo dice');
+  // con una data dell'archivio: si salva e si riapre con i dati di quel mese
+  await capo.fill('[data-f="data"]', '2025-10-15');
+  await capo.click('#b-storico button:has-text("Ricalcola con i dati TARIC del 01/09/2025")');
+  await capo.waitForSelector('#storico >> text=dati TARIC del 01/09/2025'); await pronta(capo);
+  await capo.waitForSelector('[data-a="1"][data-f="codice"]');
+  await capo.waitForFunction(() => !/non disponibili con i dati TARIC/.test(document.querySelector('#view-bolla').innerText) && document.querySelector('#b-esito .b-tab'));
+  ok(new URL(capo.url()).searchParams.get('dati') === '2025-09-01' && (await capo.inputValue('[data-f="data"]')) === '2025-10-15' &&
+    await capo.isHidden('#b-storico button') && await capo.isVisible('#b-esito >> text=8712 00 30 90'), 'bolla ricalcolata con i dati TARIC del mese passato');
+  await capo.goto(B + '/#bolla'); await pronta(capo);
+  await capo.waitForSelector('#view-bolla >> text=Fattura di prova');
+  if (await capo.isVisible('[data-b="chiudi"]')) await capo.click('[data-b="chiudi"]');
   // esportazione: niente dazi, valore statistico in euro e documenti
   await capo.click('[data-b="nuova"][data-tipo="export"]');
   // dirham degli Emirati: la BCE non lo pubblica, il cambio si scrive a mano (1 € = 4 AED)
@@ -333,7 +344,23 @@ async function accedi(p, email, password) {
   await capo.waitForSelector('#b-esito >> text=Valore statistico totale');
   const esp = await capo.innerText('#b-esito');
   ok(/625,00 €/.test(esp) && /Cambio di AED scritto a mano/.test(esp), 'bolla d\'esportazione: valore statistico con un cambio scritto a mano');
-  await capo.click('[data-b="chiudi"]'); await capo.click('#tab-gestione');
+  await capo.click('[data-b="chiudi"]');
+  // con i dati di un mese passato (il finto GitHub ha anche settembre 2025): la scheda li apre, e si torna ai dati in uso
+  await capo.goto(B + '/?codice=6403999610#classifica'); await pronta(capo);
+  await capo.waitForSelector('#esito .riep');
+  await capo.fill('#data-misure', '2025-10-15');
+  await capo.click('#esito a:has-text("Apri i dati TARIC del 01/09/2025")');
+  await capo.waitForSelector('#storico >> text=dati TARIC del 01/09/2025'); await pronta(capo);
+  await capo.waitForSelector('#esito .riep');
+  ok(new URL(capo.url()).searchParams.get('dati') === '2025-09-01' && (await capo.inputValue('#data-misure')) === '2025-10-15' &&
+    await capo.isVisible('#esito >> text=6403 99 96 10') && await capo.isVisible('#dato >> text=01/09/2025 · archivio'),
+    'mese passato: la scheda dello stesso codice con i dati di settembre 2025 al 15/10/2025');
+  ok(await capo.isVisible('#esito >> text=possono esserci misure nuove che qui mancano'), 'mese passato: oltre il mese dei dati lo dice');
+  await capo.screenshot({ path: out + '/5d-mese-passato.png' });
+  await capo.click('#esito a:has-text("Oggi")');
+  await capo.waitForSelector('#esito [data-act="in-bolla"]'); await pronta(capo);
+  ok(await capo.isHidden('#storico') && !new URL(capo.url()).searchParams.get('dati'), 'mese passato: «Oggi» torna ai dati in uso con lo stesso codice');
+  await capo.click('#tab-gestione');
 
   // password dimenticata: link preparato dall'amministratore
   await capo.click('button[data-v="utenti"]');

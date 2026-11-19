@@ -46,13 +46,19 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   Riclassifica) contano una volta; le traduzioni (`tipo`) no. Ogni fornitore ha il suo metodo che restituisce una
   `Risposta` (con `token_cache`); gli errori diventano codici comuni (`_errore_http`) con messaggi italiani in
   `app.MESSAGGI_IA`.
-- `taric/dati.py`: versioni dei dati TARIC, aggiornamento, pianificatore. Prima i dati pronti della pre-release `dati`
+- `taric/dati.py`: versioni dei dati TARIC, aggiornamento, pianificatore; mesi passati (`versione_per`, `pubblicati`,
+  `archiviata`, `contenuto`): scaricati dalla pagina «dati» quando servono (`/api/dati/storico?data=`), tenuti come zip in
+  `dati/taric/archivio` e serviti da lì; `/?dati=AAAA-MM-01` apre l'app con quei dati (`data-attivi` dice quelli in uso,
+  `STORICO` in `app.js`, con `giorno`, `codice`, `paese`, `flusso`, `bolla` nell'indirizzo); `nome_ufficiale` uniforma i nomi
+  dei file dell'estrazione (su CIRCABC con maiuscole, spazi, «(1)» e plurali diversi). `strumenti/dati_storici.py` prepara i
+  mesi passati da CIRCABC (da luglio 2025) e `.github/workflows/dati-storici.yml` li pubblica. Prima i dati pronti della pre-release `dati`
   su GitHub (`dati-AAAA-MM-01.zip`, impronta SHA-256, `estrai_dati`, controllo del mese), altrimenti download
   dell'estrazione dalla fonte, `aggiorna.py` e installazione. `strumenti/dati_mese.py` prepara l'archivio con gli stessi
   passaggi e `.github/workflows/dati.yml` lo pubblica ogni mese.
 - `taric/aggiorna.py`: genera i file di `data/` dai file Excel dell'estrazione e li controlla. Si esegue come
   sottoprocesso con `python -I`; l'installazione avviene solo con codice di uscita 0 e ultima riga `CONTROLLI OK`.
-  Non indebolire i controlli per far passare un mese: se cambia il formato dei file, adegua lo script.
+  Non indebolire i controlli per far passare un mese: se cambia il formato dei file, adegua lo script (le intestazioni
+  equivalenti già viste nelle estrazioni passate sono in `VARIANTI`).
 - `taric/backup.py`: backup del database (.zip con solo `taric.db`, API di backup di SQLite), uno al giorno dal
   pianificatore, e ripristino (`python -m taric ripristina FILE` dalla Shell di Render: a sito acceso, riconosciuto da
   `dati/server.pid`, il backup va in `ripristino-in-attesa.db` e si rimette al riavvio; `taric/__main__.py`:

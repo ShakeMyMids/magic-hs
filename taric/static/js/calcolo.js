@@ -581,7 +581,7 @@
   function controlliTestata(bolla, ctx, giorno, conflitto, avvisi, flusso) {
     var dati = parseInt(String(ctx.dataDati || '').replace(/-/g, ''), 10);
     if (giorno > 19000101 && dati > 19000101) {
-      if (giorno < dati) conflitto(0, 'La data della bolla è precedente ai dati TARIC di MAGIC HS, che partono dal ' + dataIt(dati) + ': le misure finite nel frattempo non ci sono. Verifica le misure di quel giorno sul TARIC dell\'UE (link in ogni articolo) o su AIDA.', 'data');
+      if (giorno < dati) conflitto(0, 'La data della bolla è precedente ai dati TARIC del ' + dataIt(dati) + ': le misure finite nel frattempo non ci sono. Ricalcola la bolla con i dati di quel mese, se ci sono, o verifica sul TARIC dell\'UE (link in ogni articolo).', 'data');
       else if (giorno - dati > 200) avvisi.push({ articolo: 0, testo: 'La data della bolla è oltre il mese dei dati TARIC (' + dataIt(dati) + '): fino ad allora le misure possono cambiare.' });
     }
     var v = bolla.valuta || 'EUR', cb = (ctx.cambi || {})[v];

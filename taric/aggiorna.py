@@ -40,6 +40,8 @@ ATTESE = {
     "Additional codes descriptions": ["Add code", "Language", "Description", "Start date", "Descr. start date", "End date"],
 }
 ATTESE["Nomenclature IT"] = ATTESE["Nomenclature EN"]
+# intestazioni equivalenti viste nelle estrazioni passate (fino a maggio 2026 la seconda «Abbrev.» si chiamava «Abbrev._1»)
+VARIANTI = {"Geographical areas composition": [ATTESE["Geographical areas composition"][:6] + ["Abbrev._1"] + ATTESE["Geographical areas composition"][7:]]}
 
 SUP = str.maketrans("0123456789-+n", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺ⁿ")
 SUB = str.maketrans("0123456789-+n", "₀₁₂₃₄₅₆₇₈₉₋₊ₙ")
@@ -53,7 +55,7 @@ def righe(path, nome=None):
     it = ws.iter_rows(values_only=True)
     testa = [str(h).strip() if h is not None else "" for h in next(it)]
     attese = ATTESE.get(nome)
-    if attese and testa[:len(attese)] != attese:
+    if attese and testa[:len(attese)] != attese and not any(testa[:len(v)] == v for v in VARIANTI.get(nome, [])):
         raise SystemExit(f"ERRORE: colonne cambiate nel file '{nome}'.\n  attese: {attese}\n  trovate: {testa}\nNON PUBBLICARE.")
     return [tuple(r) for r in it]
 

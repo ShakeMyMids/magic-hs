@@ -81,7 +81,13 @@
   }
 
   vista.bolla = {
-    mostra: function () { if (!st.elenco) caricaElenco(); disegna(); },
+    mostra: function () {
+      if (!st.elenco) caricaElenco();
+      // aperta da «Ricalcola con i dati TARIC del …»: /?dati=AAAA-MM-01&bolla=N#bolla
+      var q = (function () { try { return new URLSearchParams(location.search).get('bolla'); } catch (e) { return null; } })();
+      if (q && /^\d+$/.test(q) && !st.daIndirizzo) { st.daIndirizzo = true; apri(q); }
+      disegna();
+    },
     /* le misure di un capitolo sono arrivate: ricalcola */
     capitolo: function () { if (st.b && !el.hidden) { disegnaOpzioniTutte(); calcola(); } },
     /* «Aggiungi alla bolla» dalla scheda del codice */
@@ -149,11 +155,24 @@
   /* ------------------------------------------------------------------ misure e calcolo */
   // le estrazioni del TARIC hanno solo le misure valide dal loro giorno in poi: per una data precedente ai dati non si calcola
   function giornoDati() { return parseInt(String(app().dati().iso || '').replace(/-/g, ''), 10) || 0; }
+  /* data della bolla fuori dal mese dei dati aperti: il tasto per ricalcolarla con i dati TARIC di quel mese */
+  function fuoriMese() { return giorno() > 0 && (passato() || (app().storico() && giorno() >= app().giornoMeseDopo())); }
+  function disegnaStorico() {
+    var c = el.querySelector('#b-storico');
+    if (!c) return;
+    if (!fuoriMese()) { c.innerHTML = ''; return; }
+    var s = app().storicoPer(giorno(), disegnaStorico);
+    if (s.attesa) c.innerHTML = '<p class="nota">Cerco i dati TARIC di quel mese…</p>';
+    else if (s.errore) c.innerHTML = '<p class="nota">' + esc(s.errore) + '</p>';
+    else if (s.versione === app().dati().iso) c.innerHTML = '';
+    else c.innerHTML = '<div class="fila"><button class="btn pri" type="button" data-b="storico" data-v="' + esc(s.attuale ? '' : s.versione) + '">' + T.icona('calendario') +
+      (s.attuale ? 'Ricalcola con i dati TARIC in uso' : 'Ricalcola con i dati TARIC del ' + esc(dataIt(s.versione))) + '</button><span class="nota">La bolla si salva e si riapre con quei dati.</span></div>';
+  }
   function passato() { return giorno() > 0 && giorno() < giornoDati(); }
   function misure(a) {
     var paese = a.origine || dati().paese;
     if (!giorno()) return { errore: 'Indica la data della bolla.' };
-    if (passato()) return { passato: true, errore: 'Misure del ' + dataIt(dati().data) + ' non disponibili in MAGIC HS: i dati TARIC partono dal ' + app().dati().it + '.' };
+    if (passato()) return { passato: true, errore: 'Misure del ' + dataIt(dati().data) + ' non disponibili con i dati TARIC del ' + app().dati().it + '.' };
     return app().misureBolla(a.codice, imp() ? 'import' : 'export', paese, giorno());
   }
   function contesto() {
@@ -195,6 +214,7 @@
     h += '<div id="bolla-stampa" class="solo-stampa"></div>';
     el.innerHTML = allinea(h);
     disegnaCambio();
+    disegnaStorico();
     disegnaOpzioniTutte();
     calcola();
   }
@@ -245,7 +265,7 @@
       '<label>Valuta della fattura' + de('valuta') + '<input class="campo" data-f="valuta" list="b-valute" value="' + esc(d.valuta) + '" maxlength="3" autocomplete="off" autocapitalize="characters"></label>' +
       '<datalist id="b-valute">' + VALUTE.map(function (c) { return '<option value="' + c + '"></option>'; }).join('') + '</datalist>' +
       '<label>' + (imp() ? 'Origine predefinita' : 'Destinazione predefinita') + '<select class="campo" data-f="paese">' + opzioniPaesi(d.paese) + '</select></label></div>' +
-      '<div id="b-cambio"></div>';
+      '<div id="b-cambio"></div><div id="b-storico"></div>';
     if (imp() && (d.valuta !== 'EUR' || String(d.tassoContratto || '').trim()))
       h += '<div class="b-campi">' + campo('Tasso fissato dal contratto: 1 € = … ' + esc(d.valuta) + de('tassoContratto'), 'tassoContratto', d.tassoContratto,
         ' inputmode="decimal" autocomplete="off" placeholder="vuoto: cambio doganale del mese"') + '</div>';
@@ -720,7 +740,7 @@
       });
       disegna(); caricaCambio(); return;
     }
-    if (f === 'data') { disegnaOpzioniTutte(); caricaCambio(); return; }
+    if (f === 'data') { disegnaOpzioniTutte(); disegnaStorico(); caricaCambio(); return; }
     if (f === 'paese') { disegnaOpzioniTutte(); }
     calcola();
   });
@@ -748,6 +768,14 @@
     else if (azione === 'aggiungi') { dati().articoli.push(nuovoArticolo(dati().paese)); st.salvata = false; disegna(); var u = el.querySelectorAll('.articolo'); if (u.length) u[u.length - 1].querySelector('.codice').focus(); }
     else if (azione === 'togli') { dati().articoli.splice(+b.getAttribute('data-a'), 1); st.salvata = false; disegna(); }
     else if (azione === 'vai') vaiAlCampo(b.getAttribute('data-a'), b.getAttribute('data-c'));
+    else if (azione === 'storico') {
+      var v = b.getAttribute('data-v');
+      b.disabled = true;
+      salva().then(function () {
+        b.disabled = false;
+        if (st.b && st.b.id && st.salvata) location.href = app().urlStorico(v, 0, { bolla: st.b.id }) + '#bolla';
+      });
+    }
     else if (azione === 'riprova-cambio') { delete st.cambi[chiaveCambio()]; caricaCambio(); }
     else if (azione === 'togli-cod') {
       var ar = dati().articoli[+b.getAttribute('data-a')], cod = b.getAttribute('data-c');
