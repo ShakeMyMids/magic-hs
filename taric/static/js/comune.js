@@ -90,6 +90,8 @@
   };
 
   /* icone (js/icone.js): T.icona('cerca') restituisce l'SVG da inserire nel testo HTML */
+  // account con l'IA spenta (utenti.quota_ia = 0, per esempio quelli approvati in automatico per il dominio dell'email)
+  T.IA_NON_AUTORIZZATA = 'Chiedere autorizzazione all\'admin per l\'utilizzo dell\'IA';
   T.icona = function (nome, classe) {
     var d = (window.TARIC_ICONE || {})[nome];
     return d ? '<svg class="ico' + (classe ? ' ' + classe : '') + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + d + '</svg>' : '';

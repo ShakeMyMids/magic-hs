@@ -45,6 +45,7 @@ COOKIE = "magic_hs"
 RE_CODICE = re.compile(r"^\d{10}$")
 RE_STATICO = re.compile(r'(src|href)="/static/([A-Za-z0-9_./-]+)"')
 RE_AREA = re.compile(r"^[A-Z0-9]{2,4}$")
+RE_DOMINIO = re.compile(r"^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
 
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
        "connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
@@ -52,6 +53,7 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
 MESSAGGI_IA = {
     "not_configured": "La classificazione assistita non è attiva: manca la chiave del servizio di intelligenza artificiale.",
     "quota_esaurita": "Hai usato tutte le classificazioni con l'IA di questo mese: per averne altre chiedi all'amministratore.",
+    "ia_non_autorizzata": "Chiedere autorizzazione all'admin per l'utilizzo dell'IA.",
     "tetto_raggiunto": "Questo mese le classificazioni con l'IA sono finite per tutti: chiedi all'amministratore.",
     "rate_limited": "Troppe richieste in questo momento. Riprova tra un minuto.",
     "limite_giornaliero": "Il servizio di intelligenza artificiale ha raggiunto il suo limite di oggi (succede con i piani gratuiti). Riprova domani.",
@@ -178,6 +180,7 @@ class ImpostazioniSito(BaseModel):
     quota_predefinita: Optional[int] = Field(default=None, ge=0, le=100000)
     tetto_mese: Optional[int] = Field(default=None, ge=0, le=10_000_000)
     registrazione_aperta: Optional[bool] = None
+    domini_automatici: Optional[list[str]] = Field(default=None, max_length=20)
 
 
 def segreto_moduli(cartella: Path) -> bytes:
@@ -398,21 +401,28 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         if troppi:
             raise Errore(429, "Troppe registrazioni da questa rete: riprova più tardi.", "troppi_tentativi")
         amministratore = email in cfg.amministratori
+        dominio = email.rsplit("@", 1)[-1]
         with db.transazione() as c:
-            if not amministratore and not db.impostazioni(c)["registrazione_aperta"]:
+            imp = db.impostazioni(c)
+            if not amministratore and not imp["registrazione_aperta"]:
                 raise Errore(403, "Le registrazioni sono chiuse: chiedi all'amministratore di MAGIC HS.", "chiuse")
             if c.execute("SELECT 1 FROM utenti WHERE email = ?", (email,)).fetchone():
                 raise Errore(409, "Esiste già un account con questa email: accedi, oppure chiedi all'amministratore un link per la password.", "esiste")
+            # dominio approvato in automatico: entra subito, ma l'IA resta spenta finche' l'amministratore non la concede
+            automatico = not amministratore and dominio in (imp.get("domini_automatici") or [])
+            attivo = amministratore or automatico
             uid = c.execute(
-                "INSERT INTO utenti(email, nome, azienda, richiesta, hash_password, ruolo, stato, email_confermata, creato, aggiornato) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                "INSERT INTO utenti(email, nome, azienda, richiesta, hash_password, ruolo, stato, quota_ia, email_confermata, creato, aggiornato) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
                 (email, body.nome.strip(), body.azienda.strip(), body.richiesta.strip(), S.hash_password(body.password),
-                 "amministratore" if amministratore else "utente", "attivo" if amministratore else "in_attesa", iso(), iso())).lastrowid
-            db.evento(c, "registrazione", uid, uid, f"{email}" + (" (amministratore)" if amministratore else ""))
-            if amministratore:
+                 "amministratore" if amministratore else "utente", "attivo" if attivo else "in_attesa", 0 if automatico else None,
+                 iso(), iso())).lastrowid
+            db.evento(c, "registrazione", uid, uid, f"{email}" + (" (amministratore)" if amministratore else
+                                                                   f" (approvato in automatico per @{dominio}, IA spenta)" if automatico else ""))
+            if attivo:
                 gettone, durata = S.crea_sessione(c, uid, request.headers.get("user-agent", ""), ip(request))
-        resp = JSONResponse(json_ok(stato="attivo" if amministratore else "in_attesa"))
-        if amministratore:
+        resp = JSONResponse(json_ok(stato="attivo" if attivo else "in_attesa"))
+        if attivo:
             imposta_cookie(resp, request, gettone, durata)
         return resp
 
@@ -589,11 +599,22 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return {"attiva": ia.disponibile, "ia_nome": cfg.ia_nome, "fornitore": cfg.ia_fornitore,
                 "modelli": {"rapido": cfg.modello_rapido, "principale": cfg.modello} if ia.disponibile else None,
                 "uso": uso, "quota_predefinita": imp["quota_predefinita"], "tetto_mese": imp["tetto_mese"],
-                "registrazione_aperta": imp["registrazione_aperta"], "in_attesa": in_attesa}
+                "registrazione_aperta": imp["registrazione_aperta"], "domini_automatici": imp["domini_automatici"], "in_attesa": in_attesa}
 
     @app.put("/api/admin/impostazioni")
     def admin_impostazioni(body: ImpostazioniSito, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         valori = {k: getattr(body, k) for k in body.model_fields_set}
+        if "domini_automatici" in valori:
+            domini = []
+            for d in valori["domini_automatici"] or []:
+                d = str(d).strip().lower().lstrip("@")
+                if not d:
+                    continue
+                if not RE_DOMINIO.match(d):
+                    raise Errore(422, f"Dominio non valido: «{d[:60]}». Scrivi solo la parte dopo la @, per esempio dhl.com.", "dominio")
+                if d not in domini:
+                    domini.append(d)
+            valori["domini_automatici"] = domini
         with db.transazione() as c:
             db.salva_impostazioni(c, valori)
             db.evento(c, "impostazioni_sito", autore_id=a["id"], dettagli=json.dumps(valori, ensure_ascii=False))

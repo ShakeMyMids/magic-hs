@@ -189,6 +189,9 @@ IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
     # tetto di classificazioni al mese per tutti insieme (None = nessuno) e registrazioni aperte
     "tetto_mese": None,
     "registrazione_aperta": True,
+    # domini delle email approvate subito alla registrazione, con l'IA spenta (utenti.quota_ia = 0) finche'
+    # l'amministratore non la concede
+    "domini_automatici": ["dhl.com"],
 }
 
 

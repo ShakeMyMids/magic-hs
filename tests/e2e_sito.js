@@ -190,6 +190,25 @@ async function accedi(p, email, password) {
   ok(await luca.isVisible('text=2 di 2 classificazioni') && await luca.isVisible('text=luca@azienda.it'), 'profilo con account e uso');
   await luca.screenshot({ path: out + '/5-profilo.png', fullPage: true });
 
+  // email @dhl.com: account approvato subito, con l'IA spenta; i comandi dell'IA restano visibili ma bloccati, con il divieto
+  const cd = await b.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light' });
+  const anna = await cd.newPage(); attenzione(anna, 'anna');
+  await richiedi(anna, 'Anna Verdi', 'anna.verdi@dhl.com', 'Spedizioni-2026!', '');
+  await pronta(anna);
+  ok(await anna.isVisible('#interruttore-ia.con-divieto') && await anna.isDisabled('#modo-ia'), '@dhl.com: dentro subito, interruttore dell\'IA bloccato');
+  await anna.hover('#interruttore-ia');
+  ok(await anna.isVisible('#divieto-ia >> text=Chiedere autorizzazione all\'admin per l\'utilizzo dell\'IA') && await anna.isVisible('#divieto-ia svg') &&
+    (await anna.evaluate(() => getComputedStyle(document.querySelector('#interruttore-ia')).cursor)) === 'not-allowed', '@dhl.com: al passaggio del mouse divieto e messaggio');
+  await anna.screenshot({ path: out + '/5c-ia-bloccata.png' });
+  await anna.click('#interruttore-ia', { force: true });         // per il browser l'etichetta di un comando spento non si clicca
+  ok(!(await anna.isChecked('#modo-ia')) && !(await anna.evaluate(() => document.querySelector('.domanda').classList.contains('modo-ia'))), '@dhl.com: l\'IA non si accende');
+  await anna.mouse.move(5, 5);
+  await cerca(anna, 'biciclette');
+  ok(await anna.isVisible('#risultati [data-act="ia-bloccata"]') && await anna.isHidden('#risultati [data-act="chiedi"]'), '@dhl.com: «Classifica con l\'IA» bloccato anche nei risultati');
+  await anna.click('#tab-profilo'); await anna.waitForSelector('text=Il tuo account');
+  ok(await anna.isVisible('#view-profilo >> text=Chiedere autorizzazione all\'admin per l\'utilizzo dell\'IA'), '@dhl.com: nel profilo come avere l\'IA');
+  await cd.close();
+
   // archivio aziendale: quello che ha classificato Luca lo ritrova l'amministratore, e non lo rifà con l'IA
   await capo.click('#tab-classifica'); await capo.reload(); await pronta(capo);
   if (await capo.isChecked('#modo-ia')) await capo.click('#interruttore-ia');

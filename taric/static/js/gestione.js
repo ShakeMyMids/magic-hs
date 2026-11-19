@@ -157,7 +157,7 @@
         altri.map(function (x) {
           var s = STATI[x.stato] || [x.stato, ''], aperto = st.aperto === x.id;
           var r = '<tr' + (aperto ? ' class="evid"' : '') + '><td>' + persona(x) + '</td><td data-l="Stato"><span class="st ' + s[1] + '">' + s[0] + '</span></td>' +
-            '<td class="n" data-l="IA">' + numero(x.uso.classificazioni) + (x.limite !== null ? ' / ' + numero(x.limite) : '') + '</td>' +
+            '<td class="n" data-l="IA">' + (x.limite === 0 && !x.uso.classificazioni ? '<span class="nota">spenta</span>' : numero(x.uso.classificazioni) + (x.limite !== null ? ' / ' + numero(x.limite) : '')) + '</td>' +
             '<td data-l="Ultimo accesso">' + esc(x.ultimo_accesso ? T.dataOra(x.ultimo_accesso) : 'mai') + '</td>' +
             '<td class="azioni"><button class="btn sm" type="button" data-g="u-apri" data-id="' + x.id + '" aria-expanded="' + aperto + '">' + (aperto ? 'Chiudi' : 'Modifica') + '</button></td></tr>';
           if (aperto) r += '<tr class="dettaglio"><td colspan="5">' + dettaglioUtente(x, U.io) + '</td></tr>';
@@ -207,8 +207,9 @@
       '<label>Classificazioni con l\'IA al mese per persona<input class="campo" type="number" min="0" max="100000" name="quota_predefinita" value="' + (A.quota_predefinita === null ? '' : esc(A.quota_predefinita)) + '" placeholder="vuoto = senza limite"></label>' +
       '<label>Tetto al mese per tutti insieme<input class="campo" type="number" min="0" max="10000000" name="tetto_mese" value="' + (A.tetto_mese === null ? '' : esc(A.tetto_mese)) + '" placeholder="vuoto = nessun tetto"></label>' +
       '<label class="spunta"><input type="checkbox" name="registrazione_aperta"' + (A.registrazione_aperta ? ' checked' : '') + '> Si possono chiedere nuovi account</label>' +
+      '<label>Email approvate subito, con l\'IA spenta<input class="campo" name="domini_automatici" value="' + esc((A.domini_automatici || []).join(', ')) + '" placeholder="nessun dominio" autocomplete="off" autocapitalize="none" spellcheck="false"></label>' +
       '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('limiti') +
-      '<p class="nota">Gli amministratori non hanno limite personale; per una persona si cambia in Utenti › Modifica.</p></form></div></div>';
+      '<p class="nota">Domini dopo la @, separati da virgole. Per dare l\'IA a una persona: Utenti › Modifica, limite vuoto o un numero. Gli amministratori non hanno limite personale.</p></form></div></div>';
 
     var u = A.uso || {}, cache = u.token_in ? Math.round(u.token_cache / u.token_in * 100) : 0;
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('grafico') + 'Uso a ' + esc(meseIt(u.mese)) + '</div>' +
@@ -297,8 +298,9 @@
       }, function (e) { msg('ricerca', errore(e)); }).then(carica);
     } else if (g === 's-limiti') {
       var qp = String(d.get('quota_predefinita') || '').trim(), tm = String(d.get('tetto_mese') || '').trim();
+      var dom = String(d.get('domini_automatici') || '').split(/[\s,;]+/).map(function (x) { return x.trim(); }).filter(Boolean);
       T.api('PUT', '/api/admin/impostazioni', { quota_predefinita: qp === '' ? null : parseInt(qp, 10), tetto_mese: tm === '' ? null : parseInt(tm, 10),
-        registrazione_aperta: !!d.get('registrazione_aperta') }).then(function () { msg('limiti', 'Salvato.', true); return app().aggiornaIo(); },
+        registrazione_aperta: !!d.get('registrazione_aperta'), domini_automatici: dom }).then(function () { msg('limiti', 'Salvato.', true); return app().aggiornaIo(); },
         function (e) { msg('limiti', errore(e)); }).then(carica);
     } else return false;
     return true;

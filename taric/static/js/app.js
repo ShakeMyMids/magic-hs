@@ -251,6 +251,14 @@ function creaIA() {
     }
   };
 }
+/* il fumetto con il divieto sopra i comandi dell'IA bloccati */
+function bollaDivieto(id) { return '<span class="divieto" role="tooltip" id="' + id + '">' + T.icona('divieto') + esc(T.IA_NON_AUTORIZZATA) + '</span>'; }
+function mostraDivieto(el) {
+  if (!el) return;
+  el.classList.add('mostra');
+  clearTimeout(el._divieto);
+  el._divieto = setTimeout(function () { el.classList.remove('mostra'); }, 3500);
+}
 function impostaIA() {
   var u = state.utente, ia = u && u.ia, intanto = ' Intanto puoi cercare per parola o codice: spegni «Usa l\'IA».';
   sampleFn = null; state.ai = 'no';
@@ -258,12 +266,18 @@ function impostaIA() {
     (u && u.ruolo === 'amministratore' ? 'inserisci la chiave di Gemini nel servizio su Render (Gestione, «Intelligenza artificiale»).'
       : 'la deve attivare l\'amministratore di MAGIC HS.') + intanto;
   else if (ia.tetto) state.aiMotivo = 'Questo mese le classificazioni con l\'IA sono finite per tutti: chiedi all\'amministratore.' + intanto;
-  else if (ia.limite === 0) state.aiMotivo = 'La classificazione assistita non è abilitata per il tuo account: chiedi all\'amministratore.' + intanto;
+  else if (ia.limite === 0) state.aiMotivo = T.IA_NON_AUTORIZZATA + '.' + intanto;
   else if (ia.limite !== null && ia.usate >= ia.limite) state.aiMotivo = 'Hai usato tutte le ' + ia.limite + ' classificazioni con l\'IA di questo mese: ' +
     'per averne altre chiedi all\'amministratore.' + intanto;
   else { sampleFn = creaIA(); state.ai = 'ok'; state.aiMotivo = ''; }
-  $('#interruttore-ia').hidden = !(ia && ia.configurata);
-  if (!(ia && ia.configurata) && state.modo === 'ia') state.modo = 'parole';
+  // IA spenta per questo account: l'interruttore resta, bloccato, con il divieto e il messaggio quando ci si passa sopra
+  state.iaBloccata = !!(ia && ia.configurata && ia.limite === 0);
+  var sw = $('#interruttore-ia');
+  sw.hidden = !(ia && ia.configurata);
+  sw.classList.toggle('con-divieto', state.iaBloccata);
+  $('#modo-ia').disabled = state.iaBloccata;
+  $('#divieto-ia').hidden = !state.iaBloccata;
+  if ((!(ia && ia.configurata) || state.iaBloccata) && state.modo === 'ia') state.modo = 'parole';
   applicaModo();
 }
 
@@ -321,7 +335,10 @@ function renderRisultati() {
     el.innerHTML = res.length ? '<button class="link indietro" type="button" data-act="mostra-ris">' + T.icona('indietro') + 'Torna ai risultati per «' + esc(q) + '»</button>' : '';
     el.hidden = !res.length; return;
   }
-  var ponte = (testuale && state.utente && state.utente.ia && state.utente.ia.configurata) ? '<button class="btn sm" type="button" data-act="chiedi">' + T.icona('scintille') + 'Classifica con l\'IA</button>' : '';
+  var ponte = !(testuale && state.utente && state.utente.ia && state.utente.ia.configurata) ? ''
+    : state.iaBloccata ? '<span class="con-divieto"><button class="btn sm" type="button" data-act="ia-bloccata" aria-disabled="true" aria-describedby="divieto-ponte">' +
+      T.icona('scintille') + 'Classifica con l\'IA</button>' + bollaDivieto('divieto-ponte') + '</span>'
+    : '<button class="btn sm" type="button" data-act="chiedi">' + T.icona('scintille') + 'Classifica con l\'IA</button>';
   var arch = archivioPer(q);
   h = '<div class="box ris-box' + (nuovi ? ' arriva' : '') + '">';
   if (arch.length) h += '<div class="lab">' + T.icona('utenti') + 'Già classificate in azienda<span class="dx">' + arch.length + '</span></div><div class="albero">' +
@@ -1349,6 +1366,7 @@ document.addEventListener('click', function (ev) {
     });
   }
   else if (act === 'chiedi') { cambiaModo('ia'); classifica(false); }
+  else if (act === 'ia-bloccata') mostraDivieto(t.closest('.con-divieto'));
   else if (act === 'ancora-ia') { state.gia = null; state.forzaIA = true; classifica(false); }
   else if (act === 'riusa' && state.gia) {
     t.disabled = true;
@@ -1395,6 +1413,9 @@ $('#q').addEventListener('input', function () {
 });
 $('#q-x').addEventListener('click', function () { $('#q').value = ''; state.risChiusi = false; renderRisultati(); $('#q').focus(); });
 $('#modo-ia').addEventListener('change', function (ev) { cambiaModo(ev.target.checked ? 'ia' : 'parole'); $('#q').focus(); });
+$('#interruttore-ia').addEventListener('click', function (ev) {              // al tocco, dove non c'è il passaggio del mouse
+  if (state.iaBloccata) { ev.preventDefault(); mostraDivieto(ev.currentTarget); }
+});
 document.addEventListener('keydown', function (ev) {
   if (ev.key === 'Enter' && ev.target && ev.target.id === 'extra') { ev.preventDefault(); var b = document.querySelector('[data-act="riclassifica"]'); if (b) b.click(); }
 });

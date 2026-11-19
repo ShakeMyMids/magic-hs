@@ -228,6 +228,21 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 .interruttore input:checked + .pista::after{transform:translateX(18px)}
 .interruttore input:focus-visible + .pista{outline:2px solid var(--accento);outline-offset:3px}
 .interruttore span:last-child{display:inline-flex;align-items:center;gap:6px}
+/* comandi dell'IA per un account con l'IA spenta: cursore di divieto e fumetto con il messaggio (al passaggio del mouse,
+   al tocco o con la tastiera); il fumetto sta sopra la pagina e non sposta niente */
+.con-divieto{position:relative;display:inline-flex}
+.interruttore.con-divieto,.con-divieto .btn[aria-disabled="true"]{cursor:not-allowed}
+.interruttore.con-divieto .pista,.interruttore.con-divieto span:last-child,.con-divieto .btn[aria-disabled="true"]{opacity:.5}
+.con-divieto .btn[aria-disabled="true"]:hover{transform:none;box-shadow:none}
+.divieto{position:absolute;z-index:40;right:0;bottom:calc(100% + 10px);display:none;align-items:center;gap:8px;width:max-content;
+  max-width:min(320px,calc(100vw - 32px));padding:9px 12px;border-radius:10px;background:var(--inchiostro);color:var(--carta);
+  font:600 13.5px/1.35 var(--f);text-align:left;white-space:normal;box-shadow:var(--ombra-alta);pointer-events:none}
+.divieto::after{content:"";position:absolute;right:18px;top:100%;border:6px solid transparent;border-top-color:var(--inchiostro)}
+.divieto .ico{flex:none;width:20px;height:20px;color:var(--d-cont-1)}
+@media (hover:hover){.con-divieto:hover .divieto{display:inline-flex}}
+.con-divieto.mostra .divieto,.con-divieto:focus-within .divieto{display:inline-flex}
+.divieto-nota{display:flex;align-items:center;gap:8px}
+.divieto-nota .ico{flex:none;color:var(--timbro)}
 .interruttore .ico{width:17px;height:17px}
 .interruttore input:checked ~ span:last-child{color:var(--accento-forte)}
 /* risultati della ricerca per parola o codice, sotto la casella */
