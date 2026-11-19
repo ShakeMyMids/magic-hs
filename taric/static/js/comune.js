@@ -133,6 +133,13 @@
     document.dispatchEvent(new CustomEvent('taric:tema', { detail: t }));
   };
   try { T.tema(localStorage.getItem('taric2.tema') || 'auto'); } catch (e) { T.tema('auto'); }
+  /* puntatore del mouse a forma di aereo (app.css): si spegne dal profilo, su questo dispositivo */
+  T.puntatoreAereo = function (acceso) {
+    document.documentElement.classList.toggle('senza-aereo', !acceso);
+    try { if (acceso) localStorage.removeItem('magic-hs.aereo'); else localStorage.setItem('magic-hs.aereo', 'no'); } catch (e) { /* niente archivio */ }
+  };
+  T.conMouse = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+  try { if (localStorage.getItem('magic-hs.aereo') === 'no') document.documentElement.classList.add('senza-aereo'); } catch (e) { /* niente archivio */ }
   if (window.matchMedia) {
     var mq = window.matchMedia('(prefers-color-scheme: dark)');
     if (mq.addEventListener) mq.addEventListener('change', coloreBarra);

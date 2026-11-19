@@ -46,6 +46,7 @@ Per chi ha un minuto, senza togliere niente al lavoro:
   - San Valentino: cuori dal fumaiolo; Carnevale (dal giovedì al martedì grasso): coriandoli e stelle filanti; 8 marzo: l'albero fiorisce di mimosa; Pasqua e Pasquetta: le uova sulla banchina.
   - 25 aprile, 1° maggio e 2 giugno: bandierine sulla gru e il tricolore a poppa; il 2 giugno la scia dell'aereo è quella delle Frecce Tricolori. Ferragosto: l'ombrellone; Halloween: la zucca e i pipistrelli.
   - Con il tema scuro, le stelle e le finestre accese (e niente sole).
+- **Puntatore a forma di aereo** con il mouse: blu marina, arancio sopra collegamenti e pulsanti; la punta è il punto che clicca. Si spegne dal Profilo su un dispositivo; non compare con il contrasto elevato o i colori forzati del sistema.
 - **Codici recenti** sotto la casella di ricerca, quando è vuota (gli ultimi aperti su questo dispositivo), e vignette disegnate negli elenchi vuoti.
 
 Con «movimento ridotto» attivo nel sistema le animazioni durano un istante.
