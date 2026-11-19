@@ -62,6 +62,8 @@
       selettoreProva() +
       '</div><label class="spunta"><input type="checkbox" data-p="pref" name="condividi"' + (p.condividi !== false ? ' checked' : '') + '> Condividi le mie classificazioni con i colleghi: le ritrovano nella ricerca e non le rifanno con l\'IA</label>' +
       '<label class="spunta"><input type="checkbox" data-p="stagioni"' + (T.oggi && T.oggi.spento ? '' : ' checked') + '> Colori e decorazioni delle stagioni e delle feste (su questo dispositivo)</label>' +
+      (T.conMouse ? '<label class="spunta"><input type="checkbox" data-p="aereo"' + (document.documentElement.classList.contains('senza-aereo') ? '' : ' checked') +
+        '> Puntatore del mouse a forma di aereo (su questo dispositivo)</label>' : '') +
       '</div></div></div>';
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Storico delle classificazioni<span class="dx">' + st.totale + ' salvate</span></div>';
@@ -211,6 +213,7 @@
     if (ev.target.getAttribute('data-p') === 'importa') { importa(ev.target); return; }
     if (ev.target.getAttribute('data-p') === 'stagioni' && T.stagioni) { T.stagioni(ev.target.checked); return; }
     if (ev.target.getAttribute('data-p') === 'prova' && T.provaGiorno) { T.provaGiorno(ev.target.value); return; }
+    if (ev.target.getAttribute('data-p') === 'aereo') { T.puntatoreAereo(ev.target.checked); T.avviso('Preferenza salvata.'); return; }
     if (ev.target.getAttribute('data-p') !== 'pref') return;
     var io = u(), p = { paese: io.preferenze.paese, flusso: io.preferenze.flusso, tema: io.preferenze.tema, condividi: io.preferenze.condividi !== false };
     p[ev.target.name] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value;

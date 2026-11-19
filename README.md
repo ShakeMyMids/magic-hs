@@ -4,8 +4,6 @@ Sito per cercare le voci doganali in modo più rapido di AIDA, ad uso interno de
 
 Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'amministratore** (le email @dhl.com sono approvate subito, con l'IA spenta). L'intelligenza artificiale usa **una sola chiave a pagamento**, inserita dall'amministratore su Render e mai visibile ai browser, con un limite mensile di classificazioni per persona. I dati TARIC del mese arrivano da soli.
 
-> Strumento non ufficiale e senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.
-
 ## Che cosa fa
 
 - **Classifica** (prima pagina): si cerca per parola o per codice nella nomenclatura, senza intelligenza artificiale; i risultati compaiono mentre scrivi e «Usa» apre la scheda del codice. In cima vengono le voci che contengono le parole così come sono scritte, poi quelle con le sole radici o con un sinonimo. Le parole d'uso comune trovano anche i termini della nomenclatura (per esempio «scarpe» le «calzature», «divano» i «mobili per sedersi», «router» gli apparecchi di routing): l'elenco è in `taric/static/js/sinonimi.js`, e l'amministratore ne aggiunge altri da *Gestione → Ricerca*. Con l'interruttore **Usa l'IA** si descrive invece la merce: l'IA individua le voci candidate e sceglie il codice confrontandolo con il testo ufficiale della nomenclatura, che è in italiano; le domande affinano la scelta. Ogni dispositivo ricorda la scelta dell'interruttore.
@@ -46,6 +44,7 @@ Per chi ha un minuto, senza togliere niente al lavoro:
   - San Valentino: cuori dal fumaiolo; Carnevale (dal giovedì al martedì grasso): coriandoli e stelle filanti; 8 marzo: l'albero fiorisce di mimosa; Pasqua e Pasquetta: le uova sulla banchina.
   - 25 aprile, 1° maggio e 2 giugno: bandierine sulla gru e il tricolore a poppa; il 2 giugno la scia dell'aereo è quella delle Frecce Tricolori. Ferragosto: l'ombrellone; Halloween: la zucca e i pipistrelli.
   - Con il tema scuro, le stelle e le finestre accese (e niente sole).
+- **Puntatore a forma di aereo** con il mouse: blu marina, arancio sopra collegamenti e pulsanti; la punta è il punto che clicca. Si spegne dal Profilo su un dispositivo; non compare con il contrasto elevato o i colori forzati del sistema.
 - **Codici recenti** sotto la casella di ricerca, quando è vuota (gli ultimi aperti su questo dispositivo), e vignette disegnate negli elenchi vuoti.
 
 Con «movimento ridotto» attivo nel sistema le animazioni durano un istante.
@@ -119,7 +118,7 @@ Ogni estrazione mensile del TARIC (Commissione europea, DG TAXUD) contiene solo 
 
 ## Bolla simulata
 
-Serve a preparare e controllare una bolla prima di farla in AIDA. **Non è una dichiarazione** e non sostituisce AIDA. I calcoli sono in `taric/static/js/calcolo.js` e hanno prove automatiche (`tests/prova_calcolo.js`).
+Serve a preparare e controllare una bolla prima di farla in AIDA. I calcoli sono in `taric/static/js/calcolo.js` e hanno prove automatiche (`tests/prova_calcolo.js`).
 
 - **Dati della dichiarazione**: ogni campo porta il suo riferimento, il dato (DE) e la casella del vecchio DAU. Per l'importazione sono quelli del tracciato H1 dell'Agenzia delle Dogane nella versione EUCDM 6.2, obbligatoria dal 13 luglio 2026 (allegato B dei Reg. UE 2015/2446 e 2015/2447, come modificati dai Reg. 2021/234 e 2021/235); per l'esportazione quelli della colonna B1 dell'allegato B del Reg. 2015/2446. I codici delle liste (natura della transazione, modo di trasporto, imballaggi, aggiunte e detrazioni, metodo di valutazione, rappresentanza) sono in `taric/static/js/codici-dogana.js`, dalle tabelle dei codici dell'Agenzia delle Dogane.
 - **Dati obbligatori da completare**: i dati che la dichiarazione richiede ma che non cambiano i tributi (soggetti, natura della transazione, modo di trasporto, container, ubicazione delle merci, documento di trasporto, fattura N380, provincia e paese di spedizione, colli con tipo, numero e marchi, descrizione, masse, codici di aggiunte e detrazioni; all'esportazione l'ufficio di uscita) sono elencati sotto il riepilogo; con un clic si va al campo. Non bloccano il totale.

@@ -126,6 +126,14 @@ async function accedi(p, email, password) {
   await Promise.all([capo.waitForEvent('load'), capo.check('[data-p="stagioni"]')]);
   await capo.waitForSelector('[data-p="prova"]');
   ok(await temaDi(capo) === oggi, 'stagioni: riaccese');
+  // puntatore del mouse a forma di aereo (app.css), blu e arancio sopra ciò che si tocca; si spegne dal profilo
+  const cursori = () => capo.evaluate(() => ['html', '.btn.pri:not([disabled])', 'input.campo'].map((s) => getComputedStyle(document.querySelector(s)).cursor));
+  let c = await cursori();
+  ok(c[0].startsWith('url("data:image/svg+xml') && c[1].startsWith('url("data:image/svg+xml') && c[0] !== c[1] && c[2] === 'text', 'puntatore: l\'aereo con il mouse, il cursore di testo nei campi');
+  await capo.uncheck('[data-p="aereo"]'); c = await cursori();
+  ok(c[0] === 'auto' && c[1] === 'pointer' && await capo.evaluate(() => localStorage.getItem('magic-hs.aereo') === 'no'), 'puntatore: spento dal profilo');
+  await capo.check('[data-p="aereo"]');
+  ok((await cursori())[0].startsWith('url('), 'puntatore: riacceso');
   await capo.click('#tab-classifica'); await pronta(capo);
 
   // prima pagina: ricerca per parola o codice, senza IA

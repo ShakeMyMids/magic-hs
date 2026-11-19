@@ -1634,7 +1634,7 @@ var chiusiPrimaStampa = [];
 window.addEventListener('beforeprint', function () {
   var sel = state.sel, s = $('#stampa-testa');
   if (s) s.textContent = 'MAGIC HS · ' + (sel ? 'codice ' + grp(sel.code) + ' · ' : '') + (state.country ? (state.flow === 'export' ? 'destinazione ' : 'origine ') + nomeArea(state.country) + ' · ' : '') +
-    (state.dataMisure ? 'misure al ' + dataIt(state.dataMisure) + ' · ' : '') + 'dati TARIC al ' + DATA_IT + ' · stampata il ' + dataIt(oggiNum()) + ' · strumento non ufficiale: verifica su AIDA o sul TARIC dell\'UE';
+    (state.dataMisure ? 'misure al ' + dataIt(state.dataMisure) + ' · ' : '') + 'dati TARIC al ' + DATA_IT + ' · stampata il ' + dataIt(oggiNum());
   chiusiPrimaStampa = Array.prototype.filter.call(document.querySelectorAll('#esito details:not([open])'), function (d) { d.open = true; return true; });
 });
 window.addEventListener('afterprint', function () { chiusiPrimaStampa.forEach(function (d) { d.open = false; }); chiusiPrimaStampa = []; });

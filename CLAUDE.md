@@ -106,7 +106,9 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   `js/attiva-ia.js` (festa alla prima «Prova» riuscita
   dell'amministratore: `T.festaIA`, scena `T.festa()` di `disegni.js`, animazioni `.festa` in `app.css` con lo stato
   finale uguale a quello senza animazioni). Tema «porto»: blu marina e arancio dei container, colori solo nelle variabili
-  di `css/app.css` (anche quelle `--d-*` delle illustrazioni). Testi brevi: niente spiegazioni ovvie nelle pagine. Le
+  di `css/app.css` (anche quelle `--d-*` delle illustrazioni). Puntatore del mouse: l'aereo `--aereo`/`--aereo-via` (con
+  `(hover:hover) and (pointer:fine)`, non con il contrasto elevato o i colori forzati, spento dal profilo con la classe
+  `senza-aereo` e `localStorage` `magic-hs.aereo`): nelle regole si scrive `cursor:var(--mano,pointer)` o `var(--freccia,default)`. Testi brevi: niente spiegazioni ovvie nelle pagine. Le
   icone PNG si rigenerano dal logo di `icons/icona.svg`.
 
 ## Regole da rispettare

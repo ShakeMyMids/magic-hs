@@ -578,7 +578,7 @@
       return righe.length ? '<table class="tab"><tbody>' + righe.map(function (x) { return '<tr><th>' + esc(x[0]) + '</th><td>' + esc(x[1]).replace(/\n/g, '<br>') + '</td></tr>'; }).join('') + '</tbody></table>' : '';
     };
     var cb = contesto().cambi[d.valuta];
-    var h = '<div class="b-st-testa"><p class="b-st-sim">SIMULAZIONE · non è una dichiarazione doganale e non ha valore legale</p>' +
+    var h = '<div class="b-st-testa"><p class="b-st-sim">SIMULAZIONE · non è una dichiarazione doganale</p>' +
       '<h1>' + (imp() ? 'Bolla d\'importazione simulata (immissione in libera pratica e in consumo)' : 'Bolla d\'esportazione simulata') + '</h1>' +
       '<p>' + (imp() ? 'Tipo di dichiarazione IM A (DE 11 01-11 02 · c. 1) · Regime 40 00 (DE 11 09 · c. 37) · tracciato H1, EUCDM 6.2'
         : 'Tipo di dichiarazione EX A (DE 1/1-1/2 · c. 1) · Regime 10 00 (DE 1/10 · c. 37) · tracciato B1') + '</p>' +
