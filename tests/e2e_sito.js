@@ -284,6 +284,16 @@ async function accedi(p, email, password) {
   // «Aggiungi alla bolla» dalla scheda del codice; la bolla salvata si riapre dall'elenco
   await capo.click('#tab-classifica');
   await capo.fill('#q', '6403999610'); await capo.press('#q', 'Enter'); await capo.waitForSelector('[data-act="in-bolla"]');
+  // misure a una data passata: prima dei dati del mese la scheda non le calcola e apre il TARIC dell'UE di quel giorno
+  const oggiIso = await capo.inputValue('#data-misure');
+  await capo.fill('#data-misure', '2023-05-10');
+  await capo.waitForSelector('#esito >> text=per il 10/05/2023 mancano le misure finite nel frattempo');
+  const hrefScheda = await capo.getAttribute('#esito a:has-text("Misure sul TARIC UE al 10/05/2023")', 'href');
+  ok(/SimDate=20230510/.test(hrefScheda) && /Taric=6403999610/.test(hrefScheda) && await capo.isHidden('#esito .riep'),
+    'scheda: misure a una data passata, rimando al TARIC dell\'UE di quel giorno');
+  await capo.click('[data-act="data-oggi"]');
+  await capo.waitForSelector('#esito .riep');
+  ok((await capo.inputValue('#data-misure')) === oggiIso && await capo.isHidden('[data-act="data-oggi"]'), 'scheda: di nuovo le misure di oggi');
   await capo.click('[data-act="in-bolla"]');
   await capo.waitForSelector('[data-a="1"][data-f="codice"]');
   ok((await capo.inputValue('[data-a="1"][data-f="codice"]')) === '6403999610', 'bolla: articolo aggiunto dalla scheda del codice');
@@ -304,6 +314,12 @@ async function accedi(p, email, password) {
   await capo.waitForSelector('#view-bolla >> text=Fattura di prova');
   await capo.click('[data-b="apri"]'); await capo.waitForSelector('[data-a="1"][data-f="codice"]');
   ok((await capo.inputValue('[data-a="0"][data-f="codice"]')) === '8712003090', 'bolla: salvata nel profilo e riaperta');
+  // revisione di una bolla di una data passata: niente totale, in ogni articolo il TARIC dell'UE di quel giorno
+  await capo.fill('[data-f="data"]', '2025-03-10');
+  await capo.waitForSelector('#b-esito >> text=precedente ai dati TARIC di MAGIC HS');
+  const hrefBolla = await capo.getAttribute('[data-opz="0"] a', 'href');
+  ok(/SimDate=20250310/.test(hrefBolla) && /Taric=8712003090/.test(hrefBolla) && /Area=CN/.test(hrefBolla) && await capo.isHidden('#b-esito >> text=Totale da pagare'),
+    'bolla con una data passata: niente totale e link al TARIC dell\'UE di quel giorno');
   await capo.click('[data-b="chiudi"]');
   // esportazione: niente dazi, valore statistico in euro e documenti
   await capo.click('[data-b="nuova"][data-tipo="export"]');

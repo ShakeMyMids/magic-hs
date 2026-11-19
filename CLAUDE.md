@@ -71,7 +71,9 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; sopra i
   risultati l'archivio aziendale e, prima di chiedere all'IA una descrizione già classificata, la proposta di riprenderla;
   le ricerche senza risultati vanno a `/api/ricerche-vuote`; albero della nomenclatura; misure con il calcolo degli
-  importi e la stampa, stili `@media print` in fondo ad `app.css`; `misureBolla()` per la bolla), `js/calcolo.js` (calcoli
+  importi e la stampa, stili `@media print` in fondo ad `app.css`; data delle misure della scheda in `state.dataMisure` con
+  `giornoMisure()`: prima della data dei dati (`primaDeiDati`) niente misure e link `urlTaric()` al TARIC dell'UE a quel giorno,
+  perché le estrazioni mensili non contengono le misure finite; `misureBolla()` per la bolla, che per le date passate fa lo stesso), `js/calcolo.js` (calcoli
   senza pagina, `window.TARIC_CALCOLO` e modulo di node: dazi, condizioni con i documenti, regimi, codice addizionale del
   produttore per famiglia, ripartizione al centesimo, `calcolaImport`/`calcolaExport`; ogni cosa incerta diventa un blocco
   con il motivo, mai una stima; i `conflitti` tra i campi (con il `campo` da evidenziare) non bloccano il totale; codici della

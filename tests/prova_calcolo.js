@@ -310,7 +310,7 @@ prova('conflitti: masse, origine UE, IVA non dovuta, codici addizionali, data e 
     Object.assign({}, SCARPE_ART, { origine: 'DE', iva: 0, ivaMotivo: 'dichiarazione d\'intento n. 12' })
   ], Object.assign({ data: '2026-10-20' }, SENZA_SPESE)), Object.assign({ dataDati: '2026-11-01' }, ctx));
   uguale(r.conflitti.map(x => [x.articolo, x.campo]), [[0, 'data'], [1, 'netto'], [1, 'addizionali'], [1, 'ivaMotivo'], [2, 'origine']]);
-  uguale(r.conflitti[0].testo, 'La data della bolla è precedente ai dati TARIC del 01/11/2026: le misure finite prima di quel giorno non ci sono. Per una data passata verifica su AIDA.');
+  uguale(r.conflitti[0].testo, 'La data della bolla è precedente ai dati TARIC di MAGIC HS, che partono dal 01/11/2026: le misure finite nel frattempo non ci sono. Verifica le misure di quel giorno sul TARIC dell\'UE (link in ogni articolo) o su AIDA.');
   uguale(r.conflitti[2].testo, 'Il codice addizionale ZZ99 non vale per questo codice, origine e data: toglilo.');
   const m = K.calcolaImport(bolla([BICI_ART], SENZA_SPESE), Object.assign({}, ctx, { cambi: { USD: { tasso: 1.1, manuale: true } } }));
   uguale(testi(m.avvisi), ['Cambio di USD scritto a mano (la BCE non lo pubblica): per le Dogane vale il cambio giornaliero della Banca d\'Italia.']);

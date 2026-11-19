@@ -92,6 +92,7 @@ var FREQUENTI = ['CN', 'US', 'GB', 'CH', 'TR', 'JP', 'KR', 'IN', 'VN', 'TW'];
    ================================================================ */
 var state = {
   view: 'classifica',
+  dataMisure: 0,       // data delle misure nella scheda del codice (AAAAMMGG), 0 = oggi
   modo: 'parole',      // parole: ricerca nella nomenclatura | ia: classificazione con l'intelligenza artificiale
   gia: null,           // classificazione identica già nell'archivio aziendale (si riprende senza chiamare l'IA)
   forzaIA: false,
@@ -504,6 +505,17 @@ function chiediCapitolo(ch) {
   return 'attesa';
 }
 function oggiNum() { return parseInt(oggi(), 10); }
+/* data di consultazione delle misure nella scheda del codice (AAAAMMGG; 0 = oggi). Ogni estrazione mensile del TARIC
+   contiene solo le misure valide da quel giorno in poi: per una data precedente ai dati mancano quelle finite nel
+   frattempo, quindi la scheda non le mostra e rimanda al TARIC dell'UE a quella data. */
+function giornoMisure() { return state.dataMisure || oggiNum(); }
+function giornoDati() { return parseInt(DATA_ISO.replace(/-/g, ''), 10) || 0; }
+function primaDeiDati(g) { return giornoDati() > 0 && g < giornoDati(); }
+function isoDi(g) { var s = String(g); return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8); }
+function urlTaric(code, area, g) {
+  return 'https://ec.europa.eu/taxation_customs/dds2/taric/measures.jsp?Lang=it&SimDate=' + (g || oggiNum()) + '&Area=' + (area || '') +
+    '&MeasType=&StartPub=&EndPub=&MeasText=&GoodsText=&op=&Taric=' + code + '&search_text=goods&textSearch=&LangDescr=it&OrderNum=&Regulation=&measStartDat=&measEndDat=';
+}
 function dataIt(n) { var s = String(n); return s.slice(6, 8) + '/' + s.slice(4, 6) + '/' + s.slice(0, 4); }
 
 /* measure types: Italian labels written for this page (the extraction names them in English only) */
@@ -677,7 +689,7 @@ function certDi(m) { var o = []; parseCond(condDi(m)).forEach(function (p) { if 
 function misure(i, flow, paese, giorno) {
   var C = MIS[CODE[i].slice(0, 2)];
   if (!C) return null;
-  var tab = (flow === 'export' ? C.x : C.m) || {}, og = giorno || oggiNum(), out = [], altri = 0;
+  var tab = (flow === 'export' ? C.x : C.m) || {}, og = giorno || giornoMisure(), out = [], altri = 0;
   pathOf(i).forEach(function (j) {
     if (FLAG[j] === 'g') return;
     var rows = tab[CODE[j]];
@@ -720,7 +732,7 @@ function misureBolla(codice, flusso, paese, giorno) {
 function unitaSupplementare(i) {
   var C = MIS[CODE[i].slice(0, 2)];
   if (!C) return undefined;
-  var og = oggiNum(), trovata = null;
+  var og = giornoMisure(), trovata = null;
   [C.m || {}, C.x || {}].forEach(function (tab) {
     pathOf(i).forEach(function (j) {
       if (FLAG[j] === 'g' || !tab[CODE[j]]) return;
@@ -925,7 +937,8 @@ function boxMisure(sel) {
     paesi.map(function (p) { return '<option value="' + p[1] + '"' + (p[1] === c && freq.indexOf(c) < 0 ? ' selected' : '') + '>' + esc(p[0]) + ' (' + p[1] + ')</option>'; }).join('') + '</optgroup>';
   var dichiarabile = i >= 0 && isLeaf(i);
   var iso = c === 'XS' ? 'RS' : c;
-  var uTaric = 'https://ec.europa.eu/taxation_customs/dds2/taric/measures.jsp?Lang=it&SimDate=' + oggi() + '&Area=' + c + '&MeasType=&StartPub=&EndPub=&MeasText=&GoodsText=&op=&Taric=' + code + '&search_text=goods&textSearch=&LangDescr=it&OrderNum=&Regulation=&measStartDat=&measEndDat=';
+  var g = giornoMisure(), passato = primaDeiDati(g);
+  var uTaric = urlTaric(code, c, g);
   var uA2M = c ? 'https://trade.ec.europa.eu/access-to-markets/it/results?product=' + code + (exp ? '&origin=IT&destination=' + iso : '&origin=' + iso + '&destination=IT') : '';
   var links = dichiarabile ? '<div class="fila"><span class="et">Verifica sulla fonte</span>' +
     '<a class="btn sm" href="' + esc(uTaric) + '" target="_blank" rel="noopener">TARIC UE</a>' +
@@ -935,6 +948,12 @@ function boxMisure(sel) {
   var h47 = '', h44 = '', n44 = 0;
   var st = i >= 0 ? chiediCapitolo(code.slice(0, 2)) : 'nessuno';
   if (st === 'nessuno') h47 = h44 = '<p class="nota">Il codice non è nella nomenclatura: nessuna misura da mostrare.</p>';
+  else if (passato) {
+    state.calcDazi = null;
+    h47 = '<p class="avviso">I dati TARIC di MAGIC HS partono dal ' + esc(DATA_IT) + ': per il ' + esc(dataIt(g)) + ' mancano le misure finite nel frattempo.</p>' +
+      (dichiarabile ? '<div class="fila"><a class="btn sm pri" href="' + esc(uTaric) + '" target="_blank" rel="noopener">' + T.icona('link') + 'Misure sul TARIC UE al ' + esc(dataIt(g)) + '</a></div>' : '');
+    h44 = '<p class="nota">Divieti, restrizioni e documenti del ' + esc(dataIt(g)) + ': vedili sul TARIC dell\'UE.</p>';
+  }
   else if (st === 'attesa') h47 = h44 = '<p class="nota">Carico le misure del capitolo ' + esc(code.slice(0, 2)) + '…</p>';
   else if (st === 'errore') h47 = h44 = '<p class="errore">Non riesco a caricare le misure del capitolo ' + esc(code.slice(0, 2)) + '. Ricarica la pagina.</p>';
   else {
@@ -985,7 +1004,9 @@ function boxMisure(sel) {
     '<select class="campo" id="paese" aria-label="Paese">' + opt + '</select>' +
     '<div class="fila"><button class="chip" type="button" data-act="flusso" data-f="import" aria-pressed="' + (!exp) + '">Importazione</button>' +
     '<button class="chip" type="button" data-act="flusso" data-f="export" aria-pressed="' + exp + '">Esportazione</button></div></div>' +
-    '<div class="box s8"><div class="lab">' + T.icona('percento') + 'Misure TARIC al ' + dataIt(oggiNum()) + '</div>' + links + '</div>' +
+    '<div class="box s8"><div class="lab">' + T.icona('percento') + 'Misure TARIC al ' + dataIt(g) + '</div>' +
+    '<div class="fila data-misure"><label>Data delle misure<input class="campo" type="date" id="data-misure" value="' + isoDi(g) + '"></label>' +
+    (state.dataMisure ? '<button class="btn sm" type="button" data-act="data-oggi">' + T.icona('calendario') + 'Oggi</button>' : '') + '</div>' + links + '</div>' +
     '<div class="box"><div class="lab"><b>47</b> Calcolo delle imposizioni <span class="dx">' + (exp ? 'esportazione' : 'dazi all\'importazione') + '</span></div>' + h47 + '</div>' +
     '<div class="box"><div class="lab"><b>44</b> Documenti presentati, certificati e autorizzazioni <span class="dx">' + (n44 ? n44 + (n44 === 1 ? ' misura' : ' misure') + ' di controllo' : 'divieti, restrizioni e controlli') + '</span></div>' + h44 + '</div>' +
     '</div>';
@@ -1081,7 +1102,7 @@ function renderEsito() {
     (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' +
       '<button class="btn sm" type="button" data-act="in-bolla" data-c="' + esc(sel.code) + '">' + T.icona('pacco') + 'Aggiungi alla bolla</button>' : '') + '</div>';
   var fineCod = (D.fine && D.fine[sel.code]) || 0;
-  if (i >= 0 && fineCod) h += '<p class="avviso">' + (fineCod < oggiNum() ? 'Questo codice ha cessato di valere il ' : 'Questo codice cessa di valere il ') + dataIt(fineCod) + '.</p>';
+  if (i >= 0 && fineCod) h += '<p class="avviso">' + (fineCod < giornoMisure() ? 'Questo codice ha cessato di valere il ' : 'Questo codice cessa di valere il ') + dataIt(fineCod) + '.</p>';
   h += '</div>';
 
   /* --- box 41 --- */
@@ -1386,9 +1407,15 @@ document.addEventListener('click', function (ev) {
     state.anima = true; state.risChiusi = true; vista('classifica'); renderAll(); var es = $('#esito'); if (es.scrollIntoView) es.scrollIntoView({ block: 'start' });
   }
   else if (act === 'apri') { ev.stopPropagation(); apriNellAlbero(i); }
+  else if (act === 'data-oggi') { state.dataMisure = 0; renderEsito(); }
 });
 document.addEventListener('change', function (ev) {
   if (ev.target && ev.target.id === 'paese') { state.country = ev.target.value; renderEsito(); salvaPreferenze(); }
+  if (ev.target && ev.target.id === 'data-misure') {
+    var gd = parseInt(String(ev.target.value || '').replace(/-/g, ''), 10);
+    state.dataMisure = gd > 19000101 && gd !== oggiNum() ? gd : 0;
+    renderEsito();
+  }
   if (ev.target && ev.target.classList && ev.target.classList.contains('calc')) { state.calc[ev.target.getAttribute('data-c')] = ev.target.value; aggiornaCalcolo(); }
 });
 document.addEventListener('input', function (ev) {
@@ -1458,6 +1485,7 @@ T.app = {
   percorso: function (c) { var i = byCode.has(c) ? byCode.get(c) : -1; return i < 0 ? [] : pathOf(i).map(function (j) { return descOf(j); }); },
   paesi: elencoPaesi,
   dati: function () { return { iso: DATA_ISO, it: DATA_IT }; },
+  urlTaric: urlTaric,
   utente: function () { return state.utente; },
   aggiornaIo: aggiornaIo,
   caricaSinonimi: caricaSinonimi,
@@ -1515,7 +1543,7 @@ var chiusiPrimaStampa = [];
 window.addEventListener('beforeprint', function () {
   var sel = state.sel, s = $('#stampa-testa');
   if (s) s.textContent = 'MAGIC HS · ' + (sel ? 'codice ' + grp(sel.code) + ' · ' : '') + (state.country ? (state.flow === 'export' ? 'destinazione ' : 'origine ') + nomeArea(state.country) + ' · ' : '') +
-    'dati TARIC al ' + DATA_IT + ' · stampata il ' + dataIt(oggiNum()) + ' · strumento non ufficiale: verifica su AIDA o sul TARIC dell\'UE';
+    (state.dataMisure ? 'misure al ' + dataIt(state.dataMisure) + ' · ' : '') + 'dati TARIC al ' + DATA_IT + ' · stampata il ' + dataIt(oggiNum()) + ' · strumento non ufficiale: verifica su AIDA o sul TARIC dell\'UE';
   chiusiPrimaStampa = Array.prototype.filter.call(document.querySelectorAll('#esito details:not([open])'), function (d) { d.open = true; return true; });
 });
 window.addEventListener('afterprint', function () { chiusiPrimaStampa.forEach(function (d) { d.open = false; }); chiusiPrimaStampa = []; });

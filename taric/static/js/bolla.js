@@ -147,9 +147,13 @@
   }
 
   /* ------------------------------------------------------------------ misure e calcolo */
+  // le estrazioni del TARIC hanno solo le misure valide dal loro giorno in poi: per una data precedente ai dati non si calcola
+  function giornoDati() { return parseInt(String(app().dati().iso || '').replace(/-/g, ''), 10) || 0; }
+  function passato() { return giorno() > 0 && giorno() < giornoDati(); }
   function misure(a) {
     var paese = a.origine || dati().paese;
     if (!giorno()) return { errore: 'Indica la data della bolla.' };
+    if (passato()) return { passato: true, errore: 'Misure del ' + dataIt(dati().data) + ' non disponibili in MAGIC HS: i dati TARIC partono dal ' + app().dati().it + '.' };
     return app().misureBolla(a.codice, imp() ? 'import' : 'export', paese, giorno());
   }
   function contesto() {
@@ -336,6 +340,11 @@
     if (desc) {
       var perc = M && M.descrizione ? app().percorso(String(a.codice).replace(/\D/g, '')) : [];
       desc.textContent = perc.length > 1 ? perc[perc.length - 2] + ' › ' + perc[perc.length - 1] : (M && M.descrizione ? M.descrizione : (M && M.errore && a.codice ? M.errore : ''));
+    }
+    if (M && M.passato && /^\d{10}$/.test(String(a.codice || ''))) {
+      box.innerHTML = '<div class="fila"><a class="btn sm" href="' + esc(app().urlTaric(a.codice, a.origine || dati().paese, g)) + '" target="_blank" rel="noopener">' +
+        T.icona('link') + 'Misure sul TARIC UE al ' + esc(dataIt(dati().data)) + '</a></div>';
+      return;
     }
     if (!M || M.errore) { box.innerHTML = ''; return; }
     var h = '<div class="b-campi">';
