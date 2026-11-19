@@ -12,29 +12,38 @@
   'use strict';
   var T = window.TARIC = window.TARIC || {};
 
-  function cont(x, y, l, a, n) {           // container con le nervature verticali
-    var h = '<rect class="d-c' + n + '" x="' + x + '" y="' + y + '" width="' + l + '" height="' + a + '" rx="1.5"/>';
-    for (var k = x + 6; k < x + l - 3; k += 6) h += '<line class="d-nervo" x1="' + k + '" y1="' + (y + 3) + '" x2="' + k + '" y2="' + (y + a - 3) + '"/>';
-    return h;
+  /* ---------------------------------------------------------------- pezzi comuni
+     Scala: i container da 20 piedi sulla nave (32 x 13), quelli da 40 sui carri e sul camion, più vicini e quindi più
+     grandi. Le forme diritte sono rect (bordi netti, app.css), le curve e le diagonali sono path. */
+  function cont(x, y, l, a, n) {           // container: corpo, nervature, porte a un'estremità, luce sul bordo alto
+    var h = '<rect class="d-c' + n + '" x="' + x + '" y="' + y + '" width="' + l + '" height="' + a + '" rx="1"/>';
+    var passo = a > 18 ? 5 : 4;
+    for (var k = x + passo; k < x + l - 4; k += passo) h += '<line class="d-nervo" x1="' + k + '" y1="' + (y + 2) + '" x2="' + k + '" y2="' + (y + a - 2) + '"/>';
+    return h + '<rect class="d-porta" x="' + (x + l - 3) + '" y="' + y + '" width="3" height="' + a + '"/><rect class="d-lucido" x="' + x + '" y="' + y + '" width="' + l + '" height="1.5"/>';
   }
   function ruota(x, y, r) {
-    return '<circle class="d-t" cx="' + x + '" cy="' + y + '" r="' + r + '"/><circle class="d-mozzo" cx="' + x + '" cy="' + y + '" r="' + (r * 0.38) + '"/>';
+    return '<circle class="d-t" cx="' + x + '" cy="' + y + '" r="' + r + '"/><circle class="d-mozzo" cx="' + x + '" cy="' + y + '" r="' + (r * 0.42).toFixed(1) + '"/>';
+  }
+  function carrello(x, y) {                 // carrello ferroviario a due assi
+    return '<rect class="d-t" x="' + x + '" y="' + y + '" width="18" height="3" rx="1"/>' + ruota(x + 4, y + 5, 3.2) + ruota(x + 14, y + 5, 3.2);
   }
 
-  /* cielo: nuvole e aereo con la scia */
+  /* ---------------------------------------------------------------- cielo: nuvole e aereo cargo con la scia */
   function nuvola(x, y, k) {
     var gocce = '';
-    for (var g = 0; g < 5; g++) gocce += '<path class="s-goccia" style="--g:' + g + '" d="M' + (8 + g * 11) + ' 46l-3 8"/>';
-    return '<g class="d-nuvola-g t-nuvola"><g transform="translate(' + x + ' ' + y + ') scale(' + k + ')">' + presa(-4, -4, 70, 44) +
-      '<g class="s-pioggia">' + gocce + '</g><path class="d-nuvola" d="M0 18a14 14 0 0 1 26-7 18 18 0 0 1 33 4 11 11 0 0 1 3 22H4a10 10 0 0 1-4-19z"/></g></g>';
+    for (var g = 0; g < 5; g++) gocce += '<path class="s-goccia" style="--g:' + g + '" d="M' + (10 + g * 10) + ' 30l-3 8"/>';
+    return '<g class="d-nuvola-g t-nuvola"><g transform="translate(' + x + ' ' + y + ') scale(' + k + ')">' + presa(-4, -4, 74, 40) +
+      '<g class="s-pioggia">' + gocce + '</g>' +
+      '<path class="d-nuvola" d="M6 26a9 9 0 0 1 3-17 12 12 0 0 1 21-5 15 15 0 0 1 26 6 9 9 0 0 1 8 16z"/>' +
+      '<path class="d-nuvola-ombra" d="M6 26h58a9 9 0 0 0 2-5c-6 2-14 2-20 0-7 2-16 2-23 0-6 2-13 2-17 0a8 8 0 0 0 0 5z"/></g></g>';
   }
   /* zona invisibile da toccare, per i mezzi fatti di linee sottili (js/porto.js) */
   function presa(x, y, l, a) { return '<rect class="s-presa" x="' + x + '" y="' + y + '" width="' + l + '" height="' + a + '"/>'; }
   /* parti che compaiono solo in certi momenti: stelle (tema scuro), gabbiano, fuochi */
   function stelle(punti) {
-    return '<g class="s-stelle">' + punti.map(function (s, n) { return '<circle class="s-stella" style="--n:' + n + '" cx="' + s[0] + '" cy="' + s[1] + '" r="' + (n % 3 ? 1.3 : 1.9) + '"/>'; }).join('') + '</g>';
+    return '<g class="s-stelle">' + punti.map(function (s, n) { return '<circle class="s-stella" style="--n:' + n + '" cx="' + s[0] + '" cy="' + s[1] + '" r="' + (n % 3 ? 1.2 : 1.7) + '"/>'; }).join('') + '</g>';
   }
-  function gabbiano(y) { return '<path class="s-gabbiano" d="M0 ' + y + 'q6-7 12 0q6-7 12 0"/>'; }
+  function gabbiano(y) { return '<path class="s-gabbiano" d="M0 ' + y + 'q5-6 10-1q5-5 10 1"/>'; }
   function fuochi(centri) {
     return '<g class="s-fuochi">' + centri.map(function (c, n) {
       var raggi = '';
@@ -45,81 +54,139 @@
       return '<g class="s-fuoco d-c' + (n % 2 ? 2 : 1) + '" style="--n:' + n + '">' + raggi + '</g>';
     }).join('') + '</g>';
   }
-  var aereo =
-    '<g class="t-aereo">' + presa(826, 4, 136, 72) + '<g class="s-aereo"><g transform="translate(130 0) rotate(-7 770 40)">' +
-    '<path class="d-t" d="M712 34h86c10 0 18 3 22 6-4 3-12 6-22 6h-86c-5 0-8-2.6-8-6s3-6 8-6z"/>' +
-    '<path class="d-t" d="M748 41h22l-20 26h-12z"/><path class="d-t" d="M752 37h16l-10-15h-10z"/>' +
-    '<path class="d-t" d="M706 36h12l-6-17h-9z"/><path class="d-t" d="M705 42h15l-7 10h-7z"/>' +
-    '<path class="d-c1" d="M800 35.5c6 .5 12 2.5 15 4.5h-15z"/>' +
-    '<circle class="d-oblo" cx="728" cy="39" r="1.6"/><circle class="d-oblo" cx="736" cy="39" r="1.6"/><circle class="d-oblo" cx="744" cy="39" r="1.6"/>' +
-    '<circle class="d-oblo" cx="776" cy="39" r="1.6"/><circle class="d-oblo" cx="784" cy="39" r="1.6"/><circle class="d-oblo" cx="792" cy="39" r="1.6"/>' +
-    '</g></g></g>';
-  var cielo = stelle([[40, 22], [120, 48], [210, 16], [300, 40], [430, 24], [640, 30], [700, 70], [960, 26], [1110, 20], [1170, 64]]) +
-    fuochi([[260, 40], [690, 34], [1010, 44]]) + nuvola(548, 26, 1) + nuvola(1040, 52, 0.86) + '<path class="d-scia" d="M560 96C650 72 750 60 846 50"/>' + aereo + gabbiano(70);
-  var cieloStretto = stelle([[30, 60], [110, 22], [220, 48], [330, 18], [420, 60], [470, 26], [660, 22]]) + fuochi([[200, 36], [450, 30]]) +
-    nuvola(24, 14, 0.72) + nuvola(604, 64, 0.6) + '<path class="d-scia" d="M524 58C540 50 552 42 566 34"/>' +
-    '<g transform="translate(-270 -12)">' + aereo + '</g>' + gabbiano(80);
+  /* aereo cargo visto di fianco, muso a destra (coordinate proprie: fusoliera lunga 132) */
+  function aereo(x, y, k) {
+    return '<g class="t-aereo"><g transform="translate(' + x + ' ' + y + ') rotate(-6) scale(' + k + ')">' + presa(-12, -26, 152, 56) + '<g class="s-aereo">' +
+      '<path class="d-t" d="M8 3 L-2 -20 H8 Q11 -20 13 -17 L28 3 Z"/><path class="d-c1" d="M1 -17 H8 Q10 -17 11.5 -15 L14 -11 H3.5 Z"/>' +
+      '<path class="d-t d-lontano-ala" d="M14 9 L2 17 H10 L26 10 Z"/>' +
+      '<path class="d-t" d="M4 10 Q2 3 12 1.6 L104 1 Q124 1 134 8 Q126 13.5 106 13.5 H22 Q10 13.5 4 10 Z"/>' +
+      '<path class="d-c1" d="M20 8.6 H122 Q118 9.8 112 10.2 H22 Z"/>' +
+      '<path class="d-oblo" d="M114 3.4 H122 Q127 4.6 129.5 7 H114 Z"/>' +
+      '<path class="d-porta-a" d="M92 3.5 H101 V10.5 H92 Z"/>' +
+      '<path class="d-t" d="M60 10 L40 26 H52 L80 11 Z"/>' +
+      '<path class="d-t" d="M44 18 H60 Q65 18 65 21.5 Q65 25 60 25 H44 Q41 21.5 44 18 Z"/><path class="d-c3" d="M60.5 18.6 Q64 19 64 21.5 Q64 24 60.5 24.4 Z"/>' +
+      '</g></g></g>';
+  }
+  var cielo = stelle([[40, 22], [120, 48], [210, 16], [300, 30], [430, 18], [640, 30], [720, 64], [990, 74], [1110, 20], [1170, 54]]) +
+    fuochi([[250, 34], [690, 30], [1010, 40]]) + nuvola(600, 22, 1) + nuvola(1060, 46, 0.86) + nuvola(170, 14, 0.62) +
+    '<path class="d-scia" d="M590 100C680 80 770 62 836 48"/>' + aereo(842, 34, 1) + gabbiano(70);
+  var cieloStretto = stelle([[30, 60], [110, 22], [220, 48], [330, 18], [420, 60], [470, 26], [660, 22]]) + fuochi([[200, 32], [450, 26]]) +
+    nuvola(18, 12, 0.7) + nuvola(626, 80, 0.5) + '<path class="d-scia" d="M566 70C570 60 574 52 580 44"/>' + aereo(584, 30, 0.72) + gabbiano(80);
 
-  /* mare con la nave portacontainer, banchina con la gru */
-  var colonne = [3, 2, 3, 3, 2, 3, 2], colori = [1, 2, 3, 2, 1, 3, 2, 1, 3, 1, 2, 3, 2, 1, 3, 2, 3, 1, 2, 1, 2];
-  var stiva = '', c = 0;
-  colonne.forEach(function (n, i) {
-    for (var r = 0; r < n; r++) stiva += cont(100 + i * 41, 98 - r * 17, 40, 16, colori[c++ % colori.length]);
-  });
-  var nave =
-    '<g class="t-nave"><g class="s-nave">' + stiva +
-    '<g class="s-fumo"><circle cx="70" cy="52" r="4"/><circle cx="64" cy="44" r="5.5"/><circle cx="72" cy="35" r="7"/></g>' +
-    '<g class="s-sirena"><path d="M80 58q6-6 0-12"/><path d="M86 62q11-10 0-20"/><path d="M92 66q16-14 0-28"/></g>' +
-    '<rect class="d-t" x="54" y="76" width="36" height="38" rx="2"/>' +
-    '<rect class="d-oblo" x="59" y="82" width="26" height="5" rx="1.5"/><rect class="d-c1" x="63" y="60" width="13" height="17" rx="1.5"/>' +
-    '<path class="d-t" d="M36 113h372l-15 27H58z"/><path class="d-c1" d="M47 128h354l-6 12H58z"/>' +
-    '</g></g>';
-  var mare =
-    '<rect class="d-mare" x="0" y="138" width="430" height="40"/>' +
-    '<path class="d-onda" d="M10 150q10-5 20 0t20 0 20 0 20 0M120 160q10-5 20 0t20 0 20 0M250 152q10-5 20 0t20 0 20 0 20 0M350 163q10-5 20 0t20 0"/>';
-  var luci = '';
-  for (var lx = 326; lx < 512; lx += 16) luci += '<circle class="s-luce d-c' + (lx % 3 ? 1 : 2) + '" style="--n:' + ((lx - 326) / 16) + '" cx="' + lx + '" cy="45" r="2.2"/>';
-  var gru =
-    '<g class="t-gru">' + presa(316, 16, 200, 124) + '<g class="d-gru"><path d="M446 140V40M486 140V40M446 76h40M446 108h40M446 76l40 32M446 108l40-32M318 40h196M486 40l-22-18-18 18"/></g>' +
-    '<g class="s-luci">' + luci + '</g>' +
-    '<g class="s-carico"><path class="d-cavo" d="M352 40v6"/><g class="s-cont">' + cont(332, 46, 40, 15, 2) + '</g></g></g>' +
-    '<rect class="d-banchina" x="430" y="140" width="770" height="40"/><path class="d-suolo" d="M430 140H1200"/>';
-  /* abete con le luci, a dicembre */
-  function albero(x) {
-    return '<g class="s-albero"><path class="s-abete" d="M' + x + ' 92l15 22h-8l12 14h-9l13 12h-46l13-12h-9l12-14h-8z"/>' +
-      '<circle class="s-luce d-c1" style="--n:1" cx="' + (x - 5) + '" cy="110" r="2"/><circle class="s-luce d-c2" style="--n:3" cx="' + (x + 6) + '" cy="122" r="2"/>' +
-      '<circle class="s-luce d-c1" style="--n:5" cx="' + (x - 9) + '" cy="133" r="2"/><circle class="s-luce d-c2" style="--n:7" cx="' + (x + 11) + '" cy="135" r="2"/>' +
-      '<path class="s-puntale d-c1" d="M' + x + ' 84l2.4 5h5l-4 3.4 1.6 5.2-5-3.2-5 3.2 1.6-5.2-4-3.4h5z"/></g>';
+  /* ---------------------------------------------------------------- lontano: profilo del porto dietro la banchina */
+  function lontano(da, a) {
+    var h = '<g class="d-lontano">', x = da, alti = [16, 24, 12, 28, 18, 10, 22, 14], k = 0;
+    while (x < a) { var l = 26 + (k * 13) % 30, t = alti[k % alti.length]; h += '<rect x="' + x + '" y="' + (140 - t) + '" width="' + Math.min(l, a - x) + '" height="' + t + '"/>'; x += l + 6; k++; }
+    return h + '</g>';
   }
 
-  /* binari con il treno merci */
+
+  /* ---------------------------------------------------------------- mare, nave portacontainer, banchina e gru */
+  /* nave: plancia e fumaiolo a poppa (sinistra), otto file di container sui boccaporti, prua slanciata a destra.
+     Lo scafo scende sotto la linea dell'acqua: lo copre il mare davanti (marePrima). */
+  var FILE = [104, 138, 177, 211, 250, 284, 323, 357], ALTE = [3, 3, 2, 3, 2, 3, 1, 2];
+  var COLORI = [1, 2, 3, 2, 1, 3, 1, 3, 2, 3, 2, 1, 2, 1, 3, 1, 2, 3, 2, 1, 3];
+  var stiva = '', ci = 0;
+  [[102, 172], [175, 245], [248, 318], [321, 391]].forEach(function (b) { stiva += '<rect class="d-boccaporto" x="' + b[0] + '" y="101" width="' + (b[1] - b[0]) + '" height="3"/>'; });
+  FILE.forEach(function (x, i) { for (var r = 0; r < ALTE[i]; r++) stiva += cont(x, 101 - 13 * (r + 1), 32, 13, COLORI[ci++ % COLORI.length]); });
+  var finestre = function (x1, x2, y) { var h = ''; for (var x = x1; x <= x2; x += 7) h += '<rect class="d-oblo" x="' + x + '" y="' + y + '" width="4" height="3"/>'; return h; };
+  var nave =
+    '<g class="t-nave"><g class="s-nave">' +
+    '<g class="s-fumo"><circle cx="56" cy="30" r="3.5"/><circle cx="51" cy="22" r="5"/><circle cx="58" cy="12" r="6.5"/></g>' +
+    '<g class="s-sirena"><path d="M88 41q5-5 0-10"/><path d="M93 44q9-8 0-16"/><path d="M98 47q13-12 0-22"/></g>' +
+    stiva +
+    '<rect class="d-t" x="40" y="76" width="56" height="28"/>' + finestre(45, 87, 81) + finestre(45, 87, 90) +
+    '<rect class="d-t" x="46" y="60" width="44" height="16"/>' + finestre(50, 84, 66) +
+    '<rect class="d-t" x="36" y="53" width="64" height="7"/><rect class="d-oblo" x="40" y="55" width="56" height="3"/>' +
+    '<rect class="d-t" x="44" y="51" width="48" height="2"/>' +
+    '<path class="d-t" d="M47 53L49 34H63L63 53Z"/><path class="d-c1" d="M48.5 39H63V43.5H48Z"/><path class="d-ombra-s" d="M49 34H63V36.5H48.8Z"/>' +
+    '<path class="d-albero" d="M84 51V36M79 40h10M398 104V88M394 92h8"/>' +
+    '<path class="d-t" d="M384 104L392 96h4v8z"/>' +
+    '<path class="d-t" d="M24 104H392Q410 103 418 110L406 148H34Q28 146 26 132Z"/>' +
+    '<path class="d-ombra-s" d="M25 121H414L411.4 130H26Z"/>' +
+    '<path class="d-c1" d="M25.7 130H411.4L408.6 138H27.6Z"/>' +
+    '<path class="d-filo" d="M26 104.6H392Q406 104 413 108"/>' +
+    '<circle class="d-ombra-s" cx="402" cy="114" r="2.2"/>' +
+    '</g></g>';
+  var mareDietro = '<rect class="d-mare" x="0" y="136" width="460" height="34"/>';
+  var marePrima =
+    '<rect class="d-mare" x="0" y="141" width="460" height="29"/>' +
+    '<path class="d-schiuma" d="M38 141H406M406 141q8-3 14 1"/>' +
+    '<path class="d-onda" d="M12 151h18M58 158h30M126 149h14M176 160h26M240 152h20M300 162h34M372 150h16M420 158h22"/>';
+  var banchina =
+    '<rect class="d-banchina" x="460" y="140" width="740" height="30"/><path class="d-suolo" d="M460 140H1200"/>' +
+    '<rect class="d-muro" x="456" y="140" width="5" height="30"/><rect class="d-t" x="453" y="146" width="4" height="8" rx="1"/><rect class="d-t" x="453" y="158" width="4" height="8" rx="1"/>' +
+    '<path class="d-t" d="M463 140v-3a3 3 0 0 1 6 0v3z"/>';
+  /* gru di banchina: due gambe con il portale, braccio a traliccio sopra la nave, carrello con la cabina e il container
+     agganciato allo spreader; la sala macchine sul retro. s-carico è la parte che cala (js/porto.js, app.css) */
+  var reticolo = 'M290 40';
+  for (var rx = 290; rx < 470; rx += 12) reticolo += 'L' + (rx + 6) + ' 34L' + (rx + 12) + ' 40';
+  var luci = '';
+  for (var lx = 296; lx < 470; lx += 16) luci += '<circle class="s-luce d-c' + (lx % 3 ? 1 : 2) + '" style="--n:' + ((lx - 296) / 16) + '" cx="' + lx + '" cy="44" r="2"/>';
+  var gru =
+    '<g class="t-gru">' + presa(276, 6, 290, 134) +
+    '<g class="d-gru">' +
+    '<path class="g-sottile" d="' + reticolo + '"/>' +
+    '<path class="g-forte" d="M476 140V36M522 140V36M476 96H522"/>' +
+    '<path class="g-medio" d="M280 34H562M290 40H562M280 34L290 40M476 34L499 10L522 34"/>' +
+    '<path class="g-sottile" d="M476 96L522 40M522 96L476 40M499 10L292 34M499 10L560 34"/>' +
+    '</g>' +
+    '<rect class="d-t" x="466" y="134" width="20" height="6" rx="1.5"/><rect class="d-t" x="512" y="134" width="20" height="6" rx="1.5"/>' +
+    '<rect class="d-c1" x="477" y="95" width="44" height="2"/>' +
+    '<rect class="d-t" x="528" y="22" width="34" height="12" rx="1"/><rect class="d-c1" x="528" y="29" width="34" height="2"/>' +
+    '<g class="s-luci">' + luci + '</g>' +
+    '<g class="s-carico"><rect class="d-t" x="330" y="40" width="18" height="4"/><rect class="d-t" x="334" y="44" width="10" height="7"/>' +
+      '<rect class="d-oblo" x="336" y="46" width="6" height="3"/>' +
+      '<path class="d-cavo" d="M333 44V60M345 44V60"/>' +
+      '<g class="s-cont"><rect class="d-t" x="321" y="60" width="36" height="2"/>' + cont(323, 62, 32, 13, 2) + '</g></g>' +
+    '</g>';
+  /* abete con le luci, a dicembre */
+  function albero(x) {
+    return '<g class="s-albero"><path class="s-abete" d="M' + x + ' 96l13 18h-7l11 13h-8l12 13h-42l12-13h-8l11-13h-7z"/>' +
+      '<circle class="s-luce d-c1" style="--n:1" cx="' + (x - 4) + '" cy="112" r="1.8"/><circle class="s-luce d-c2" style="--n:3" cx="' + (x + 5) + '" cy="123" r="1.8"/>' +
+      '<circle class="s-luce d-c1" style="--n:5" cx="' + (x - 8) + '" cy="135" r="1.8"/><circle class="s-luce d-c2" style="--n:7" cx="' + (x + 10) + '" cy="136" r="1.8"/>' +
+      '<path class="s-puntale d-c1" d="M' + x + ' 88l2.2 4.6h4.6l-3.7 3 1.4 4.8-4.5-2.9-4.5 2.9 1.4-4.8-3.7-3h4.6z"/></g>';
+  }
+
+  /* ---------------------------------------------------------------- binari con il treno: locomotiva e due carri pianale */
   var traversine = '';
-  for (var x = 498; x < 736; x += 14) traversine += '<rect class="d-traversa" x="' + x + '" y="141" width="8" height="5" rx="1"/>';
+  for (var tx = 574; tx < 800; tx += 10) traversine += '<rect class="d-traversa" x="' + tx + '" y="141" width="6" height="3" rx="1"/>';
+  function pianale(x, n) {
+    return cont(x + 2, 115, 56, 12, n) + '<rect class="d-t" x="' + x + '" y="127" width="60" height="3"/>' + carrello(x + 2, 130) + carrello(x + 40, 130);
+  }
   var treno =
-    traversine + '<path class="d-binario" d="M494 140H740"/>' +
-    '<g class="t-treno">' + presa(514, 70, 216, 70) + '<g class="s-treno">' +
-    cont(522, 103, 40, 20, 1) + cont(564, 103, 40, 20, 3) + '<rect class="d-t" x="518" y="123" width="90" height="6" rx="2"/>' +
-    '<rect class="d-t" x="608" y="124" width="16" height="3"/>' +
-    '<g transform="translate(-106 0)">' +
-    '<g class="s-fumo"><circle cx="740" cy="92" r="3.5"/><circle cx="734" cy="84" r="5"/><circle cx="742" cy="75" r="6"/></g>' +
-    '<path class="d-t" d="M730 130V104a4 4 0 0 1 4-4h62l22 16v14z"/><path class="d-oblo" d="M796 105h6l10 8h-16z"/>' +
-    '<rect class="d-c1" x="734" y="118" width="82" height="4"/><rect class="d-oblo" x="744" y="106" width="12" height="7" rx="1.5"/>' +
-    ruota(744, 134, 5) + ruota(762, 134, 5) + ruota(788, 134, 5) + ruota(806, 134, 5) + '</g>' +
-    ruota(530, 134, 5) + ruota(546, 134, 5) + ruota(580, 134, 5) + ruota(596, 134, 5) +
+    traversine + '<path class="d-binario" d="M570 140H800"/>' +
+    '<g class="t-treno">' + presa(600, 92, 196, 50) + '<g class="s-treno">' +
+    '<g class="s-fumo"><circle cx="742" cy="96" r="3"/><circle cx="736" cy="88" r="4.5"/><circle cx="744" cy="79" r="5.5"/></g>' +
+    pianale(604, 3) + '<rect class="d-t" x="664" y="127" width="4" height="2"/>' + pianale(668, 1) + '<rect class="d-t" x="728" y="127" width="4" height="2"/>' +
+    '<rect class="d-t" x="736" y="100" width="22" height="4" rx="1"/>' +
+    '<path class="d-t" d="M731 130V109Q731 104 736 104H778L791 114Q793 116 793 119V130Z"/>' +
+    '<path class="d-oblo" d="M778 107.5L788 115H778Z"/><rect class="d-oblo" x="762" y="108" width="11" height="6" rx="1"/>' +
+    '<rect class="d-c1" x="731" y="121" width="62" height="3"/><path class="d-filo" d="M734 117H758"/>' +
+    carrello(736, 130) + carrello(770, 130) +
     '</g></g>';
 
-  /* strada con il camion */
-  var pila = cont(1020, 124, 40, 16, 2) + cont(1062, 124, 40, 16, 1) + cont(1104, 124, 40, 16, 3) + cont(1041, 107, 40, 16, 1) + cont(1083, 107, 40, 16, 2);
-  var mezzo =
-    '<g class="t-camion">' + presa(784, 90, 186, 52) + '<g class="s-camion"><g transform="translate(-110 0)">' + cont(904, 95, 116, 28, 1) +
-    '<rect class="d-t" x="900" y="123" width="124" height="6" rx="2"/>' +
-    '<path class="d-t" d="M1026 131V102a6 6 0 0 1 6-6h20l20 17v18z"/><path class="d-oblo" d="M1036 101h14l13 11h-27z"/>' +
-    '<rect class="d-c1" x="1028" y="120" width="44" height="3"/>' +
-    ruota(918, 133, 7) + ruota(936, 133, 7) + ruota(1004, 133, 7) + ruota(1040, 133, 7) + ruota(1060, 133, 7) +
-    '<g class="s-fumo"><circle cx="890" cy="124" r="3"/><circle cx="882" cy="119" r="4.5"/><circle cx="872" cy="112" r="5.5"/></g>' +
-    '</g></g></g>';
-  var camion = '<path class="d-strada" d="M756 152H1200"/>' + pila + albero(1172) + mezzo;
-  var camionStretto = '<path class="d-strada" d="M500 152H700"/>' + albero(684) + '<g transform="translate(-284 0)">' + mezzo + '</g>';
+  /* ---------------------------------------------------------------- strada con il camion (trattore e semirimorchio) */
+  var pila = '';
+  [[1036, 127, 2], [1070, 127, 1], [1104, 127, 3], [1053, 114, 1], [1087, 114, 3], [1070, 101, 2]].forEach(function (p) { pila += cont(p[0], p[1], 32, 13, p[2]); });
+  function camion(x, k) {
+    var su = (151 * (1 - k)).toFixed(1);
+    return '<g class="t-camion"><g transform="translate(' + x + ' ' + su + ') scale(' + k + ')">' + presa(-4, 96, 160, 58) + '<g class="s-camion">' +
+      '<g class="s-fumo"><circle cx="104" cy="96" r="3"/><circle cx="98" cy="88" r="4.5"/><circle cx="106" cy="79" r="5.5"/></g>' +
+      cont(0, 110, 100, 24, 1) +
+      '<rect class="d-t" x="0" y="134" width="104" height="4"/><rect class="d-t" x="74" y="138" width="3" height="7"/>' +
+      ruota(16, 145, 6) + ruota(31, 145, 6) +
+      '<rect class="d-t" x="103" y="100" width="3" height="22" rx="1"/>' +
+      '<rect class="d-t" x="104" y="135" width="46" height="4"/>' +
+      '<path class="d-t" d="M108 136V114Q108 107 115 107H136Q145 107 148 116L150 128V136Z"/>' +
+      '<path class="d-oblo" d="M136 110.5Q142 110.5 144 117L145.5 125H136Z"/><rect class="d-oblo" x="118" y="111" width="13" height="9" rx="1.5"/>' +
+      '<rect class="d-c1" x="108" y="128" width="42" height="3"/><path class="d-filo" d="M133 110V133"/>' +
+      '<rect class="d-t" x="146" y="131" width="6" height="8" rx="1"/><rect class="d-c3" x="125" y="139" width="9" height="4" rx="1"/>' +
+      ruota(118, 145, 6) + ruota(141, 145, 6) +
+      '</g></g></g>';
+  }
+  var camionLargo = '<path class="d-strada" d="M800 160H1200"/>' + pila + albero(1176) + camion(846, 1);
+  var camionStretto = '<path class="d-strada" d="M530 160H700"/>' + albero(690) + camion(534, 0.78);
 
   /* festa per l'intelligenza artificiale collegata (js/attiva-ia.js): la gru cala sulla nave un container con le
      scintille, che si illumina; la nave suona la sirena e salpa. Le animazioni sono in app.css (.festa) */
@@ -139,35 +206,60 @@
     [[0, -46], [33, -33], [48, 0], [33, 33], [0, 40], [-33, 33], [-48, 0], [-33, -33]].forEach(function (d, n) {
       scintille += stella(358, 107, n % 2 ? 4 : 6, 'f-scintilla ' + (n % 2 ? 'd-c2' : 'd-c1'), '--dx:' + d[0] + 'px;--dy:' + d[1] + 'px');
     });
-    var onde = '';
-    for (var x = 20; x < 470; x += 64) onde += 'M' + x + ' ' + (190 + (x % 3) * 6) + 'q10-5 20 0t20 0';
+    var finestre = function (x1, x2, y) { var h = ''; for (var x = x1; x <= x2; x += 8) h += '<rect class="d-oblo" x="' + x + '" y="' + y + '" width="5" height="3.5"/>'; return h; };
+    var reticolo = 'M306 36';
+    for (var rx = 306; rx < 494; rx += 14) reticolo += 'L' + (rx + 7) + ' 30L' + (rx + 14) + ' 36';
     return '<svg class="festa-svg" viewBox="0 0 640 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">' +
       '<path class="d-nuvola" d="M70 40a12 12 0 0 1 22-6 16 16 0 0 1 29 4 10 10 0 0 1 2 19H73a9 9 0 0 1-3-17z"/>' +
       '<path class="d-nuvola" d="M560 70a10 10 0 0 1 19-5 13 13 0 0 1 24 3 8 8 0 0 1 2 16h-42a8 8 0 0 1-3-14z"/>' +
-      '<rect class="d-mare" x="0" y="176" width="480" height="44"/><path class="d-onda" d="' + onde + '"/>' +
-      '<rect class="d-banchina" x="470" y="176" width="170" height="44"/><path class="d-suolo" d="M470 176H640"/>' +
-      '<g class="d-gru"><path d="M500 176V36M548 176V36M500 80h48M500 120h48M500 80l48 40M500 120l48-40M296 36h330M548 36l-24-20-24 20"/></g>' +
-      '<rect class="d-t" x="346" y="33" width="24" height="8" rx="2"/>' +
-      '<path class="f-cavo" d="M358 41V98"/>' +
+      '<rect class="d-mare" x="0" y="174" width="482" height="46"/>' +
+      '<rect class="d-banchina" x="482" y="176" width="158" height="44"/><path class="d-suolo" d="M482 176H640"/><rect class="d-muro" x="478" y="176" width="5" height="44"/>' +
+      '<g class="d-gru"><path class="g-sottile" d="' + reticolo + '"/>' +
+        '<path class="g-forte" d="M500 176V32M548 176V32M500 124H548"/>' +
+        '<path class="g-medio" d="M296 30H628M306 36H628M296 30L306 36M500 30L524 6L548 30"/>' +
+        '<path class="g-sottile" d="M500 124L548 38M548 124L500 38M524 6L308 30M524 6L626 30"/></g>' +
+      '<rect class="d-t" x="490" y="170" width="20" height="6" rx="1.5"/><rect class="d-t" x="538" y="170" width="20" height="6" rx="1.5"/>' +
+      '<rect class="d-c1" x="501" y="123" width="46" height="2"/>' +
+      '<rect class="d-t" x="590" y="17" width="38" height="13" rx="1"/><rect class="d-c1" x="590" y="25" width="38" height="2"/>' +
+      '<rect class="d-t" x="346" y="36" width="24" height="5"/><rect class="d-t" x="351" y="41" width="14" height="7"/><rect class="d-oblo" x="354" y="43" width="8" height="3"/>' +
+      '<path class="f-cavo" d="M358 48V98"/>' +
       '<g class="f-nave">' + stiva +
       '<g class="f-ia">' + cont(336, 98, 44, 18, 1) + stella(358, 107, 6, 'f-stella') + '</g>' +
-      '<rect class="d-t" x="110" y="112" width="36" height="44" rx="2"/><rect class="d-oblo" x="115" y="118" width="26" height="5" rx="1.5"/>' +
-      '<rect class="d-c1" x="119" y="94" width="13" height="19" rx="1.5"/>' +
-      '<g class="f-sirena"><path d="M138 88q7-6 0-13"/><path d="M145 92q11-10 0-21"/><path d="M152 96q15-14 0-29"/></g>' +
-      '<path class="d-t" d="M96 156h356l-16 30H116z"/><path class="d-c1" d="M106 172h336l-6 14H116z"/>' +
-      '</g>' + scintille + '</svg>';
+      '<rect class="d-t" x="104" y="122" width="46" height="34"/>' + finestre(109, 141, 128) + finestre(109, 141, 139) +
+      '<rect class="d-t" x="109" y="106" width="36" height="16"/>' + finestre(113, 137, 112) +
+      '<rect class="d-t" x="98" y="99" width="58" height="7"/><rect class="d-oblo" x="102" y="101" width="50" height="3"/>' +
+      '<path class="d-t" d="M112 99L114 80H128L128 99Z"/><path class="d-c1" d="M113.5 85H128V89.5H113Z"/><path class="d-ombra-s" d="M114 80H128V82.5H113.8Z"/>' +
+      '<path class="d-albero" d="M146 99V84M141 88h10M444 156V142M440 146h8"/>' +
+      '<g class="f-sirena"><path d="M150 88q7-6 0-13"/><path d="M157 92q11-10 0-21"/><path d="M164 96q15-14 0-29"/></g>' +
+      '<path class="d-t" d="M94 156H432Q450 155 458 162L446 198H106Q98 196 96 182Z"/>' +
+      '<path class="d-ombra-s" d="M95 172H454L451.6 180H95.5Z"/><path class="d-c1" d="M95.5 180H451.6L449.4 188H97Z"/>' +
+      '<path class="d-filo" d="M96 156.6H432Q446 156 453 160"/><circle class="d-ombra-s" cx="444" cy="166" r="2.4"/>' +
+      '</g>' +
+      '<rect class="d-mare" x="0" y="190" width="482" height="30"/>' +
+      '<path class="d-schiuma" d="M100 190H446M446 190q9-3 16 1"/>' +
+      '<path class="d-onda" d="M20 202h22M84 210h34M170 200h18M236 212h30M320 203h24M396 211h30"/>' +
+      scintille + '</svg>';
   };
 
   /* vignette per gli elenchi vuoti: T.vignetta('nave' | 'container' | 'gru' | 'faro') */
   var VIGNETTE = {
-    nave: '<path class="d-onda" d="M6 52q8-4 16 0t16 0 16 0M84 56q8-4 16 0t16 0"/>' +
-      '<g class="v-dondola"><path class="d-t" d="M30 38h68l-8 12H38z"/>' + cont(46, 26, 18, 11, 1) + cont(66, 26, 18, 11, 2) +
-      '<rect class="d-t" x="36" y="22" width="9" height="16" rx="1.5"/><rect class="d-c1" x="38" y="14" width="5" height="8" rx="1"/></g>',
+    nave: '<rect class="d-mare" x="4" y="45" width="124" height="13" rx="3"/>' +
+      '<g class="v-dondola">' + cont(41, 26, 14, 10, 1) + cont(56, 26, 14, 10, 2) + cont(71, 26, 14, 10, 3) + cont(86, 26, 14, 10, 1) +
+        cont(56, 16, 14, 10, 3) + cont(71, 16, 14, 10, 1) +
+        '<rect class="d-t" x="25" y="25" width="13" height="11"/><rect class="d-t" x="22" y="21" width="19" height="4"/><rect class="d-oblo" x="24" y="22.2" width="15" height="1.6"/>' +
+        '<path class="d-t" d="M26 21L27 14H32V21Z"/><path class="d-c1" d="M26.6 16H32V18H26.3Z"/>' +
+        '<path class="d-t" d="M20 36H98Q106 35.6 110 40L104 50H27Q22 49 21 43Z"/><path class="d-c1" d="M21.4 43H107L105.6 46H22.6Z"/></g>' +
+      '<rect class="d-mare" x="4" y="48" width="124" height="10" rx="3"/><path class="d-schiuma" d="M28 48H103M103 48q4-1.5 7 .5"/><path class="d-onda" d="M14 54h10M60 55h16M110 53h8"/>',
     container: '<path class="d-suolo" d="M8 58H124"/>' + cont(30, 30, 56, 26, 1) +
       '<path class="d-t v-anta" d="M86 30l18-8v34l-18 0z"/><path class="v-ombra" d="M32 33h52v4H32z"/>',
-    gru: '<path class="d-suolo" d="M8 58H124"/><g class="d-gru v-gru"><path d="M86 58V14M100 58V14M86 30h14M86 44h14M86 30l14 14M86 44l14-14M40 14h72"/></g>' +
-      '<g class="v-gancio"><path class="d-cavo-v" d="M54 14v14"/><path class="d-cavo-v" d="M50 28h8l-4 6z"/></g>',
-    faro: '<path class="d-onda" d="M6 56q8-4 16 0t16 0M90 58q8-4 16 0t16 0"/>' +
+    gru: '<path class="d-suolo" d="M8 58H124"/><g class="d-gru v-gru"><path class="g-sottile" d="M34 17L37 14L40 17L43 14L46 17L49 14L52 17L55 14L58 17L61 14L64 17L67 14L70 17L73 14L76 17L79 14L82 17"/>' +
+        '<path class="g-forte" d="M84 58V12M102 58V12M84 40H102"/><path class="g-medio" d="M30 14H116M34 17H116M30 14L34 17M84 14L93 4L102 14"/>' +
+        '<path class="g-sottile" d="M84 40L102 18M102 40L84 18M93 4L34 14M93 4L114 14"/></g>' +
+      '<rect class="d-t" x="104" y="8" width="12" height="6" rx="1"/><rect class="d-t" x="80" y="56" width="8" height="2"/><rect class="d-t" x="98" y="56" width="8" height="2"/>' +
+      '<rect class="d-t" x="46" y="17" width="10" height="3"/>' +
+      '<g class="v-gancio"><path class="d-cavo-v" d="M49 20v10M53 20v10"/><rect class="d-t" x="42" y="30" width="18" height="1.5"/>' + cont(43, 31.5, 16, 8, 2) + '</g>',
+    faro: '<rect class="d-mare" x="4" y="52" width="124" height="8" rx="3"/><path class="d-onda" d="M14 56h10M96 57h14"/>' +
+      '<path class="d-t" d="M48 56q6-6 14-4 6-4 14 0 6-1 10 4z"/>' +
       '<path class="d-t" d="M58 56l4-34h12l4 34z"/><rect class="d-c1" x="61" y="34" width="14" height="5"/><rect class="d-c1" x="60" y="46" width="16" height="5"/>' +
       '<rect class="d-oblo" x="63" y="14" width="10" height="8" rx="1"/><path class="d-t" d="M60 14h16l-8-7z"/>' +
       '<path class="v-luce" d="M74 18l40-10v20z"/>'
@@ -181,7 +273,7 @@
       interno + '</svg>';
   }
   T.scena = function (classe) {
-    return svg('larga', classe, 1200, cielo + mare + gru + nave + treno + camion) +
-      svg('stretta', classe, 700, cieloStretto + mare + gru + nave + camionStretto);
+    return svg('larga', classe, 1200, cielo + lontano(600, 1000) + lontano(1150, 1200) + mareDietro + banchina + nave + marePrima + gru + treno + camionLargo) +
+      svg('stretta', classe, 700, cieloStretto + lontano(580, 700) + mareDietro + banchina + nave + marePrima + gru + camionStretto);
   };
 })();

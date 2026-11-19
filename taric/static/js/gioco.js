@@ -19,8 +19,8 @@
   function salvaRecord(n) { try { localStorage.setItem(CHIAVE, String(n)); } catch (e) { /* niente archivio */ } }
   function cont(x, y, n, classe) {
     var h = '<g class="' + (classe || '') + '" transform="translate(' + x + ' ' + y + ')"><rect class="d-c' + n + '" width="' + LC + '" height="' + HC + '" rx="2"/>';
-    for (var k = 6; k < LC - 3; k += 6) h += '<line class="d-nervo" x1="' + k + '" y1="4" x2="' + k + '" y2="' + (HC - 4) + '"/>';
-    return h + '</g>';
+    for (var k = 5; k < LC - 4; k += 5) h += '<line class="d-nervo" x1="' + k + '" y1="3" x2="' + k + '" y2="' + (HC - 3) + '"/>';
+    return h + '<rect class="d-porta" x="' + (LC - 3) + '" width="3" height="' + HC + '"/><rect class="d-lucido" width="' + LC + '" height="1.5"/></g>';
   }
   function centroPosto(i) { return X0 + i * LP + LP / 2; }
 
@@ -41,7 +41,7 @@
           '<path class="g-cavo" data-g="cavo" d="M0 ' + (BRACCIO + 6) + 'V' + APPESO + '"/><g data-g="appeso"></g></g>' +
         '<g data-g="cade"></g><g data-g="spruzzi"></g>' +
         '<rect class="d-mare" y="270" width="' + L + '" height="50"/>' +
-        '<path class="d-onda" d="M20 286q10-5 20 0t20 0M150 296q10-5 20 0t20 0 20 0M330 284q10-5 20 0t20 0M480 298q10-5 20 0t20 0"/>' +
+        '<path class="d-onda" d="M22 284h22M110 296h34M210 288h18M300 300h30M392 286h22M480 296h34M560 284h20"/>' +
       '</svg><div class="g-scritta" data-g="scritta" aria-hidden="true"></div>' +
       '<div class="g-velo" data-g="velo"><p class="g-titolo">Carica la nave</p><p>Sgancia il container sul posto indicato: tocca, clicca o premi spazio.</p>' +
         '<button class="btn pri" type="button" data-g="via">' + T.icona('container') + 'Inizia</button></div></div>' +
@@ -56,9 +56,17 @@
       disegnaNave(); nuovoBersaglio();
     }
     function disegnaNave() {
-      var h = '<g data-g="scafo"><path class="d-t" d="M70 ' + PONTE + 'H530l-24 34H96z"/><path class="d-c1" d="M84 ' + (PONTE + 18) + 'H520l-12 16H96z"/>' +
-        '<rect class="d-t" x="44" y="' + (PONTE - 50) + '" width="46" height="50" rx="3"/><rect class="d-oblo" x="51" y="' + (PONTE - 42) + '" width="32" height="7" rx="2"/>' +
-        '<rect class="d-c1" x="57" y="' + (PONTE - 72) + '" width="16" height="22" rx="2"/>';
+      // la stessa nave della scena (js/disegni.js): plancia e fumaiolo a poppa, prua slanciata, fascia arancio sulla linea d'acqua
+      var P = PONTE, fin = function (x1, x2, y) { var f = ''; for (var x = x1; x <= x2; x += 8) f += '<rect class="d-oblo" x="' + x + '" y="' + y + '" width="5" height="4"/>'; return f; };
+      var h = '<g data-g="scafo">' +
+        '<rect class="d-t" x="50" y="' + (P - 36) + '" width="46" height="36"/>' + fin(55, 87, P - 30) + fin(55, 87, P - 18) +
+        '<rect class="d-t" x="55" y="' + (P - 52) + '" width="36" height="16"/>' + fin(59, 83, P - 46) +
+        '<rect class="d-t" x="46" y="' + (P - 59) + '" width="54" height="7"/><rect class="d-oblo" x="50" y="' + (P - 57) + '" width="46" height="3"/>' +
+        '<path class="d-t" d="M58 ' + (P - 59) + 'L60 ' + (P - 80) + 'H74V' + (P - 59) + 'Z"/><path class="d-c1" d="M59.4 ' + (P - 74) + 'H74V' + (P - 69) + 'H58.9Z"/>' +
+        '<path class="d-albero" d="M92 ' + (P - 59) + 'V' + (P - 76) + 'M86 ' + (P - 71) + 'h12M528 ' + P + 'V' + (P - 16) + 'M523 ' + (P - 12) + 'h10"/>' +
+        '<path class="d-t" d="M44 ' + P + 'H512Q532 ' + (P - 1) + ' 540 ' + (P + 8) + 'L526 ' + (P + 38) + 'H58Q48 ' + (P + 36) + ' 45 ' + (P + 20) + 'Z"/>' +
+        '<path class="d-ombra-s" d="M44.6 ' + (P + 12) + 'H536.7L533.8 ' + (P + 20) + 'H45Z"/><path class="d-c1" d="M45 ' + (P + 20) + 'H533.8L531 ' + (P + 27) + 'H47Z"/>' +
+        '<path class="d-filo" d="M46 ' + (P + 0.6) + 'H512Q528 ' + P + ' 536 ' + (P + 5) + '"/><circle class="d-ombra-s" cx="526" cy="' + (P + 9) + '" r="2.6"/>';
       s.pile.forEach(function (p, i) { p.forEach(function (c, r) { h += cont(centroPosto(i) - LC / 2, PONTE - HC * (r + 1), c); }); });
       $('nave').innerHTML = h + '</g>';
     }
