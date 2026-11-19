@@ -29,6 +29,18 @@ Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'ammini
   - **Ricerca**: le parole cercate senza risultati (quante volte, quando), da trasformare in **sinonimi** che valgono subito per tutti; un sinonimo si accetta solo se i termini esistono nella nomenclatura;
   - **Registro** degli eventi.
 
+## Curiosità nel porto
+
+Per chi ha un minuto, senza togliere niente al lavoro:
+
+- **La scena si tocca**: la nave suona la sirena e sbuffa, la gru appoggia il container sulla nave, l'aereo fa un giro, il camion parte e torna, il treno fa manovra, le nuvole piovono e dal mare si alza un gabbiano. Ogni animazione finisce dov'era cominciata.
+- **«Carica la nave»**: tre tocchi veloci sulla gru (oppure «gioca» scritto fuori dai campi) aprono un piccolo gioco. Si sgancia il container sul posto indicato con un tocco, un clic, la barra spaziatrice o Invio; ogni dieci container la nave salpa. Il record resta nel dispositivo. Lo propongono anche le pagine d'attesa (account da approvare, dati in preparazione).
+- **Parole segrete**, scritte fuori dai campi: «nave» fa suonare le sirene, «festa» accende i fuochi, «magic» fa salpare il logo (come cinque tocchi sul logo).
+- **Stagioni**: a dicembre, fino all'Epifania, un abete sulla banchina e le luci sulla gru; a Capodanno i fuochi. Con il tema scuro, le stelle e le finestre accese.
+- **Codici recenti** sotto la casella di ricerca, quando è vuota (gli ultimi aperti su questo dispositivo), e vignette disegnate negli elenchi vuoti.
+
+Con «movimento ridotto» attivo nel sistema le animazioni durano un istante.
+
 ## Sito su Render
 
 ### Prima volta (amministratore)

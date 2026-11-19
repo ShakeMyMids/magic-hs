@@ -6,6 +6,8 @@
   var T = window.TARIC, esc = T.esc;
   var esito = document.getElementById('esito');
   function mostra(testo, ok) { esito.innerHTML = testo ? '<p class="' + (ok ? 'esito-ok' : 'errore') + '">' + esc(testo) + '</p>' : ''; }
+  /* a chi aspetta l'approvazione, il gioco della gru (js/gioco.js) */
+  function conGioco() { if (T.gioco) esito.insertAdjacentHTML('beforeend', '<div class="fila"><button class="btn sm" type="button" data-gioca>' + T.icona('container') + 'Mentre aspetti: carica una nave</button></div>'); }
   function occupato(f, si) { var b = f.querySelector('button[type="submit"]'); if (b) b.disabled = si; }
   function valori(f) { var d = new FormData(f), o = {}; d.forEach(function (v, k) { o[k] = typeof v === 'string' ? v : ''; }); return o; }
 
@@ -40,7 +42,7 @@
       if (!v.email || !v.password) { mostra('Inserisci email e password.'); return; }
       occupato(accedi, true); mostra('');
       T.api('POST', '/api/accedi', { email: v.email, password: v.password, ricordami: accedi.elements.ricordami.checked }, { resta: true })
-        .then(function () { location.href = '/'; }, function (e) { mostra(e.errore); occupato(accedi, false); });
+        .then(function () { location.href = '/'; }, function (e) { mostra(e.errore); if (e.codice === 'in_attesa') conGioco(); occupato(accedi, false); });
     });
 
     richiedi.addEventListener('submit', function (ev) {
@@ -59,6 +61,7 @@
           if (r.stato === 'attivo') { location.href = '/'; return; }        // amministratore: entra subito
           richiedi.reset(); richiedi.hidden = true;
           mostra('Richiesta inviata. Quando l\'amministratore la approva puoi accedere con la tua email e la password scelta.', true);
+          conGioco();
         }, function (e) { mostra(e.errore); occupato(richiedi, false); });
     });
   }

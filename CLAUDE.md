@@ -89,7 +89,12 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   (sezione Bolla: elenco, intestazione, articoli, tributi, documenti della casella 44, riferimenti DE e casella di ogni campo in
   `RIF_IMP`/`RIF_EXP`, foglio `#bolla-stampa` con `body.stampa-bolla`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
-  (Utenti, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Registro), `js/attiva-ia.js` (festa alla prima «Prova» riuscita
+  (Utenti, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Registro), `js/porto.js` (la scena si tocca:
+  gruppi `.t-*` di `disegni.js` animati per la durata di una classe; tre tocchi sulla gru o «gioca» scritto fuori dai campi aprono
+  il gioco; «nave», «festa», «magic» e cinque tocchi sul logo; classi `natale` e `capodanno` su `<html>`; `[data-gioca]` nelle
+  pagine d'attesa), `js/gioco.js` (`T.gioco()`, «Carica la nave»: SVG con le variabili `--d-*`, record in `localStorage`
+  `magic-hs.gioco`), `T.vignetta()` di `disegni.js` per gli elenchi vuoti, codici recenti di `app.js` (`magic-hs.recenti`),
+  `js/attiva-ia.js` (festa alla prima «Prova» riuscita
   dell'amministratore: `T.festaIA`, scena `T.festa()` di `disegni.js`, animazioni `.festa` in `app.css` con lo stato
   finale uguale a quello senza animazioni). Tema «porto»: blu marina e arancio dei container, colori solo nelle variabili
   di `css/app.css` (anche quelle `--d-*` delle illustrazioni). Testi brevi: niente spiegazioni ovvie nelle pagine. Le

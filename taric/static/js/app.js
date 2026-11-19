@@ -331,6 +331,7 @@ function rigaRisultato(i, n) {
 var MOSTRATI = 40;
 function renderRisultati() {
   var el = $('#risultati'), q = $('#q').value.trim();
+  renderRecenti();
   $('#q-x').hidden = !q;
   $('.domanda').classList.toggle('cercando', state.modo === 'parole' && !!q);
   if (state.modo !== 'parole' || !q) { el.hidden = true; el.innerHTML = ''; return; }
@@ -1117,9 +1118,29 @@ function rigaPerc(j, fine) {
     '<span class="txt"><span class="tr">' + dash + '</span>' + esc(descOf(j)) + tagEN(j) + '</span>' +
     (t ? '<span class="trad">' + esc(t) + '</span>' : '') + '</div>';
 }
+/* codici aperti di recente su questo dispositivo: sotto la casella di ricerca, quando è vuota */
+var RECENTI = 'magic-hs.recenti';
+function recenti() { try { return (JSON.parse(localStorage.getItem(RECENTI) || '[]') || []).filter(function (c) { return byCode.has(c) && isLeaf(byCode.get(c)); }); } catch (e) { return []; } }
+function ricordaRecente(c) {
+  var l = recenti();
+  if (l[0] === c) return;
+  l = [c].concat(l.filter(function (x) { return x !== c; })).slice(0, 6);
+  try { localStorage.setItem(RECENTI, JSON.stringify(l)); } catch (e) { /* niente archivio */ }
+}
+function renderRecenti() {
+  var el = $('#recenti'), q = $('#q').value.trim(), l = recenti();
+  if (q || !l.length) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  el.innerHTML = '<span class="et">' + T.icona('storico') + 'Recenti</span>' + l.map(function (c) {
+    var d = descOf(byCode.get(c));
+    return '<button class="chip" type="button" data-act="recente" data-c="' + esc(c) + '" title="' + esc(d) + '"><b>' + esc(grp(c)) + '</b><span>' + esc(d.length > 34 ? d.slice(0, 33) + '…' : d) + '</span></button>';
+  }).join('');
+}
 function renderEsito() {
   var el = $('#esito'), sel = state.sel, r = state.result;
+  renderRecenti();
   if (!sel) { el.innerHTML = ''; return; }
+  if (sel.idx >= 0 && isLeaf(sel.idx)) ricordaRecente(sel.code);
   var i = sel.idx, role = ruolo(sel), cand = role.cand, h = '';
   /* l'arrivo del risultato si anima una volta; se nel frattempo la scheda si ridisegna (per esempio arrivano
      le misure del capitolo) l'animazione riprende dal punto in cui era, grazie al ritardo negativo --t */
@@ -1140,7 +1161,7 @@ function renderEsito() {
   h += '<div class="fila"><button class="btn sm" type="button" data-act="copia" data-c="' + esc(sel.code) + '">' + T.icona('copia') + 'Copia codice</button>' +
     '<button class="btn sm" type="button" data-act="stampa">' + T.icona('documento') + 'Stampa o PDF</button>' +
     (i >= 0 ? '<button class="btn sm" type="button" data-act="apri" data-i="' + i + '">' + T.icona('libro') + 'Vedi nella nomenclatura</button>' : '') +
-    (i >= 0 && isLeaf(i) ? '<button class="btn sm" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' +
+    (i >= 0 && isLeaf(i) ? '<button class="btn sm' + (state.stellaAppena === sel.code ? ' appena' : '') + '" type="button" data-act="preferito" data-c="' + esc(sel.code) + '" aria-pressed="' + (state.preferiti[sel.code] ? 'true' : 'false') + '">' + T.icona('stella') + (state.preferiti[sel.code] ? 'Nei preferiti' : 'Aggiungi ai preferiti') + '</button>' +
       '<button class="btn sm" type="button" data-act="in-bolla" data-c="' + esc(sel.code) + '">' + T.icona('pacco') + 'Aggiungi alla bolla</button>' : '') + '</div>';
   var fineCod = (D.fine && D.fine[sel.code]) || 0;
   if (i >= 0 && fineCod) h += '<p class="avviso">' + (fineCod < giornoMisure() ? 'Questo codice ha cessato di valere il ' : 'Questo codice cessa di valere il ') + dataIt(fineCod) + '.</p>';
@@ -1398,7 +1419,10 @@ document.addEventListener('click', function (ev) {
   if ((act === 'togli' || act === 'riclassifica' || act === 'chiedi') && state.busy) return;
   else if (act === 'togli') { state.answers.splice(parseInt(t.getAttribute('data-k'), 10), 1); renderFornite(); classifica(true); }
   else if (act === 'copia') {
-    var c = t.getAttribute('data-c'), done = function (ok) { t.textContent = ok ? 'Copiato' : c; setTimeout(function () { t.textContent = 'Copia codice'; }, 1600); };
+    var c = t.getAttribute('data-c'), done = function (ok) {
+      t.innerHTML = ok ? T.icona('spunta') + 'Copiato' : esc(c); t.classList.toggle('fatto', ok);
+      setTimeout(function () { t.innerHTML = T.icona('copia') + 'Copia codice'; t.classList.remove('fatto'); }, 1600);
+    };
     try { navigator.clipboard.writeText(c).then(function () { done(true); }, function () { done(false); }); } catch (e) { done(false); }
   }
   else if (act === 'alt') { var cc = t.getAttribute('data-c'); state.sel = { code: cc, idx: byCode.has(cc) ? byCode.get(cc) : -1 }; state.warn = ''; renderEsito(); }
@@ -1418,7 +1442,8 @@ document.addEventListener('click', function (ev) {
   else if (act === 'preferito') {
     var pc = t.getAttribute('data-c'), cera = state.preferiti[pc];
     if (cera) delete state.preferiti[pc]; else state.preferiti[pc] = { nota: '' };
-    renderEsito();
+    state.stellaAppena = cera ? '' : pc;                 // la stella si accende con un piccolo scoppio, una volta
+    renderEsito(); state.stellaAppena = '';
     (cera ? T.api('DELETE', '/api/preferiti/' + pc) : T.api('PUT', '/api/preferiti/' + pc, { nota: '' })).then(function () {
       T.avviso(cera ? 'Tolto dai preferiti.' : 'Aggiunto ai preferiti: trovi la nota e l\'elenco nel Profilo.');
       if (T.viste && T.viste.profilo) T.viste.profilo.daRicaricare = true;
@@ -1443,6 +1468,11 @@ document.addEventListener('click', function (ev) {
   else if (act === 'flusso') { state.flow = t.getAttribute('data-f'); renderEsito(); salvaPreferenze(); }
   else if (act === 'sez') { var s = t.getAttribute('data-k'); state.secOpen[s] = !state.secOpen[s]; renderNom(); }
   else if (act === 'toggle') { state.open[i] = !state.open[i]; renderNom(); }
+  else if (act === 'recente') {
+    var rc = t.getAttribute('data-c');
+    state.sel = { code: rc, idx: byCode.get(rc) }; state.result = null; state.answers = []; state.heads = []; state.trad = {};
+    state.anima = true; state.risChiusi = true; renderAll(); var er = $('#esito'); if (er.scrollIntoView) er.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
   else if (act === 'usa') {
     ev.stopPropagation(); state.sel = { code: CODE[i], idx: i }; state.result = null; state.answers = []; state.heads = []; state.trad = {};
     state.anima = true; state.risChiusi = true; vista('classifica'); renderAll(); var es = $('#esito'); if (es.scrollIntoView) es.scrollIntoView({ block: 'start' });

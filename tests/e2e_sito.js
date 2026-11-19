@@ -71,6 +71,21 @@ async function accedi(p, email, password) {
   ok(await capo.isVisible('.finestra.installa >> text=Installa pagina come app'), 'Installa: istruzioni per il computer');
   await capo.click('.finestra.installa .btn.pri');
 
+  // il porto da toccare (js/porto.js) e il gioco «Carica la nave» (js/gioco.js)
+  await capo.click('.scena-larga .t-nave', { force: true });
+  ok(await capo.evaluate(() => document.querySelector('.scena-larga .t-nave').classList.contains('suona')), 'scena: toccata, la nave suona la sirena');
+  await capo.keyboard.type('gioca');
+  await capo.waitForSelector('.finestra.gioco');
+  await capo.click('[data-g="via"]');
+  await capo.waitForFunction(() => { const g = document.querySelector('[data-g="carrello"]'), b = document.querySelector('.g-freccia'); if (!g || !b) return false;
+    const m = (g.getAttribute('transform') || '').match(/translate\(([-\d.]+)/), d = b.getAttribute('d').match(/M([\d.]+)/);
+    return !!(m && d) && Math.abs(+m[1] - (+d[1] + 8)) < 3; }, null, { timeout: 15000, polling: 'raf' });
+  await capo.keyboard.press('Space');
+  await capo.waitForFunction(() => +document.querySelector('[data-g="punti"]').textContent >= 1, null, { timeout: 5000 });
+  ok(true, 'gioco: si apre scrivendo «gioca», il container sganciato sul posto indicato fa punto');
+  await capo.keyboard.press('Escape');
+  ok(await capo.isHidden('.finestra.gioco'), 'gioco: si chiude con Esc');
+
   // prima pagina: ricerca per parola o codice, senza IA
   ok(!(await capo.isChecked('#modo-ia')) && (await capo.textContent('#titolo-q')) === 'Che merce cerchi?' && (await capo.textContent('#vai')).trim() === 'Cerca',
     'prima pagina: ricerca per parole, IA spenta');
