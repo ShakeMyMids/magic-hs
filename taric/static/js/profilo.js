@@ -64,7 +64,7 @@
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Storico delle classificazioni<span class="dx">' + st.totale + ' salvate</span></div>';
     if (!st.caricato) h += '<p class="vuoto">Carico…</p>';
-    else if (!st.storico.length) h += '<p class="vuoto">' + T.icona('nave') + 'Ancora nessuna classificazione.</p>';
+    else if (!st.storico.length) h += '<p class="vuoto illustrato">' + (T.vignetta ? T.vignetta('nave') : T.icona('nave')) + 'Ancora nessuna classificazione.</p>';
     else {
       h += '<div class="fila"><input class="campo" type="search" data-p="filtro" placeholder="Filtra per descrizione o codice" value="' + esc(st.filtro) + '"></div><div class="elenco" id="elenco-storico">' + righeStorico() + '</div>';
       h += '<div class="fila">' + (st.finito ? '' : '<button class="btn sm" type="button" data-p="altre">Mostra le precedenti</button>') +
@@ -74,7 +74,7 @@
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('stella') + 'Voci preferite<span class="dx">' + st.preferiti.length + '</span></div>';
     if (!st.caricato) h += '<p class="vuoto">Carico…</p>';
-    else if (!st.preferiti.length) h += '<p class="vuoto">' + T.icona('container') + 'Nessuna voce preferita.</p>';
+    else if (!st.preferiti.length) h += '<p class="vuoto illustrato">' + (T.vignetta ? T.vignetta('container') : T.icona('container')) + 'Nessuna voce preferita.</p>';
     else h += '<div class="elenco">' + st.preferiti.map(rigaPreferito).join('') + '</div>';
     h += '</div></div>';
 

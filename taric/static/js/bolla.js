@@ -228,7 +228,7 @@
     var L = st.elenco;
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Le tue bolle<span class="dx">' + (L ? L.length : '') + '</span></div>';
     if (!L) h += '<p class="vuoto">Carico…</p>';
-    else if (!L.length) h += '<p class="vuoto">Nessuna bolla salvata.</p>';
+    else if (!L.length) h += '<p class="vuoto illustrato">' + (T.vignetta ? T.vignetta('gru') : '') + 'Nessuna bolla salvata.</p>';
     else h += '<div class="scorri"><table class="tab"><thead><tr><th>Riferimento</th><th>Tipo</th><th>Data</th><th class="n">Articoli</th><th>Modificata</th><th></th></tr></thead><tbody>' +
       L.map(function (v) {
         return '<tr><td>' + esc(v.riferimento || 'senza riferimento') + '</td><td data-l="Tipo">' + (v.tipo === 'import' ? 'importazione' : 'esportazione') + '</td>' +

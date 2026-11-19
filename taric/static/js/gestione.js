@@ -318,7 +318,7 @@
     var R = st.ricerca;
     if (!R) return '<p class="vuoto">Carico…</p>';
     var h = '<div class="foglio"><div class="box s7"><div class="lab">' + T.icona('domanda') + 'Parole cercate senza risultati<span class="dx">' + R.vuote.length + '</span></div>' + riga('ricerca');
-    if (!R.vuote.length) h += '<p class="vuoto">Nessuna: ogni ricerca ha trovato qualcosa.</p>';
+    if (!R.vuote.length) h += '<p class="vuoto illustrato">' + (T.vignetta ? T.vignetta('faro') : '') + 'Nessuna: ogni ricerca ha trovato qualcosa.</p>';
     else {
       h += '<div class="elenco">' + R.vuote.map(function (v) {
         var aperto = st.sinonimoPer === v.testo;
