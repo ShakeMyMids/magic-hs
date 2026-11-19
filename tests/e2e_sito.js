@@ -91,7 +91,10 @@ async function accedi(p, email, password) {
   const ps = await cs.newPage(); attenzione(ps, 'stagioni');
   await ps.clock.setFixedTime(new Date('2026-12-24T10:00:00'));
   await ps.goto(B + '/accedi'); await ps.waitForSelector('.scena-stretta .t-albero');
-  ok(await ps.evaluate(() => ['inverno', 'natale'].every(c => document.documentElement.classList.contains(c)) &&
+  ok(await ps.evaluate(() => ['inverno', 'natale', 'con-tema', 'tema-natale', 'con-festone'].every(c => document.documentElement.classList.contains(c)) &&
+    !!document.querySelector('.barra .festone pattern') && !!document.querySelector('.logo .marchio .s-rosso') &&
+    document.querySelector('.auguri:not([hidden])').textContent === 'Buon Natale!' &&
+    getComputedStyle(document.querySelector('.btn.pri')).borderColor === 'rgb(161, 38, 43)' &&
     !!document.querySelector('.scena-stretta .t-albero .s-abete') && document.querySelectorAll('.scena-stretta .s-fiocchi .s-cade').length > 5 &&
     !!document.querySelector('.scena-stretta .s-neve')), 'stagioni: la vigilia di Natale abete, neve e fiocchi');
   await ps.click('.scena-stretta .t-albero', { force: true });
@@ -104,6 +107,26 @@ async function accedi(p, email, password) {
     !!document.querySelector('.scena-stretta .s-pavese') && !!document.querySelector('.scena-stretta .s-frecce') && !!document.querySelector('.scena-stretta .s-sole')),
     'stagioni: il 2 giugno sole, bandiere sulla gru e Frecce Tricolori');
   await cs.close();
+
+  // stagioni e feste dal profilo: anteprima di un altro giorno, ritorno a oggi, interruttore (su questo dispositivo)
+  const temaDi = (p) => p.evaluate(() => (document.documentElement.className.match(/tema-([a-z-]+)/) || [])[1] || '');
+  const oggi = await capo.evaluate(() => TARIC.calendario(new Date()).tema);
+  ok(await temaDi(capo) === oggi && await capo.evaluate(() => !!document.querySelector('.barra .festone')), 'stagioni: colori e festone del giorno (' + oggi + ')');
+  await capo.click('#tab-profilo'); await capo.waitForSelector('[data-p="prova"]');
+  await Promise.all([capo.waitForEvent('load'), capo.selectOption('[data-p="prova"]', { label: 'Natale' })]);
+  await capo.waitForSelector('.anteprima');
+  ok(await temaDi(capo) === 'natale' && (await capo.textContent('.anteprima')).includes('Natale (25/12/'), 'stagioni: anteprima di Natale dal profilo, con l\'avviso');
+  await Promise.all([capo.waitForEvent('load'), capo.click('[data-prova="fine"]')]);
+  await capo.waitForSelector('[data-p="prova"]');
+  ok(await temaDi(capo) === oggi && await capo.isHidden('.anteprima'), 'stagioni: «Torna a oggi»');
+  await Promise.all([capo.waitForEvent('load'), capo.uncheck('[data-p="stagioni"]')]);
+  await capo.waitForSelector('[data-p="prova"]');
+  ok(await capo.evaluate(() => !document.documentElement.classList.contains('con-tema') && !document.querySelector('.festone') &&
+    document.querySelector('[data-p="prova"]').disabled && !document.querySelector('[data-p="stagioni"]').checked), 'stagioni: spente dal profilo, i colori di sempre');
+  await Promise.all([capo.waitForEvent('load'), capo.check('[data-p="stagioni"]')]);
+  await capo.waitForSelector('[data-p="prova"]');
+  ok(await temaDi(capo) === oggi, 'stagioni: riaccese');
+  await capo.click('#tab-classifica'); await pronta(capo);
 
   // prima pagina: ricerca per parola o codice, senza IA
   ok(!(await capo.isChecked('#modo-ia')) && (await capo.textContent('#titolo-q')) === 'Che merce cerchi?' && (await capo.textContent('#vai')).trim() === 'Cerca',

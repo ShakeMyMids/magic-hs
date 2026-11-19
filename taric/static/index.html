@@ -6,6 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <title>MAGIC HS</title>
 <link rel="stylesheet" href="/static/css/app.css">
+<script src="/static/js/calendario.js"></script>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icons/icona.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
@@ -42,7 +43,7 @@
       <div class="foglio">
         <div class="box domanda">
           <div class="scena" data-scena="vivo"></div>
-          <div class="titolo-riga"><h2 id="titolo-q">Che merce cerchi?</h2><span class="dato" id="dato"></span></div>
+          <div class="titolo-riga"><h2 id="titolo-q">Che merce cerchi?</h2><span class="auguri" data-auguri hidden></span><span class="dato" id="dato"></span></div>
           <label for="q" id="etichetta-q" hidden>Parola o codice da cercare nella nomenclatura</label>
           <div class="cerca-merce" data-ico="cerca"><textarea id="q" rows="1" spellcheck="false" autocomplete="off" enterkeyhint="search" placeholder="Parola o codice"></textarea>
             <button class="tasto-ico azzera" id="q-x" type="button" aria-label="Svuota la casella" data-ico="chiudi" hidden></button></div>
@@ -85,7 +86,6 @@
 </div>
 
 <script src="/static/js/icone.js"></script>
-<script src="/static/js/calendario.js"></script>
 <script src="/static/js/disegni.js"></script>
 <script src="/static/js/porto.js"></script>
 <script src="/static/js/gioco.js"></script>

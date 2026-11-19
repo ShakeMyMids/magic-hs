@@ -5,7 +5,8 @@
    - Tre tocchi veloci sulla gru aprono il gioco «Carica la nave» (js/gioco.js).
    - Parole scritte fuori dai campi: «gioca» apre il gioco, «nave» fa suonare le navi, «festa» accende i fuochi,
      «magic» fa salpare il logo; cinque tocchi sul logo fanno lo stesso.
-   - Stagioni e feste: js/calendario.js (classi su <html>) e js/disegni.js.
+   - Stagioni e feste: js/calendario.js (classi su <html>) e js/disegni.js; qui la pioggia di benvenuto su tutta la pagina
+     (fiocchi, foglie, petali, cuori, stelle, coriandoli), una volta per giorno e per scheda del browser.
    Ogni gesto aggiunge una classe per la durata dell'animazione (in app.css) e poi la toglie: alla fine tutto è dov'era.
    Con «movimento ridotto» le animazioni durano un istante. */
 (function () {
@@ -68,6 +69,32 @@
       if (scritto.slice(-p.length) === p) { scritto = ''; PAROLE[p](); }
     });
   });
+
+  /* pioggia di benvenuto: elementi <i> che cadono sopra la pagina, senza fermare i clic, e poi spariscono (app.css .pioggia) */
+  var PIOGGIA = { inverno: 'fiocchi', natale: 'fiocchi', capodanno: 'stelle', 'san-valentino': 'cuori', carnevale: 'coriandoli', mimosa: 'pompon',
+    pasqua: 'petali', 'festa-nazionale': 'coriandoli', halloween: 'foglie', primavera: 'petali', autunno: 'foglie' };
+  function pioggia() {
+    var o = T.oggi || {}, tipo = PIOGGIA[o.tema];
+    if (!tipo || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+    var chiave = (o.prova || new Date().toDateString()) + ' ' + o.tema;
+    try {
+      if (sessionStorage.getItem('magic-hs.pioggia') === chiave) return;
+      sessionStorage.setItem('magic-hs.pioggia', chiave);
+    } catch (e) { /* niente archivio: la pioggia ogni volta */ }
+    var n = window.innerWidth < 600 ? 16 : 30, h = '';
+    for (var i = 0; i < n; i++) {
+      h += '<i class="c' + (i % 3) + '" style="--x:' + ((i * 61.8) % 100).toFixed(1) + '%;--n:' + i + ';--v:' + ((i * 7) % 5) + ';--s:' + (9 + (i * 5) % 8) +
+        'px;--dx:' + (((i * 37) % 70) - 35) + 'px;--r:' + (((i * 53) % 2 ? 1 : -1) * (180 + (i * 47) % 360)) + 'deg"></i>';
+    }
+    var div = document.createElement('div');
+    div.className = 'pioggia p-' + tipo;
+    div.setAttribute('aria-hidden', 'true');
+    div.innerHTML = h;
+    document.body.appendChild(div);
+    setTimeout(function () { if (div.parentNode) div.parentNode.removeChild(div); }, 15000);
+  }
+  T.porto.pioggia = pioggia;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pioggia); else pioggia();
 
   // per chi apre gli strumenti per sviluppatori
   try {

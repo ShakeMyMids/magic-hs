@@ -37,6 +37,7 @@
   /* stagioni e feste (js/calendario.js) */
   --d-sole:#f4b63f; --d-neve:#ffffff; --d-fiore:#f3a6bf; --d-mimosa:#f5c623; --d-foglia:#4f9a55; --d-foglia-nuova:#7dbb5c;
   --d-autunno-1:#dd9a35; --d-autunno-2:#c75a2c; --d-tronco:#8b6a4e; --d-cuore:#e0506a; --d-verde:#1f9a4f; --d-rosso:#d7373b; --d-zucca:#ef8b2c;
+  --d-ghiaccio:#8db6dd; --d-oro:#d9a62c; --d-lilla:#b7a0e6; --d-strega:#4b2a6a; --d-maschera:#7b4fc0;
   --d-velo-primavera:rgba(150,214,170,.16); --d-velo-estate:rgba(255,214,140,.18); --d-velo-autunno:rgba(232,166,96,.18); --d-velo-inverno:rgba(196,208,224,.34);
   --ombra:0 1px 2px rgba(20,40,60,.07);
   --ombra-alta:0 18px 40px -24px rgba(20,40,60,.45),0 2px 6px -2px rgba(20,40,60,.1);
@@ -60,6 +61,7 @@
     --d-lontano:#172c42; --d-schiuma:#2c5277; --d-nuvola-ombra:#183049;
     --d-sole:#f2c46b; --d-neve:#d5e1ec; --d-fiore:#d98aa6; --d-mimosa:#e6b923; --d-foglia:#3f8a55; --d-foglia-nuova:#5f9e4e;
     --d-autunno-1:#c28a32; --d-autunno-2:#a8512a; --d-tronco:#6f5641; --d-cuore:#e8697e; --d-verde:#2fa45c; --d-rosso:#e04f4f; --d-zucca:#e9832a;
+    --d-ghiaccio:#7ea7d4; --d-oro:#ecc66e; --d-lilla:#9f88d6; --d-strega:#9a6fc4; --d-maschera:#a57ee0;
     --d-velo-primavera:rgba(80,150,105,.08); --d-velo-estate:rgba(140,100,40,.1); --d-velo-autunno:rgba(140,85,40,.1); --d-velo-inverno:rgba(130,160,200,.1);
     --vetro:rgba(13,21,30,.84); color-scheme:dark;
     --alone-1:rgba(127,184,230,.1); --alone-2:rgba(233,119,46,.07);
@@ -76,11 +78,39 @@
     --d-lontano:#172c42; --d-schiuma:#2c5277; --d-nuvola-ombra:#183049;
     --d-sole:#f2c46b; --d-neve:#d5e1ec; --d-fiore:#d98aa6; --d-mimosa:#e6b923; --d-foglia:#3f8a55; --d-foglia-nuova:#5f9e4e;
     --d-autunno-1:#c28a32; --d-autunno-2:#a8512a; --d-tronco:#6f5641; --d-cuore:#e8697e; --d-verde:#2fa45c; --d-rosso:#e04f4f; --d-zucca:#e9832a;
+    --d-ghiaccio:#7ea7d4; --d-oro:#ecc66e; --d-lilla:#9f88d6; --d-strega:#9a6fc4; --d-maschera:#a57ee0;
     --d-velo-primavera:rgba(80,150,105,.08); --d-velo-estate:rgba(140,100,40,.1); --d-velo-autunno:rgba(140,85,40,.1); --d-velo-inverno:rgba(130,160,200,.1);
     --vetro:rgba(13,21,30,.84); color-scheme:dark;
     --alone-1:rgba(127,184,230,.1); --alone-2:rgba(233,119,46,.07);
     --ombra-scheda:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.35),0 18px 40px -26px rgba(0,0,0,.9);
 }
+
+/* ================================================================ stagioni e feste: i colori di tutta l'app (js/calendario.js)
+   La classe tema-* su <html> (la festa più importante del giorno, altrimenti la stagione) sceglie l'accento chiaro e scuro
+   (pulsanti, collegamenti, scheda attiva, logo) e un secondo colore per le decorazioni; tenui e aloni ne derivano.
+   I contrasti dell'accento con le schede li controlla tests/prova_calendario.js. Spento dal profilo: niente con-tema. */
+.tema-primavera{--tema-chiaro:#2e6b4a;--tema-scuro:#8fd3a8;--tema-2:var(--d-fiore)}
+.tema-estate{--tema-chiaro:#0b6478;--tema-scuro:#7fd0e2;--tema-2:var(--d-sole)}
+.tema-autunno{--tema-chiaro:#8a4518;--tema-scuro:#efaa76;--tema-2:var(--d-autunno-1)}
+.tema-inverno{--tema-chiaro:#2b5191;--tema-scuro:#a9c6f0;--tema-2:var(--d-ghiaccio)}
+.tema-natale{--tema-chiaro:#a1262b;--tema-scuro:#f39c9c;--tema-2:var(--d-abete)}
+.tema-capodanno{--tema-chiaro:#76570d;--tema-scuro:#ecc66e;--tema-2:var(--d-oro)}
+.tema-san-valentino{--tema-chiaro:#a3234d;--tema-scuro:#f49cba;--tema-2:var(--d-cuore)}
+.tema-carnevale{--tema-chiaro:#6a3ca3;--tema-scuro:#c9a8f4;--tema-2:var(--d-sole)}
+.tema-mimosa{--tema-chiaro:#4a6a14;--tema-scuro:#c2dc7a;--tema-2:var(--d-mimosa)}
+.tema-pasqua{--tema-chiaro:#674b9a;--tema-scuro:#c4adf0;--tema-2:var(--d-foglia-nuova)}
+.tema-festa-nazionale{--tema-chiaro:#1b7442;--tema-scuro:#7fd6a2;--tema-2:var(--d-rosso)}
+.tema-halloween{--tema-chiaro:#653389;--tema-scuro:#cfa6f0;--tema-2:var(--d-zucca)}
+:root.con-tema{--accento:var(--tema-chiaro);--accento-forte:color-mix(in srgb,var(--tema-chiaro) 78%,#000);--accento-tenue:color-mix(in srgb,var(--tema-chiaro) 17%,#fff);
+  --alone-1:color-mix(in srgb,var(--tema-chiaro) 18%,transparent);--alone-2:color-mix(in srgb,var(--tema-2) 26%,transparent);--marchio-t:var(--tema-2);--motivo-k:.075}
+@media (prefers-color-scheme:dark){
+  :root.con-tema:not([data-theme="light"]){--accento:var(--tema-scuro);--accento-forte:color-mix(in srgb,var(--tema-scuro) 72%,#fff);
+    --accento-tenue:color-mix(in srgb,var(--tema-scuro) 20%,#141e29);--alone-1:color-mix(in srgb,var(--tema-scuro) 12%,transparent);
+    --alone-2:color-mix(in srgb,var(--tema-2) 13%,transparent);--motivo-k:.06}
+}
+:root.con-tema[data-theme="dark"]{--accento:var(--tema-scuro);--accento-forte:color-mix(in srgb,var(--tema-scuro) 72%,#fff);
+  --accento-tenue:color-mix(in srgb,var(--tema-scuro) 20%,#141e29);--alone-1:color-mix(in srgb,var(--tema-scuro) 12%,transparent);
+  --alone-2:color-mix(in srgb,var(--tema-2) 13%,transparent);--motivo-k:.06}
 
 /* ================================================================ base */
 *{box-sizing:border-box}
@@ -594,8 +624,8 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 @keyframes scoppia{0%{opacity:0;transform:scale(.2)}20%{opacity:1}100%{opacity:0;transform:scale(1.15)}}
 /* stagioni e feste (js/calendario.js): nella scena ci sono solo le decorazioni di oggi (js/disegni.js); qui i colori, il
    cielo della stagione e le animazioni, che finiscono come le altre */
-.primavera .scena{--d-velo:var(--d-velo-primavera)} .estate .scena{--d-velo:var(--d-velo-estate)}
-.autunno .scena{--d-velo:var(--d-velo-autunno)} .inverno .scena{--d-velo:var(--d-velo-inverno)}
+:root.primavera{--d-velo:var(--d-velo-primavera)} :root.estate{--d-velo:var(--d-velo-estate)}
+:root.autunno{--d-velo:var(--d-velo-autunno)} :root.inverno{--d-velo:var(--d-velo-inverno)}
 .s-neve,.s-fiocchi{fill:var(--d-neve)}
 .s-sole{opacity:calc(1 - var(--d-stelle))} .s-sole circle{fill:var(--d-sole)}
 .s-raggi{fill:none;stroke:var(--d-sole);stroke-width:2.4;stroke-linecap:round}
@@ -644,6 +674,108 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .s-pipistrelli path{fill:var(--d-tratto);transform-box:fill-box;transform-origin:center}
 .vivo .s-pipistrelli path{animation:sbatte .35s ease-in-out 16 alternate;animation-delay:calc(var(--n) * -.12s)}
 @keyframes sbatte{to{transform:scaleY(.55)}}
+/* ---------------------------------------------------------------- stagioni e feste nel resto dell'app
+   Il festone in cima alla barra, l'accessorio del logo, il motivo dello sfondo, la neve sulle schede d'inverno, il simbolo
+   sulle schede principali, gli auguri, la pioggia di benvenuto (js/porto.js) e l'avviso dell'anteprima. */
+.marchio{overflow:visible}
+.s-fiore-o{fill:var(--d-fiore)} .s-foglia-o{fill:var(--d-autunno-1)} .s-foglia-r{fill:var(--d-autunno-2)} .s-foglia-v{fill:var(--d-foglia-nuova)}
+.o-raggi{fill:none;stroke:var(--d-sole);stroke-width:2;stroke-linecap:round}
+.o-venatura{fill:none;stroke:var(--d-autunno-2);stroke-width:1.1;stroke-linecap:round}
+.o-fiocco{fill:none;stroke:var(--d-ghiaccio);stroke-width:1.7;stroke-linecap:round}
+.s-abete-o{fill:var(--d-abete)} .s-tronco-o{fill:var(--d-tronco)} .s-oro{fill:var(--d-oro)} .s-argento{fill:var(--d-cont-3)}
+.o-scintille{fill:none;stroke:var(--d-oro);stroke-width:1.6;stroke-linecap:round}
+.s-cuore-o{fill:var(--d-cuore)} .s-rosa{fill:var(--d-fiore)} .s-maschera{fill:var(--d-maschera)} .o-occhi{fill:var(--carta)}
+.o-filante{fill:none;stroke:var(--d-cont-1);stroke-width:1.4;stroke-linecap:round}
+.o-stelo{fill:none;stroke:var(--d-foglia);stroke-width:1.4;stroke-linecap:round} .s-mimosa-o{fill:var(--d-mimosa)} .s-uovo-o{fill:var(--d-lilla)}
+.s-bianco-o{fill:var(--d-neve);stroke:var(--linea-forte);stroke-width:.7}
+.o-pipistrello,.s-strega{fill:var(--d-strega)} .s-neve-l{fill:var(--d-neve);stroke:var(--d-ghiaccio);stroke-width:.8}
+.a-asta{fill:none;stroke:var(--d-tratto);stroke-width:1.4;stroke-linecap:round}
+.a-contorno,.a-bordo{stroke:var(--carta);stroke-width:1.4;paint-order:stroke}
+.f-croce{fill:none;stroke:var(--d-neve);stroke-width:1.6}
+.marchio .s-col0{fill:var(--d-cont-1)}
+/* festone */
+.festone{position:absolute;left:0;right:0;top:env(safe-area-inset-top);height:20px;pointer-events:none;line-height:0;overflow:hidden}
+.festone-svg{display:block}
+.con-festone .barra{padding-top:calc(30px + env(safe-area-inset-top))}
+.con-festone .accesso .barra{padding-top:34px}
+.f-corda,.f-filo{fill:none;stroke:color-mix(in srgb,var(--d-tratto) 60%,transparent);stroke-width:1.1}
+.f-attacco{fill:var(--d-tratto)}
+.f-filante{fill:none;stroke-width:1.8;stroke-linecap:round}
+.festone .f-filante.s-col1{stroke:var(--d-cont-1)} .festone .f-filante.s-col2{stroke:var(--d-maschera)} .festone .f-filante.s-col3{stroke:var(--d-sole)}
+.festone .f-coriandolo.s-col0{fill:var(--d-cont-1)} .festone .f-coriandolo.s-col1{fill:var(--d-cont-2)} .festone .f-coriandolo.s-col2{fill:var(--d-sole)}
+.festone .f-coriandolo.s-col3{fill:var(--d-verde)} .festone .f-coriandolo.s-col4{fill:var(--d-cuore)}
+.f-stelo{fill:none;stroke:var(--d-foglia);stroke-width:1.4;stroke-linecap:round}
+.f-ghiacciolo{fill:var(--d-neve);stroke:var(--d-ghiaccio);stroke-width:.8;stroke-linejoin:round}
+/* sfondo, schede, piè di pagina */
+.con-tema body{position:relative;z-index:0}
+.con-tema body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--accento);opacity:var(--motivo-k);
+  -webkit-mask:var(--motivo) 0 0/260px 260px repeat;mask:var(--motivo) 0 0/260px 260px repeat}
+.con-tema .box{position:relative}
+.inverno .box::before{content:"";position:absolute;z-index:1;top:-5px;left:14px;right:14px;height:12px;pointer-events:none;background:var(--d-neve);
+  -webkit-mask:var(--cappello) 0 0/64px 12px repeat-x;mask:var(--cappello) 0 0/64px 12px repeat-x;
+  filter:drop-shadow(0 1px 0 color-mix(in srgb,var(--d-ghiaccio) 75%,transparent))}
+.con-tema .box.domanda::after,.con-tema .accesso .box::after,.con-tema .albero-box::after,.con-tema .sezione > .foglio:first-child > .box:first-child::after,
+.con-tema .sezione > .sotto + .foglio > .box:first-child::after{
+  content:"";position:absolute;z-index:2;top:-13px;right:-9px;width:34px;height:34px;pointer-events:none;background:var(--ornamento-sfondo,var(--tema-2));
+  -webkit-mask:var(--ornamento) center/contain no-repeat;mask:var(--ornamento) center/contain no-repeat;transform:rotate(10deg);
+  filter:drop-shadow(0 2px 3px rgba(10,20,30,.2))}
+.tema-festa-nazionale{--ornamento-sfondo:radial-gradient(circle closest-side,var(--d-verde) 0 32%,var(--d-neve) 33% 64%,var(--d-rosso) 65%)}
+.tema-carnevale{--ornamento-sfondo:var(--d-maschera)} .tema-pasqua{--ornamento-sfondo:var(--d-lilla)}
+.con-tema .piede::before{background:color-mix(in srgb,var(--accento) 50%,var(--linea-forte))}
+.con-tema{scrollbar-color:color-mix(in srgb,var(--accento) 40%,var(--linea-forte)) transparent}
+/* auguri e anteprima */
+.auguri{display:inline-flex;align-items:center;gap:7px;padding:4px 12px 4px 6px;border-radius:999px;font:600 13.5px/1.2 var(--f);color:var(--accento-forte);
+  background:color-mix(in srgb,var(--accento) 10%,var(--carta));border:1px solid color-mix(in srgb,var(--accento) 26%,var(--linea));animation:auguri .6s var(--dolce) .3s backwards}
+.auguri .ornamento{width:22px;height:22px;flex:none}
+.titolo-riga .auguri{margin-right:auto;align-self:center}
+.accesso .auguri{align-self:flex-start}
+@keyframes auguri{from{opacity:0;transform:translateY(4px) scale(.96)}}
+.anteprima{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin:0 0 16px;padding:10px 12px 10px 14px;border-radius:var(--r-m);font-size:14px;color:var(--accento-forte);
+  background:color-mix(in srgb,var(--accento) 12%,var(--carta));border:1px dashed var(--accento)}
+.anteprima .btn{margin-left:auto}
+/* pioggia di benvenuto */
+.pioggia{position:fixed;inset:0;z-index:90;pointer-events:none;overflow:hidden}
+.pioggia i{position:absolute;top:-30px;left:var(--x);width:var(--s);height:var(--s);background:var(--p1);opacity:0;
+  -webkit-mask:var(--forma) center/contain no-repeat;mask:var(--forma) center/contain no-repeat;filter:drop-shadow(0 0 1px rgba(20,40,60,.3));
+  animation:pioggia calc(6s + var(--v) * .9s) cubic-bezier(.3,.1,.6,1) calc(var(--n) * .16s) both}
+.pioggia i.c1{background:var(--p2)} .pioggia i.c2{background:var(--p3)}
+.p-coriandoli i,.p-pompon i{-webkit-mask:none;mask:none;border-radius:1.5px}
+.p-coriandoli i{width:calc(var(--s) * .75);height:calc(var(--s) * .45)} .p-pompon i{border-radius:50%;width:calc(var(--s) * .8);height:calc(var(--s) * .8)}
+@keyframes pioggia{0%{opacity:0;transform:none}8%,86%{opacity:.95}100%{opacity:0;transform:translate(var(--dx),calc(100vh + 60px)) rotate(var(--r))}}
+.tema-inverno,.tema-natale{--p1:var(--d-ghiaccio);--p2:var(--d-neve);--p3:var(--d-ghiaccio)}
+.tema-capodanno{--p1:var(--d-oro);--p2:var(--d-cont-3);--p3:var(--d-oro)}
+.tema-san-valentino{--p1:var(--d-cuore);--p2:var(--d-fiore);--p3:var(--d-rosso)}
+.tema-carnevale{--p1:var(--d-cont-1);--p2:var(--d-maschera);--p3:var(--d-sole)}
+.tema-mimosa{--p1:var(--d-mimosa);--p2:var(--d-sole);--p3:var(--d-mimosa)}
+.tema-pasqua{--p1:var(--d-lilla);--p2:var(--d-fiore);--p3:var(--d-sole)}
+.tema-festa-nazionale{--p1:var(--d-verde);--p2:var(--d-neve);--p3:var(--d-rosso)}
+.tema-halloween{--p1:var(--d-zucca);--p2:var(--d-strega);--p3:var(--d-autunno-2)}
+.tema-primavera{--p1:var(--d-fiore);--p2:var(--d-neve);--p3:var(--d-fiore)}
+.tema-autunno{--p1:var(--d-autunno-1);--p2:var(--d-autunno-2);--p3:var(--d-sole)}
+@media print{.festone,.pioggia,.auguri,.anteprima{display:none !important}.con-tema body::before,.box::before,.box::after{display:none !important}}
+/* forme (maschere SVG): motivo dello sfondo e simbolo delle schede per ogni tema, neve sulle schede, pioggia.
+   Generate da strumenti/forme_stagioni.py: per cambiarle, modifica lo script e sostituisci il blocco. */
+/* forme: inizio */
+:root{--cappello:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='12' viewBox='0 0 64 12'%3E%3Cpath d='M0 4Q8 0 16 3T32 3T48 3T64 4V7Q60 11 56 8Q52 12 46 8.6Q42 10.6 38 8.4Q32 12 26 8.6Q20 11 16 8.4Q10 12 6 8.6Q3 10 0 8Z'/%3E%3C/svg%3E")}
+.tema-inverno{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cpath d='M40 46L40 59M40 53.8l2.9 2.9M40 53.8l-2.9 2.9M40 46L28.7 52.5M33.2 49.9l-1.1 4M33.2 49.9l-4 -1.1M40 46L28.7 39.5M33.2 42.1l-4 1.1M33.2 42.1l-1.1 -4M40 46L40 33M40 38.2l-2.9 -2.9M40 38.2l2.9 -2.9M40 46L51.3 39.5M46.8 42.1l1.1 -4M46.8 42.1l4 1.1M40 46L51.3 52.5M46.8 49.9l4 -1.1M46.8 49.9l1.1 4' stroke='black' stroke-width='2.6' stroke-linecap='round' fill='none'/%3E%3Cpath d='M170 30L170 38M170 34.8l1.8 1.8M170 34.8l-1.8 1.8M170 30L163.1 34M165.8 32.4l-0.7 2.5M165.8 32.4l-2.5 -0.7M170 30L163.1 26M165.8 27.6l-2.5 0.7M165.8 27.6l-0.7 -2.5M170 30L170 22M170 25.2l-1.8 -1.8M170 25.2l1.8 -1.8M170 30L176.9 26M174.2 27.6l0.7 -2.5M174.2 27.6l2.5 0.7M170 30L176.9 34M174.2 32.4l2.5 -0.7M174.2 32.4l0.7 2.5' stroke='black' stroke-width='1.6' stroke-linecap='round' fill='none'/%3E%3Cpath d='M212 150L212 165M212 159l3.4 3.4M212 159l-3.4 3.4M212 150L199 157.5M204.2 154.5l-1.2 4.6M204.2 154.5l-4.6 -1.2M212 150L199 142.5M204.2 145.5l-4.6 1.2M204.2 145.5l-1.2 -4.6M212 150L212 135M212 141l-3.4 -3.4M212 141l3.4 -3.4M212 150L225 142.5M219.8 145.5l1.2 -4.6M219.8 145.5l4.6 1.2M212 150L225 157.5M219.8 154.5l4.6 -1.2M219.8 154.5l1.2 4.6' stroke='black' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Cpath d='M92 200L92 210M92 206l2.3 2.3M92 206l-2.3 2.3M92 200L83.3 205M86.8 203l-0.8 3.1M86.8 203l-3.1 -0.8M92 200L83.3 195M86.8 197l-3.1 0.8M86.8 197l-0.8 -3.1M92 200L92 190M92 194l-2.3 -2.3M92 194l2.3 -2.3M92 200L100.7 195M97.2 197l0.8 -3.1M97.2 197l3.1 0.8M92 200L100.7 205M97.2 203l3.1 -0.8M97.2 203l0.8 3.1' stroke='black' stroke-width='2' stroke-linecap='round' fill='none'/%3E%3Cpath d='M118 112L118 118M118 115.6l1.4 1.4M118 115.6l-1.4 1.4M118 112L112.8 115M114.9 113.8l-0.5 1.9M114.9 113.8l-1.9 -0.5M118 112L112.8 109M114.9 110.2l-1.9 0.5M114.9 110.2l-0.5 -1.9M118 112L118 106M118 108.4l-1.4 -1.4M118 108.4l1.4 -1.4M118 112L123.2 109M121.1 110.2l0.5 -1.9M121.1 110.2l1.9 0.5M118 112L123.2 115M121.1 113.8l1.9 -0.5M121.1 113.8l0.5 1.9' stroke='black' stroke-width='1.2' stroke-linecap='round' fill='none'/%3E%3Cpath d='M20 140L20 147M20 144.2l1.6 1.6M20 144.2l-1.6 1.6M20 140L13.9 143.5M16.4 142.1l-0.6 2.2M16.4 142.1l-2.2 -0.6M20 140L13.9 136.5M16.4 137.9l-2.2 0.6M16.4 137.9l-0.6 -2.2M20 140L20 133M20 135.8l-1.6 -1.6M20 135.8l1.6 -1.6M20 140L26.1 136.5M23.6 137.9l0.6 -2.2M23.6 137.9l2.2 0.6M20 140L26.1 143.5M23.6 142.1l2.2 -0.6M23.6 142.1l0.6 2.2' stroke='black' stroke-width='1.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 12L12 22.4M12 18.2l2.4 2.4M12 18.2l-2.4 2.4M12 12L3 17.2M6.6 15.1l-0.9 3.2M6.6 15.1l-3.2 -0.9M12 12L3 6.8M6.6 8.9l-3.2 0.9M6.6 8.9l-0.9 -3.2M12 12L12 1.6M12 5.8l-2.4 -2.4M12 5.8l2.4 -2.4M12 12L21 6.8M17.4 8.9l0.9 -3.2M17.4 8.9l3.2 0.9M12 12L21 17.2M17.4 15.1l3.2 -0.9M17.4 15.1l0.9 3.2' stroke='black' stroke-width='2.1' stroke-linecap='round' fill='none'/%3E%3C/svg%3E")}
+.tema-natale{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cpath d='M46 37.6l8 9.6h-3.8l6.7 8h-4.5l7 8.3H32.6l7 -8.3h-4.5l6.7 -8h-3.8z'/%3E%3Crect x='43.9' y='63.2' width='4.2' height='3.8'/%3E%3Cpath d='M172 36L172 45M172 41.4l2 2M172 41.4l-2 2M172 36L164.2 40.5M167.3 38.7l-0.7 2.8M167.3 38.7l-2.8 -0.7M172 36L164.2 31.5M167.3 33.3l-2.8 0.7M167.3 33.3l-0.7 -2.8M172 36L172 27M172 30.6l-2 -2M172 30.6l2 -2M172 36L179.8 31.5M176.7 33.3l0.7 -2.8M176.7 33.3l2.8 0.7M172 36L179.8 40.5M176.7 38.7l2.8 -0.7M176.7 38.7l0.7 2.8' stroke='black' stroke-width='1.8' stroke-linecap='round' fill='none'/%3E%3Cpath d='M214 139Q215.8 146.2 223 148Q215.8 149.8 214 157Q212.2 149.8 205 148Q212.2 146.2 214 139Z'/%3E%3Cpath d='M96 206L96 217M96 212.6l2.5 2.5M96 212.6l-2.5 2.5M96 206L86.5 211.5M90.3 209.3l-0.9 3.4M90.3 209.3l-3.4 -0.9M96 206L86.5 200.5M90.3 202.7l-3.4 0.9M90.3 202.7l-0.9 -3.4M96 206L96 195M96 199.4l-2.5 -2.5M96 199.4l2.5 -2.5M96 206L105.5 200.5M101.7 202.7l0.9 -3.4M101.7 202.7l3.4 0.9M96 206L105.5 211.5M101.7 209.3l3.4 -0.9M101.7 209.3l0.9 3.4' stroke='black' stroke-width='2.2' stroke-linecap='round' fill='none'/%3E%3Cpath d='M116 104Q117.2 108.8 122 110Q117.2 111.2 116 116Q114.8 111.2 110 110Q114.8 108.8 116 104Z'/%3E%3Cpath d='M204 216.1l5.5 6.6h-2.6l4.6 5.5h-3.1l4.8 5.7H194.8l4.8 -5.7h-3.1l4.6 -5.5h-2.6z'/%3E%3Crect x='202.6' y='233.7' width='2.9' height='2.6'/%3E%3Cpath d='M24 150L24 157M24 154.2l1.6 1.6M24 154.2l-1.6 1.6M24 150L17.9 153.5M20.4 152.1l-0.6 2.2M20.4 152.1l-2.2 -0.6M24 150L17.9 146.5M20.4 147.9l-2.2 0.6M20.4 147.9l-0.6 -2.2M24 150L24 143M24 145.8l-1.6 -1.6M24 145.8l1.6 -1.6M24 150L30.1 146.5M27.6 147.9l0.6 -2.2M27.6 147.9l2.2 0.6M24 150L30.1 153.5M27.6 152.1l2.2 -0.6M27.6 152.1l0.6 2.2' stroke='black' stroke-width='1.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 -0.2l6.2 7.5h-3l5.2 6.2h-3.5l5.5 6.5H1.5l5.5 -6.5h-3.5l5.2 -6.2h-3z'/%3E%3Crect x='10.4' y='19.8' width='3.2' height='3'/%3E%3C/svg%3E")}
+.tema-capodanno{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cpath d='M42 32Q44.4 41.6 54 44Q44.4 46.4 42 56Q39.6 46.4 30 44Q39.6 41.6 42 32Z'/%3E%3Cpath d='M176 23Q177.4 28.6 183 30Q177.4 31.4 176 37Q174.6 31.4 169 30Q174.6 28.6 176 23Z'/%3E%3Cpath d='M212 136Q214.8 147.2 226 150Q214.8 152.8 212 164Q209.2 152.8 198 150Q209.2 147.2 212 136Z'/%3E%3Cpath d='M94 193Q95.8 200.2 103 202Q95.8 203.8 94 211Q92.2 203.8 85 202Q92.2 200.2 94 193Z'/%3E%3Cpath d='M118 107Q119 111 123 112Q119 113 118 117Q117 113 113 112Q117 111 118 107Z'/%3E%3Cpath d='M24 144Q25.2 148.8 30 150Q25.2 151.2 24 156Q22.8 151.2 18 150Q22.8 148.8 24 144Z'/%3E%3Cpath d='M150 231Q151 235 155 236Q151 237 150 241Q149 237 145 236Q149 235 150 231Z'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 1Q14.2 9.8 23 12Q14.2 14.2 12 23Q9.8 14.2 1 12Q9.8 9.8 12 1Z'/%3E%3C/svg%3E")}
+.tema-san-valentino{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cpath d='M44 54.1C29.6 45.1 38.6 34.3 44 42.9C49.4 34.3 58.4 45.1 44 54.1Z'/%3E%3Cpath d='M176 37C167 31.4 172.6 24.7 176 30C179.4 24.7 185 31.4 176 37Z'/%3E%3Cpath d='M212 159.4C195.4 149 205.8 136.5 212 146.4C218.2 136.5 228.6 149 212 159.4Z'/%3E%3Cpath d='M94 210.3C82.8 203.3 89.8 194.9 94 201.6C98.2 194.9 105.2 203.3 94 210.3Z'/%3E%3Cpath d='M120 116C113 111.6 117.4 106.3 120 110.5C122.6 106.3 127 111.6 120 116Z'/%3E%3Cpath d='M24 154.5C16 149.5 21 143.5 24 148.2C27 143.5 32 149.5 24 154.5Z'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 18.3C0.8 11.3 7.8 2.9 12 9.6C16.2 2.9 23.2 11.3 12 18.3Z'/%3E%3C/svg%3E")}
+.tema-carnevale{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cpath fill-rule='evenodd' d='M38.7 43.1Q52 37.5 65.3 43.1Q66 53.6 57 53.6Q54 53.6 52 50Q50 53.6 47 53.6Q38 53.6 38.7 43.1ZM43 46Q45.8 43.8 48.9 46Q45.8 48.6 43 46ZM55.1 46Q58.2 43.8 61 46Q58.2 48.6 55.1 46Z'/%3E%3Crect x='166' y='27.4' width='8' height='5.2' transform='rotate(20 170 30)'/%3E%3Cpath d='M180 140q8.8 -6.6 17.6 0t17.6 0 17.6 0' fill='none' stroke='black' stroke-width='3.1' stroke-linecap='round'/%3E%3Crect x='91.6' y='197.1' width='8.8' height='5.7' transform='rotate(-30 96 200)'/%3E%3Crect x='126.8' y='107.9' width='6.4' height='4.2' transform='rotate(50 130 110)'/%3E%3Crect x='26.4' y='147.7' width='7.2' height='4.7' transform='rotate(10 30 150)'/%3E%3Cpath d='M30 236q6.4 -4.8 12.8 0t12.8 0 12.8 0' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'/%3E%3Crect x='222' y='207.4' width='8' height='5.2' transform='rotate(70 226 210)'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M1.1 8Q12 3.4 22.9 8Q23.5 16.6 16.1 16.6Q13.6 16.6 12 13.6Q10.4 16.6 7.9 16.6Q0.5 16.6 1.1 8ZM4.6 10.4Q6.9 8.6 9.5 10.4Q6.9 12.5 4.6 10.4ZM14.5 10.4Q17.1 8.6 19.4 10.4Q17.1 12.5 14.5 10.4Z'/%3E%3C/svg%3E")}
+.tema-mimosa{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Ccircle cx='46' cy='46' r='5.3'/%3E%3Ccircle cx='38.5' cy='51.3' r='4.4'/%3E%3Ccircle cx='52.6' cy='51.7' r='4.6'/%3E%3Ccircle cx='44.7' cy='56.6' r='4.2'/%3E%3Ccircle cx='51.3' cy='40.7' r='3.7'/%3E%3Ccircle cx='176' cy='30' r='3.4'/%3E%3Ccircle cx='171.2' cy='33.4' r='2.8'/%3E%3Ccircle cx='180.2' cy='33.6' r='2.9'/%3E%3Ccircle cx='175.2' cy='36.7' r='2.7'/%3E%3Ccircle cx='179.4' cy='26.6' r='2.4'/%3E%3Ccircle cx='212' cy='150' r='5.8'/%3E%3Ccircle cx='203.8' cy='155.8' r='4.8'/%3E%3Ccircle cx='219.2' cy='156.2' r='5'/%3E%3Ccircle cx='210.6' cy='161.5' r='4.6'/%3E%3Ccircle cx='217.8' cy='144.2' r='4.1'/%3E%3Ccircle cx='96' cy='204' r='4.1'/%3E%3Ccircle cx='90.2' cy='208.1' r='3.4'/%3E%3Ccircle cx='101.1' cy='208.4' r='3.6'/%3E%3Ccircle cx='95' cy='212.2' r='3.2'/%3E%3Ccircle cx='100.1' cy='199.9' r='2.9'/%3E%3Ccircle cx='120' cy='112' r='2.6'/%3E%3Ccircle cx='116.3' cy='114.6' r='2.2'/%3E%3Ccircle cx='123.3' cy='114.9' r='2.3'/%3E%3Ccircle cx='119.3' cy='117.3' r='2.1'/%3E%3Ccircle cx='122.6' cy='109.4' r='1.9'/%3E%3Ccircle cx='24' cy='150' r='3.1'/%3E%3Ccircle cx='19.6' cy='153.1' r='2.6'/%3E%3Ccircle cx='27.9' cy='153.4' r='2.7'/%3E%3Ccircle cx='23.2' cy='156.2' r='2.5'/%3E%3Ccircle cx='27.1' cy='146.9' r='2.2'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='10' r='4.8'/%3E%3Ccircle cx='4.2' cy='14.8' r='4'/%3E%3Ccircle cx='17' cy='15.2' r='4.2'/%3E%3Ccircle cx='9.8' cy='19.6' r='3.8'/%3E%3Ccircle cx='15.8' cy='5.2' r='3.4'/%3E%3C/svg%3E")}
+.tema-pasqua{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cpath transform='rotate(-14 44 46)' d='M44 34C52.6 34 53.6 49.8 53.1 51.8C52.2 59 35.8 59 34.9 51.8C34.4 49.8 35.4 34 44 34Z'/%3E%3Ccircle cx='176' cy='28' r='3.1'/%3E%3Ccircle cx='179.8' cy='30.8' r='3.1'/%3E%3Ccircle cx='178.4' cy='35.2' r='3.1'/%3E%3Ccircle cx='173.6' cy='35.2' r='3.1'/%3E%3Ccircle cx='172.2' cy='30.8' r='3.1'/%3E%3Cpath transform='rotate(18 212 150)' d='M212 136C222.1 136 223.2 154.5 222.6 156.7C221.5 165.1 202.5 165.1 201.4 156.7C200.8 154.5 201.9 136 212 136Z'/%3E%3Ccircle cx='96' cy='201' r='3.9'/%3E%3Ccircle cx='100.8' cy='204.5' r='3.9'/%3E%3Ccircle cx='98.9' cy='210' r='3.9'/%3E%3Ccircle cx='93.1' cy='210' r='3.9'/%3E%3Ccircle cx='91.2' cy='204.5' r='3.9'/%3E%3Cpath transform='rotate(8 120 112)' d='M120 104.5C125.4 104.5 126 114.4 125.7 115.6C125.1 120.1 114.9 120.1 114.3 115.6C114 114.4 114.6 104.5 120 104.5Z'/%3E%3Ccircle cx='24' cy='146.6' r='2.7'/%3E%3Ccircle cx='27.2' cy='148.9' r='2.7'/%3E%3Ccircle cx='26' cy='152.8' r='2.7'/%3E%3Ccircle cx='22' cy='152.8' r='2.7'/%3E%3Ccircle cx='20.8' cy='148.9' r='2.7'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath transform='rotate(0 12 12.6)' d='M12 2.1C19.6 2.1 20.4 16 20 17.6C19.1 23.9 4.9 23.9 4 17.6C3.6 16 4.4 2.1 12 2.1Z'/%3E%3C/svg%3E")}
+.tema-festa-nazionale{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Ccircle cx='44' cy='46' r='13.2' fill='none' stroke='black' stroke-width='4.8'/%3E%3Ccircle cx='44' cy='46' r='4.4'/%3E%3Cpath d='M176 25Q177.4 30.6 183 32Q177.4 33.4 176 39Q174.6 33.4 169 32Q174.6 30.6 176 25Z'/%3E%3Ccircle cx='212' cy='150' r='15.6' fill='none' stroke='black' stroke-width='5.7'/%3E%3Ccircle cx='212' cy='150' r='5.2'/%3E%3Cpath d='M94 195Q95.8 202.2 103 204Q95.8 205.8 94 213Q92.2 205.8 85 204Q92.2 202.2 94 195Z'/%3E%3Ccircle cx='120' cy='112' r='7.8' fill='none' stroke='black' stroke-width='2.9'/%3E%3Ccircle cx='120' cy='112' r='2.6'/%3E%3Cpath d='M24 145Q25 149 29 150Q25 151 24 155Q23 151 19 150Q23 149 24 145Z'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11'/%3E%3C/svg%3E")}
+.tema-halloween{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cpath d='M28.2 44Q34.8 33 43.6 39.6L48 35.2L52.4 39.6Q61.2 33 67.8 44Q61.2 41.8 59 48.4Q54.6 44 50.2 48.4L48 50.6L45.8 48.4Q41.4 44 37 48.4Q34.8 41.8 28.2 44Z'/%3E%3Cellipse cx='176' cy='34' rx='11.5' ry='7.9'/%3E%3Cpath d='M175 26.8l0.7 -4.1h2.2l-0.5 4.1z'/%3E%3Cpath d='M188.6 150Q196.4 137 206.8 144.8L212 139.6L217.2 144.8Q227.6 137 235.4 150Q227.6 147.4 225 155.2Q219.8 150 214.6 155.2L212 157.8L209.4 155.2Q204.2 150 199 155.2Q196.4 147.4 188.6 150Z'/%3E%3Cellipse cx='96' cy='206' rx='14.4' ry='9.9'/%3E%3Cpath d='M94.8 197l0.9 -5.1h2.7l-0.6 5.1z'/%3E%3Cpath d='M110.3 112Q114.2 105.5 119.4 109.4L122 106.8L124.6 109.4Q129.8 105.5 133.7 112Q129.8 110.7 128.5 114.6Q125.9 112 123.3 114.6L122 115.9L120.7 114.6Q118.1 112 115.5 114.6Q114.2 110.7 110.3 112Z'/%3E%3Cpath d='M24 145Q25 149 29 150Q25 151 24 155Q23 151 19 150Q23 149 24 145Z'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cellipse cx='12' cy='13.4' rx='11' ry='7.6'/%3E%3Cpath d='M11.1 6.5l0.7 -3.9h2.1l-0.5 3.9z'/%3E%3C/svg%3E")}
+.tema-primavera{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Ccircle cx='44' cy='40' r='4.7'/%3E%3Ccircle cx='49.7' cy='44.1' r='4.7'/%3E%3Ccircle cx='47.5' cy='50.9' r='4.7'/%3E%3Ccircle cx='40.5' cy='50.9' r='4.7'/%3E%3Ccircle cx='38.3' cy='44.1' r='4.7'/%3E%3Cellipse cx='176' cy='30' rx='6' ry='3.3' transform='rotate(30 176 30)'/%3E%3Ccircle cx='212' cy='143' r='5.5'/%3E%3Ccircle cx='218.7' cy='147.8' r='5.5'/%3E%3Ccircle cx='216.1' cy='155.7' r='5.5'/%3E%3Ccircle cx='207.9' cy='155.7' r='5.5'/%3E%3Ccircle cx='205.3' cy='147.8' r='5.5'/%3E%3Cellipse cx='96' cy='206' rx='7' ry='3.9' transform='rotate(-20 96 206)'/%3E%3Ccircle cx='120' cy='108' r='3.1'/%3E%3Ccircle cx='123.8' cy='110.8' r='3.1'/%3E%3Ccircle cx='122.4' cy='115.2' r='3.1'/%3E%3Ccircle cx='117.6' cy='115.2' r='3.1'/%3E%3Ccircle cx='116.2' cy='110.8' r='3.1'/%3E%3Cellipse cx='24' cy='150' rx='5' ry='2.8' transform='rotate(60 24 150)'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='6.4' r='4.4'/%3E%3Ccircle cx='17.3' cy='10.3' r='4.4'/%3E%3Ccircle cx='15.3' cy='16.5' r='4.4'/%3E%3Ccircle cx='8.7' cy='16.5' r='4.4'/%3E%3Ccircle cx='6.7' cy='10.3' r='4.4'/%3E%3C/svg%3E")}
+.tema-estate{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cpath d='M48 34V52H36Z'/%3E%3Cpath d='M50.4 38V52H58Z'/%3E%3Cpath d='M32 54.4H62L58 60H36Z'/%3E%3Cpath d='M150 30q6 -5.2 12 0t12 0 12 0' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='212' cy='150' r='8.8'/%3E%3Cpath d='M225.2 150L230.9 150M221.3 159.3L225.4 163.4M212 163.2L212 168.9M202.7 159.3L198.6 163.4M198.8 150L193.1 150M202.7 140.7L198.6 136.6M212 136.8L212 131.1M221.3 140.7L225.4 136.6' stroke='black' stroke-width='3.1' stroke-linecap='round'/%3E%3Cpath d='M70 206q7.2 -6.2 14.4 0t14.4 0 14.4 0' fill='none' stroke='black' stroke-width='3.6' stroke-linecap='round'/%3E%3Cpath d='M130 108.3V120H122.2Z'/%3E%3Cpath d='M131.6 110.9V120H136.5Z'/%3E%3Cpath d='M119.6 121.6H139.1L136.5 125.2H122.2Z'/%3E%3Cpath d='M10 150q4.8 -4.2 9.6 0t9.6 0 9.6 0' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='5.2'/%3E%3Cpath d='M19.8 12L23.2 12M17.5 17.5L19.9 19.9M12 19.8L12 23.2M6.5 17.5L4.1 19.9M4.2 12L0.8 12M6.5 6.5L4.1 4.1M12 4.2L12 0.8M17.5 6.5L19.9 4.1' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")}
+.tema-autunno{--motivo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cg transform='rotate(-24 44 46)'%3E%3Cpath d='M44 32C54.5 39 55.2 51.6 44 60C32.8 51.6 33.5 39 44 32Z'/%3E%3Cpath d='M44 60l0 4.9' stroke='black' stroke-width='2'/%3E%3C/g%3E%3Cg transform='rotate(38 176 32)'%3E%3Cpath d='M176 23C182.8 27.5 183.2 35.6 176 41C168.8 35.6 169.2 27.5 176 23Z'/%3E%3Cpath d='M176 41l0 3.1' stroke='black' stroke-width='1.3'/%3E%3C/g%3E%3Cg transform='rotate(12 212 150)'%3E%3Cpath d='M212 134C224 142 224.8 156.4 212 166C199.2 156.4 200 142 212 134Z'/%3E%3Cpath d='M212 166l0 5.6' stroke='black' stroke-width='2.2'/%3E%3C/g%3E%3Cg transform='rotate(-50 94 204)'%3E%3Cpath d='M94 193C102.2 198.5 102.8 208.4 94 215C85.2 208.4 85.8 198.5 94 193Z'/%3E%3Cpath d='M94 215l0 3.8' stroke='black' stroke-width='1.5'/%3E%3C/g%3E%3Cg transform='rotate(70 120 112)'%3E%3Cpath d='M120 105C125.2 108.5 125.6 114.8 120 119C114.4 114.8 114.8 108.5 120 105Z'/%3E%3Cpath d='M120 119l0 2.4' stroke='black' stroke-width='1'/%3E%3C/g%3E%3Cg transform='rotate(20 24 150)'%3E%3Cpath d='M24 142C30 146 30.4 153.2 24 158C17.6 153.2 18 146 24 142Z'/%3E%3Cpath d='M24 158l0 2.8' stroke='black' stroke-width='1.1'/%3E%3C/g%3E%3C/svg%3E");--ornamento:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg transform='rotate(30 12 11)'%3E%3Cpath d='M12 1.4C19.2 6.2 19.7 14.8 12 20.6C4.3 14.8 4.8 6.2 12 1.4Z'/%3E%3Cpath d='M12 20.6l0 3.4' stroke='black' stroke-width='1.3'/%3E%3C/g%3E%3C/svg%3E")}
+.p-fiocchi{--forma:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 12L12 22.6M12 18.4l2.4 2.4M12 18.4l-2.4 2.4M12 12L2.8 17.3M6.5 15.2l-0.9 3.3M6.5 15.2l-3.3 -0.9M12 12L2.8 6.7M6.5 8.8l-3.3 0.9M6.5 8.8l-0.9 -3.3M12 12L12 1.4M12 5.6l-2.4 -2.4M12 5.6l2.4 -2.4M12 12L21.2 6.7M17.5 8.8l0.9 -3.3M17.5 8.8l3.3 0.9M12 12L21.2 17.3M17.5 15.2l3.3 -0.9M17.5 15.2l0.9 3.3' stroke='black' stroke-width='2.1' stroke-linecap='round' fill='none'/%3E%3C/svg%3E")}
+.p-stelle{--forma:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 1Q14.2 9.8 23 12Q14.2 14.2 12 23Q9.8 14.2 1 12Q9.8 9.8 12 1Z'/%3E%3C/svg%3E")}
+.p-cuori{--forma:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 18.3C0.8 11.3 7.8 2.9 12 9.6C16.2 2.9 23.2 11.3 12 18.3Z'/%3E%3C/svg%3E")}
+.p-petali{--forma:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cellipse cx='12' cy='12' rx='10' ry='5.5' transform='rotate(20 12 12)'/%3E%3C/svg%3E")}
+.p-foglie{--forma:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg transform='rotate(0 12 11)'%3E%3Cpath d='M12 1.4C19.2 6.2 19.7 14.8 12 20.6C4.3 14.8 4.8 6.2 12 1.4Z'/%3E%3Cpath d='M12 20.6l0 3.4' stroke='black' stroke-width='1.3'/%3E%3C/g%3E%3C/svg%3E")}
+/* forme: fine */
+
 /* toccare i mezzi (js/porto.js): ogni gesto è un'animazione che finisce dov'era partita */
 .t-nave,.t-gru,.t-aereo,.t-camion,.t-treno,.t-nuvola,.scena-svg .d-mare{cursor:pointer}
 .s-presa{fill:transparent}
@@ -713,7 +845,7 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .g-riserva i.no{background:var(--linea-forte);opacity:.5}
 .g-campo{position:relative;overflow:hidden;border:1px solid var(--linea);border-radius:var(--r-m);cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;outline-offset:3px}
 .g-svg{display:block;width:100%;height:auto}
-.g-campo{background:linear-gradient(to bottom,var(--d-cielo) 84.4%,var(--d-mare) 84.4%)}
+.g-campo{background:linear-gradient(to bottom,var(--d-velo,transparent),transparent 70%),linear-gradient(to bottom,var(--d-cielo) 84.4%,var(--d-mare) 84.4%)}
 /* schermi bassi (telefono in orizzontale): il campo sta nell'altezza, con il cielo ai lati */
 @media (max-height:520px){.finestra.gioco{gap:8px;padding-top:12px;padding-bottom:12px}.g-campo{flex:none}.g-svg{width:auto;max-width:100%;height:calc(100dvh - 186px);min-height:120px;margin:0 auto}}
 .g-svg rect,.g-svg line{shape-rendering:crispEdges}
@@ -823,7 +955,7 @@ html.con-finestra{overflow:hidden}
    Lo stato finale è quello senza animazioni (movimento ridotto) */
 .finestra.festa{padding:0 0 22px;gap:0;overflow-x:hidden}
 .festa-scena{aspect-ratio:640/220;flex:none;border-radius:var(--r-l) var(--r-l) 0 0;overflow:hidden;
-  background:linear-gradient(180deg,var(--d-cielo) 0%,color-mix(in srgb,var(--d-cielo) 40%,var(--carta)) 72%,var(--carta) 100%)}
+  background:linear-gradient(180deg,var(--d-velo,transparent),transparent 80%),linear-gradient(180deg,var(--d-cielo) 0%,color-mix(in srgb,var(--d-cielo) 40%,var(--carta)) 72%,var(--carta) 100%)}
 .festa-svg{display:block;width:100%;height:100%}
 .festa-testo{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:6px 22px 0}
 .festa-testo h2{margin:2px 0 0;font-size:22px;letter-spacing:-.01em}

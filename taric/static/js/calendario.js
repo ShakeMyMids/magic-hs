@@ -1,9 +1,12 @@
-/* MAGIC HS - stagioni e feste per la scena del porto.
+/* MAGIC HS - stagioni e feste in tutta l'applicazione.
    T.calendario(data) dice la stagione (per mesi interi: primavera da marzo, estate da giugno, autunno da settembre,
-   inverno da dicembre) e le feste di quel giorno, con le date italiane (Pasqua calcolata ogni anno). All'apertura della
-   pagina T.oggi tiene quelle di oggi e le loro classi vanno su <html>: js/disegni.js disegna solo le decorazioni di oggi,
-   app.css usa le classi per i colori del cielo e per le parti nascoste (luci sulla gru, fuochi).
-   Si prova con node: tests/prova_calendario.js. */
+   inverno da dicembre), le feste di quel giorno con le date italiane (Pasqua calcolata ogni anno), il tema (la festa più
+   importante, altrimenti la stagione) e gli auguri. All'apertura della pagina T.oggi tiene quelli di oggi e le classi vanno
+   su <html> (lo script sta nell'<head>, così i colori sono giusti dal primo disegno): la stagione, le feste, con-tema e
+   tema-<nome>. app.css ne prende i colori di tutta l'app e le decorazioni (festone, motivo dello sfondo, neve sulle
+   schede); js/disegni.js disegna nella scena solo le decorazioni di oggi.
+   Spento dal profilo (localStorage magic-hs.stagioni = "no"); l'anteprima di un altro giorno (sessionStorage
+   magic-hs.prova-giorno) vale finché resta aperta la scheda del browser. Si prova con node: tests/prova_calendario.js. */
 (function () {
   'use strict';
 
@@ -31,6 +34,10 @@
     'ferragosto': function (md) { return md === 815; },
     'halloween': function (md) { return md === 1031; }
   };
+  /* il tema dei colori: la prima festa di questo elenco, altrimenti la stagione (Ferragosto è l'estate); le feste di un
+     giorno vengono prima del Carnevale, che dura sei giorni (San Valentino o l'8 marzo possono cadere nel Carnevale) */
+  var TEMI = ['capodanno', 'natale', 'san-valentino', 'mimosa', 'carnevale', 'pasqua', 'festa-nazionale', 'halloween'];
+  var AUGURI = { 425: 'Buona festa della Liberazione!', 501: 'Buon primo maggio!', 602: 'Buona festa della Repubblica!' };
 
   function calendario(data) {
     data = data || new Date();
@@ -39,16 +46,54 @@
     var feste = Object.keys(FESTE).filter(function (f) { return FESTE[f](md); });
     if (dopoPasqua >= -52 && dopoPasqua <= -47) feste.push('carnevale');  // dal giovedì grasso al martedì grasso
     if (dopoPasqua === 0 || dopoPasqua === 1) feste.push('pasqua');      // Pasqua e Pasquetta
-    return { stagione: STAGIONI[data.getMonth()], feste: feste };
+    var ha = function (f) { return feste.indexOf(f) >= 0; };
+    var stagione = STAGIONI[data.getMonth()];
+    var tema = TEMI.filter(ha)[0] || stagione;
+    var auguri = ha('capodanno') ? 'Buon anno!' : ha('befana') ? 'Buona Befana!' :
+      ha('natale') ? (md >= 1224 && md <= 1226 ? 'Buon Natale!' : 'Buone feste!') :
+      ha('san-valentino') ? 'Buon San Valentino!' : ha('mimosa') ? 'Buona festa della donna!' : ha('carnevale') ? 'Buon Carnevale!' :
+      ha('pasqua') ? (dopoPasqua === 0 ? 'Buona Pasqua!' : 'Buona Pasquetta!') : ha('festa-nazionale') ? AUGURI[md] :
+      ha('ferragosto') ? 'Buon Ferragosto!' : ha('halloween') ? 'Dolcetto o scherzetto?' : '';
+    return { stagione: stagione, feste: feste, tema: tema, auguri: auguri };
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { calendario: calendario, pasqua: pasqua };
+  /* giorni da provare nell'anteprima del profilo: [valore, nome, data AAAA-MM-GG] nell'anno indicato */
+  function prove(anno) {
+    var iso = function (d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
+    var p = pasqua(anno), martedi = new Date(anno, p.getMonth(), p.getDate() - 47);
+    return [['primavera', 'Primavera', anno + '-05-20'], ['estate', 'Estate', anno + '-07-10'], ['autunno', 'Autunno', anno + '-10-15'],
+      ['inverno', 'Inverno', anno + '-01-20'], ['capodanno', 'Capodanno', anno + '-01-01'], ['befana', 'Befana', anno + '-01-06'],
+      ['san-valentino', 'San Valentino', anno + '-02-14'], ['carnevale', 'Carnevale', iso(martedi)], ['mimosa', 'Festa della donna', anno + '-03-08'],
+      ['pasqua', 'Pasqua', iso(p)], ['liberazione', '25 aprile', anno + '-04-25'], ['lavoro', '1° maggio', anno + '-05-01'],
+      ['repubblica', '2 giugno', anno + '-06-02'], ['ferragosto', 'Ferragosto', anno + '-08-15'], ['halloween', 'Halloween', anno + '-10-31'],
+      ['natale', 'Natale', anno + '-12-25']];
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = { calendario: calendario, pasqua: pasqua, prove: prove };
   if (typeof window === 'undefined') return;
   var T = window.TARIC = window.TARIC || {};
   T.calendario = calendario;
-  T.oggi = calendario();
+  T.prove = prove;
+
+  var spento = false, prova = '';
+  try { spento = localStorage.getItem('magic-hs.stagioni') === 'no'; prova = sessionStorage.getItem('magic-hs.prova-giorno') || ''; } catch (e) { /* niente archivio */ }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(prova) || spento) prova = '';
+  T.oggi = spento ? { stagione: '', feste: [], tema: '', auguri: '' }
+    : calendario(prova ? new Date(+prova.slice(0, 4), +prova.slice(5, 7) - 1, +prova.slice(8, 10), 12) : new Date());
+  T.oggi.spento = spento;
+  T.oggi.prova = prova;
   T.oggi.ha = function (festa) { return T.oggi.feste.indexOf(festa) >= 0; };
+  /* interruttore e anteprima del profilo: valgono dalla pagina ricaricata */
+  T.stagioni = function (accese) {
+    try { if (accese) localStorage.removeItem('magic-hs.stagioni'); else localStorage.setItem('magic-hs.stagioni', 'no'); } catch (e) { /* niente archivio */ }
+    location.reload();
+  };
+  T.provaGiorno = function (giorno) {
+    try { if (giorno) sessionStorage.setItem('magic-hs.prova-giorno', giorno); else sessionStorage.removeItem('magic-hs.prova-giorno'); } catch (e) { /* niente archivio */ }
+    location.reload();
+  };
+
+  if (!T.oggi.tema) return;
   var radice = document.documentElement;
-  radice.classList.add(T.oggi.stagione);
-  T.oggi.feste.forEach(function (f) { radice.classList.add(f); });
+  [T.oggi.stagione, 'con-tema', 'tema-' + T.oggi.tema].concat(T.oggi.feste).forEach(function (c) { radice.classList.add(c); });
 })();

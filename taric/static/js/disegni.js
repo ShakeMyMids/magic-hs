@@ -398,8 +398,150 @@
       '<path class="v-luce" d="M74 18l40-10v20z"/>'
   };
   T.vignetta = function (nome) {
-    return '<svg class="vignetta" viewBox="0 0 132 64" aria-hidden="true" focusable="false">' + (VIGNETTE[nome] || '') + '</svg>';
+    var o = OGGI.tema && ORNAMENTI[OGGI.tema] ? '<g class="v-ornamento" transform="translate(112 1) scale(.78)">' + ORNAMENTI[OGGI.tema] + '</g>' : '';
+    return '<svg class="vignetta" viewBox="0 0 132 64" aria-hidden="true" focusable="false">' + (VIGNETTE[nome] || '') + o + '</svg>';
   };
+
+  /* ---------------------------------------------------------------- stagioni e feste nel resto dell'app (js/calendario.js)
+     T.ornamento(tema): il simbolo della festa o della stagione (24 x 24), per gli auguri e le vignette; T.festone(tema): la
+     striscia in cima alla barra (un motivo ripetuto: luci, bandierine, ghiaccioli...); T.accessorio(tema): l'aggiunta al
+     logo (cappello di Babbo Natale, bandierina, neve...), nelle coordinate del marchio di js/comune.js (32 x 32). */
+  function giro(cx, cy, n, r1, r2, sfasa) {      // raggi da r1 a r2 attorno a un centro
+    var d = '';
+    for (var a = 0; a < n; a++) {
+      var r = a * 2 * Math.PI / n + (sfasa || 0), c = Math.cos(r), s = Math.sin(r);
+      d += 'M' + (cx + c * r1).toFixed(1) + ' ' + (cy + s * r1).toFixed(1) + 'L' + (cx + c * r2).toFixed(1) + ' ' + (cy + s * r2).toFixed(1);
+    }
+    return d;
+  }
+  function stellina(x, y, r, classe) {           // stella a quattro punte
+    return '<path class="' + classe + '" d="M' + x + ' ' + (y - r) + 'Q' + (x + r * 0.18) + ' ' + (y - r * 0.18) + ' ' + (x + r) + ' ' + y + 'Q' + (x + r * 0.18) + ' ' + (y + r * 0.18) + ' ' + x + ' ' + (y + r) +
+      'Q' + (x - r * 0.18) + ' ' + (y + r * 0.18) + ' ' + (x - r) + ' ' + y + 'Q' + (x - r * 0.18) + ' ' + (y - r * 0.18) + ' ' + x + ' ' + (y - r) + 'Z"/>';
+  }
+  function fiore(x, y, r, classe) {
+    var h = '';
+    for (var a = 0; a < 5; a++) { var g = a * 2 * Math.PI / 5 - Math.PI / 2; h += '<circle class="' + classe + '" cx="' + (x + Math.cos(g) * r).toFixed(1) + '" cy="' + (y + Math.sin(g) * r).toFixed(1) + '" r="' + (r * 0.82).toFixed(1) + '"/>'; }
+    return h + '<circle class="s-giallo" cx="' + x + '" cy="' + y + '" r="' + (r * 0.62).toFixed(1) + '"/>';
+  }
+  function uovo(x, y, k, classe, fascia) {
+    return '<path class="' + classe + '" d="M' + x + ' ' + (y - 5 * k) + 'C' + (x + 3.6 * k) + ' ' + (y - 5 * k) + ' ' + (x + 4 * k) + ' ' + (y + 1.6 * k) + ' ' + (x + 3.8 * k) + ' ' + (y + 2.4 * k) +
+      'C' + (x + 3.4 * k) + ' ' + (y + 5.4 * k) + ' ' + (x - 3.4 * k) + ' ' + (y + 5.4 * k) + ' ' + (x - 3.8 * k) + ' ' + (y + 2.4 * k) + 'C' + (x - 4 * k) + ' ' + (y + 1.6 * k) + ' ' + (x - 3.6 * k) + ' ' + (y - 5 * k) + ' ' + x + ' ' + (y - 5 * k) + 'Z"/>' +
+      (fascia ? '<path class="s-bianco-t" d="M' + (x - 3.6 * k) + ' ' + (y + 0.6 * k) + 'l' + (1.2 * k) + ' ' + (-1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + ' ' + (-1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + ' ' + (-1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + '"/>' : '');
+  }
+  function zucca(x, y, k) {
+    return '<path class="s-zucca-c" d="M' + x + ' ' + (y - 6 * k) + 'C' + (x - 8 * k) + ' ' + (y - 7 * k) + ' ' + (x - 10 * k) + ' ' + (y - 2 * k) + ' ' + (x - 9.6 * k) + ' ' + (y + 0.6 * k) +
+      'C' + (x - 9 * k) + ' ' + (y + 5.4 * k) + ' ' + (x - 4.6 * k) + ' ' + (y + 6.4 * k) + ' ' + x + ' ' + (y + 6.4 * k) + 'C' + (x + 4.6 * k) + ' ' + (y + 6.4 * k) + ' ' + (x + 9 * k) + ' ' + (y + 5.4 * k) + ' ' + (x + 9.6 * k) + ' ' + (y + 0.6 * k) +
+      'C' + (x + 10 * k) + ' ' + (y - 2 * k) + ' ' + (x + 8 * k) + ' ' + (y - 7 * k) + ' ' + x + ' ' + (y - 6 * k) + 'Z"/>' +
+      '<path class="s-spicchio" d="M' + (x - 4 * k) + ' ' + (y - 5.4 * k) + 'Q' + (x - 6.6 * k) + ' ' + y + ' ' + (x - 4 * k) + ' ' + (y + 6 * k) + 'M' + (x + 4 * k) + ' ' + (y - 5.4 * k) + 'Q' + (x + 6.6 * k) + ' ' + y + ' ' + (x + 4 * k) + ' ' + (y + 6 * k) + '"/>' +
+      '<path class="s-gambo" d="M' + (x - 0.8 * k) + ' ' + (y - 5.8 * k) + 'l' + (0.6 * k) + ' ' + (-3.4 * k) + 'h' + (1.8 * k) + 'l' + (-0.4 * k) + ' ' + (3.4 * k) + 'z"/>' +
+      '<path class="s-lume" d="M' + (x - 5.4 * k) + ' ' + (y - 0.4 * k) + 'l' + (2 * k) + ' ' + (-2.6 * k) + ' ' + (2 * k) + ' ' + (2.6 * k) + 'zM' + (x + 1.4 * k) + ' ' + (y - 0.4 * k) + 'l' + (2 * k) + ' ' + (-2.6 * k) + ' ' + (2 * k) + ' ' + (2.6 * k) + 'zM' +
+      (x - 5 * k) + ' ' + (y + 2 * k) + 'h' + (10 * k) + 'l' + (-1.6 * k) + ' ' + (2.2 * k) + '-' + (1.6 * k) + ' ' + (-1 * k) + '-' + (1.8 * k) + ' ' + (1.1 * k) + '-' + (1.8 * k) + ' ' + (-1.1 * k) + '-' + (1.6 * k) + ' ' + (1 * k) + 'z"/>';
+  }
+  function pipistrello(x, y, k) {
+    var q = function (dx, dy) { return (x + dx * k).toFixed(1) + ' ' + (y + dy * k).toFixed(1); };
+    return '<path class="o-pipistrello" d="M' + q(-9, 0) + 'Q' + q(-6, -5) + ' ' + q(-2, -2) + 'L' + q(0, -4) + 'L' + q(2, -2) + 'Q' + q(6, -5) + ' ' + q(9, 0) + 'Q' + q(6, -1) + ' ' + q(5, 2) +
+      'Q' + q(3, 0) + ' ' + q(1, 2) + 'L' + q(0, 3) + 'L' + q(-1, 2) + 'Q' + q(-3, 0) + ' ' + q(-5, 2) + 'Q' + q(-6, -1) + ' ' + q(-9, 0) + 'Z"/>';
+  }
+  var ORNAMENTI = {
+    primavera: fiore(12, 12, 4.6, 's-fiore-o'),
+    estate: '<path class="o-raggi" d="' + giro(12, 12, 8, 8, 11, Math.PI / 8) + '"/><circle class="s-giallo" cx="12" cy="12" r="5.6"/>',
+    autunno: '<path class="s-foglia-o" d="M12 2.5C18 6 19.5 12.5 12 21.5C4.5 12.5 6 6 12 2.5Z"/><path class="o-venatura" d="M12 6.5V22M12 11.5l3-2.4M12 15l-3.2-2.6M12 18.2l2.8-2.2"/>',
+    inverno: '<path class="o-fiocco" d="' + giro(12, 12, 6, 0, 9.6, Math.PI / 2) + (function () {
+      var d = '';
+      for (var a = 0; a < 6; a++) {
+        var r = a * Math.PI / 3 + Math.PI / 2, x = 12 + Math.cos(r) * 6.2, y = 12 + Math.sin(r) * 6.2;
+        [-1, 1].forEach(function (v) { var g = r + v * Math.PI / 4; d += 'M' + x.toFixed(1) + ' ' + y.toFixed(1) + 'l' + (Math.cos(g) * 3).toFixed(1) + ' ' + (Math.sin(g) * 3).toFixed(1); });
+      }
+      return d;
+    })() + '"/>',
+    natale: '<path class="s-abete-o" d="M12 3.4l5.2 6.2h-2.6l4.2 5.2h-2.9l4.6 5.4H3.5l4.6-5.4H5.2l4.2-5.2H6.8z"/><rect class="s-tronco-o" x="10.6" y="20.2" width="2.8" height="2.6"/>' +
+      '<circle class="s-rosso" cx="9.6" cy="12.6" r="1.3"/><circle class="d-c2" cx="14.4" cy="16.6" r="1.3"/><circle class="s-giallo" cx="8.6" cy="18" r="1.2"/>' + stellina(12, 3, 2.6, 's-giallo'),
+    befana: '<path class="s-rosso" d="M7.6 6h8.4v8q0 1.4 1.2 2.1l2.6 1.4q2 1.1 1.1 3-.9 1.6-2.9 1L10.6 19.4Q7.6 18.4 7.6 15.4z"/><rect class="s-bianco-o" x="6.6" y="2.6" width="10.4" height="4.2" rx="1.6"/>',
+    capodanno: '<path class="o-scintille" d="' + giro(12, 12, 8, 5, 10.5) + '"/>' + stellina(12, 12, 4.4, 's-oro'),
+    'san-valentino': cuore(12, 12, 6.6).replace('<path ', '<path class="s-cuore-o" '),
+    carnevale: '<path class="s-maschera" d="M2.5 8.5Q12 4.5 21.5 8.5Q22 16 15.6 16Q13.4 16 12 13.4Q10.6 16 8.4 16Q2 16 2.5 8.5Z"/>' +
+      '<path class="o-occhi" d="M5.6 10.6Q7.6 9 9.8 10.6Q7.6 12.4 5.6 10.6ZM14.2 10.6Q16.4 9 18.4 10.6Q16.4 12.4 14.2 10.6Z"/><circle class="s-giallo" cx="12" cy="7.4" r="1.2"/>' +
+      '<path class="o-filante" d="M21 9q2.2 3-.4 5.4t-.2 5.6"/>',
+    mimosa: '<path class="o-stelo" d="M5 21C9 15 13 10 19 4M10.2 14.6l-3.4-1.4M13.6 10.6l-1.2-3.6M15.6 8.2l3.8 1"/>' +
+      [[17.6, 4.6], [19.8, 7.2], [15.2, 5.6], [12, 6], [13.4, 8.6], [6.4, 12.4], [8.6, 11.4], [20.2, 10.4]].map(function (q) { return '<circle class="s-mimosa-o" cx="' + q[0] + '" cy="' + q[1] + '" r="1.9"/>'; }).join(''),
+    pasqua: uovo(12, 12.4, 1.75, 's-uovo-o', true),
+    'festa-nazionale': '<circle class="s-rosso" cx="12" cy="12" r="10"/><circle class="s-bianco" cx="12" cy="12" r="6.8"/><circle class="s-verde" cx="12" cy="12" r="3.6"/>',
+    halloween: zucca(12, 13.4, 1)
+  };
+  T.ornamento = function (tema, classe) {
+    var o = ORNAMENTI[tema];
+    return o ? '<svg class="ornamento' + (classe ? ' ' + classe : '') + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + o + '</svg>' : '';
+  };
+
+  /* festone: un riquadro del motivo, largo 60 e alto 20; la corda scende a festoni tra un riquadro e l'altro */
+  var CORDA = '<path class="f-corda" d="M0 2Q30 11 60 2"/>';
+  function suCorda(x) { var t = x / 60; return 2 * (1 - t) * (1 - t) + 22 * t * (1 - t) + 2 * t * t; }   // altezza della corda in x
+  function appesi(xs, fatto) { return xs.map(function (x, n) { return fatto(x, suCorda(x), n); }).join(''); }
+  var FESTONI = {
+    natale: CORDA + appesi([12, 30, 48], function (x, y, n) {
+      return '<rect class="f-attacco" x="' + (x - 1.3) + '" y="' + (y - 0.4) + '" width="2.6" height="2.4" rx=".6"/><ellipse class="f-luce ' + ['s-rosso', 's-oro', 'd-c2'][n] + '" cx="' + x + '" cy="' + (y + 5) + '" rx="2.5" ry="3.4"/>';
+    }),
+    capodanno: CORDA + appesi([12, 32, 48], function (x, y, n) {
+      var giu = [8, 4, 9][n];
+      return '<path class="f-filo" d="M' + x + ' ' + y + 'V' + (y + giu) + '"/>' + stellina(x, y + giu + 3, [3.6, 2.6, 3.2][n], n === 1 ? 's-argento' : 's-oro');
+    }),
+    'san-valentino': CORDA + appesi([12, 30, 48], function (x, y, n) { return cuore(x, y + 4.6, n === 1 ? 2.6 : 3.4).replace('<path ', '<path class="' + (n === 1 ? 's-rosa' : 's-cuore-o') + '" '); }),
+    carnevale: '<path class="f-filante s-col1" d="M0 4q7.5-4 15 0t15 0 15 0 15 0"/><path class="f-filante s-col2" d="M0 10q7.5 4 15 0t15 0 15 0 15 0"/>' +
+      '<path class="f-filante s-col3" d="M0 15q7.5-3 15 0t15 0 15 0 15 0"/>' +
+      [[6, 7, 1], [22, 13, 4], [37, 6, 0], [51, 12, 2], [29, 2, 3]].map(function (c) { return '<rect class="f-coriandolo s-col' + c[2] + '" x="' + c[0] + '" y="' + c[1] + '" width="2.6" height="2.6"/>'; }).join(''),
+    mimosa: '<path class="f-stelo" d="M0 5Q15 1 30 5T60 5"/>' + [[8, 7], [22, 6.4], [38, 7], [52, 6.4]].map(function (q, n) {
+      return '<ellipse class="s-foglia-v" cx="' + (q[0] + 4) + '" cy="' + (q[1] - 2.6) + '" rx="3" ry="1.3" transform="rotate(-24 ' + (q[0] + 4) + ' ' + (q[1] - 2.6) + ')"/>' +
+        '<circle class="s-mimosa-o" cx="' + q[0] + '" cy="' + (q[1] + 3) + '" r="2.1"/><circle class="s-mimosa-o" cx="' + (q[0] - 2.6) + '" cy="' + (q[1] + 6) + '" r="1.8"/><circle class="s-mimosa-o" cx="' + (q[0] + 2) + '" cy="' + (q[1] + 6.6) + '" r="1.7"/>';
+    }).join(''),
+    pasqua: CORDA + appesi([12, 30, 48], function (x, y, n) { return '<path class="f-filo" d="M' + x + ' ' + y + 'v1.6"/>' + uovo(x, y + 6.4, 0.78, ['s-uovo-o', 's-foglia-v', 's-giallo'][n], n !== 1); }),
+    'festa-nazionale': CORDA + appesi([4, 22, 40], function (x, y, n) {
+      var y2 = suCorda(x + 13);
+      return '<path class="' + ['s-verde', 's-bianco-o', 's-rosso'][n] + '" d="M' + x + ' ' + y.toFixed(1) + 'L' + (x + 13) + ' ' + y2.toFixed(1) + 'L' + (x + 6.5) + ' ' + ((y + y2) / 2 + 9).toFixed(1) + 'Z"/>';
+    }),
+    halloween: CORDA + appesi([15, 45], function (x, y, n) {
+      return n ? '<path class="f-filo" d="M' + x + ' ' + y + 'v2"/>' + zucca(x, y + 7.6, 0.5) : pipistrello(x, y + 4, 0.62);
+    }),
+    primavera: '<path class="f-stelo" d="M0 7Q15 2 30 7T60 7"/>' + '<ellipse class="s-foglia-v" cx="8" cy="3.6" rx="3.2" ry="1.4" transform="rotate(-28 8 3.6)"/>' +
+      '<ellipse class="s-foglia-v" cx="37" cy="10.4" rx="3.2" ry="1.4" transform="rotate(24 37 10.4)"/>' + fiore(20, 6.4, 2.4, 's-fiore-o') + fiore(50, 8, 2.4, 's-fiore-o'),
+    estate: CORDA + appesi([5, 20, 35, 49], function (x, y, n) {   // bandiere di segnalazione nautica
+      var col = ['d-c2', 's-giallo', 's-rosso', 's-bianco-o'][n];
+      return '<rect class="' + col + '" x="' + x + '" y="' + (y + 0.6).toFixed(1) + '" width="8" height="8"/>' +
+        (n === 0 ? '<rect class="s-bianco" x="' + (x + 2.6) + '" y="' + (y + 3.2).toFixed(1) + '" width="2.8" height="2.8"/>' : n === 2 ? '<path class="f-croce" d="M' + x + ' ' + (y + 4.6).toFixed(1) + 'h8M' + (x + 4) + ' ' + (y + 0.6).toFixed(1) + 'v8"/>' : n === 3 ? '<rect class="d-c2" x="' + (x + 2) + '" y="' + (y + 2.6).toFixed(1) + '" width="4" height="4"/>' : '');
+    }),
+    autunno: CORDA + appesi([12, 30, 48], function (x, y, n) {
+      return '<path class="' + ['s-foglia-o', 's-foglia-r', 's-foglia-o'][n] + '" transform="rotate(' + [-18, 12, -6][n] + ' ' + x + ' ' + y + ')" d="M' + x + ' ' + y + 'C' + (x + 4) + ' ' + (y + 3) + ' ' + (x + 4.6) + ' ' + (y + 7) + ' ' + x + ' ' + (y + 11) + 'C' + (x - 4.6) + ' ' + (y + 7) + ' ' + (x - 4) + ' ' + (y + 3) + ' ' + x + ' ' + y + 'Z"/>';
+    }),
+    inverno: '<path class="f-ghiacciolo" d="M0 0H60V2.6Q55 4 50 2.6Q45 4.4 40 2.6Q35 4 30 2.6Q25 4.4 20 2.6Q15 4 10 2.6Q5 4.4 0 2.6Z"/>' +
+      [[5, 9], [13, 5], [22, 13], [31, 6.5], [40, 11], [48, 4.5], [55, 8]].map(function (g) { return '<path class="f-ghiacciolo" d="M' + (g[0] - 2.2) + ' 2.6L' + g[0] + ' ' + (2.6 + g[1]) + 'L' + (g[0] + 2.2) + ' 2.6Z"/>'; }).join('')
+  };
+  FESTONI.befana = FESTONI.natale; FESTONI.ferragosto = FESTONI.estate;
+  T.festone = function (tema) {
+    var m = FESTONI[tema];
+    if (!m) return '';
+    return '<svg class="festone-svg" width="100%" height="20" aria-hidden="true" focusable="false"><defs><pattern id="festone-motivo" width="60" height="20" patternUnits="userSpaceOnUse">' +
+      m + '</pattern></defs><rect width="100%" height="20" fill="url(#festone-motivo)"/></svg>';
+  };
+
+  /* aggiunta al logo (marchio 32 x 32 di js/comune.js, disegnata anche fuori dal riquadro) */
+  var ACCESSORI = {
+    natale: '<path class="s-rosso" d="M15 5.2Q19 -4.4 28.6 -5.2Q33.6 -5 33.4 1.6L30 5.6Z"/><rect class="s-bianco-o" x="13.6" y="3.4" width="19" height="4.4" rx="2.2" transform="rotate(-6 23 5.6)"/>' +
+      '<circle class="s-bianco-o" cx="33.6" cy="2.4" r="2.6"/>',
+    capodanno: '<path class="s-oro" d="M21 5.4L27.4 -9L31.8 4.4Z" transform="rotate(14 26 0)"/><path class="f-croce" d="M23.6 -1.4l5 1.6M25.4 -5.4l3.8 1.2" transform="rotate(14 26 0)"/>' +
+      '<circle class="s-argento" cx="30.6" cy="-8.2" r="1.8"/>' + stellina(35, 8, 2.6, 's-oro'),
+    'san-valentino': '<g class="a-contorno">' + cuore(28.6, 2, 4.6).replace('<path ', '<path class="s-cuore-o" ') + '</g>',
+    carnevale: '<path class="s-maschera" d="M21 5.4L27.4 -9L31.8 4.4Z" transform="rotate(14 26 0)"/><circle class="s-giallo" cx="26.6" cy="-1.6" r="1.2"/><circle class="s-col0" cx="28.6" cy="2.4" r="1.1"/>' +
+      '<circle class="s-giallo" cx="30.6" cy="-8.2" r="1.9"/>',
+    mimosa: '<path class="o-stelo" d="M23 7C26 3 28.6 0 33 -3.4"/>' + [[32.6, -3], [30.6, -4.8], [34.4, -0.6], [29.6, -1], [31.6, 0.8], [27, 1.8]].map(function (q) { return '<circle class="s-mimosa-o" cx="' + q[0] + '" cy="' + q[1] + '" r="1.7"/>'; }).join(''),
+    pasqua: '<g class="a-contorno">' + uovo(29, 1.6, 1.05, 's-uovo-o', true) + '</g>',
+    'festa-nazionale': '<path class="a-asta" d="M27 9V-9"/><rect class="s-verde" x="27" y="-9" width="3.2" height="6.4"/><rect class="s-bianco-o" x="30.2" y="-9" width="3.2" height="6.4"/><rect class="s-rosso" x="33.4" y="-9" width="3.2" height="6.4"/>',
+    halloween: '<path class="s-strega" d="M16.6 5.4Q24 -1 25.6 -8.6Q28 -4 31.6 4.2Z"/><ellipse class="s-strega" cx="24.4" cy="5.2" rx="10.6" ry="2"/><path class="s-zucca-c" d="M19.6 3.2Q24 1.6 30 2.8L30.6 4.2Q24.6 3 19.2 4.6Z"/>',
+    primavera: '<g class="a-contorno">' + fiore(29, 2.6, 3, 's-fiore-o') + '</g>',
+    estate: '<path class="o-raggi" d="' + giro(29, 2.6, 8, 5.6, 8, Math.PI / 8) + '"/><circle class="s-giallo a-bordo" cx="29" cy="2.6" r="4"/>',
+    autunno: '<path class="s-foglia-o a-bordo" transform="rotate(32 29 2)" d="M29 -4.6C33 -2 34 2.6 29 8.6C24 2.6 25 -2 29 -4.6Z"/><path class="o-venatura" transform="rotate(32 29 2)" d="M29 -2V9"/>',
+    inverno: '<path class="s-neve-l" d="M.6 7Q.4 .2 8 .2H24Q31.6 .2 31.4 7Q29 4.6 26.2 6.4Q23.4 3.6 20 5.8Q16.6 3.4 13 5.6Q9.6 3.4 6.6 5.8Q3.4 4.2 .6 7Z"/>'
+  };
+  ACCESSORI.befana = ACCESSORI.natale; ACCESSORI.ferragosto = ACCESSORI.estate;
+  T.accessorio = function () { return ACCESSORI[OGGI.tema] || ''; };
 
   function svg(tipo, classe, larghezza, interno) {
     return '<svg class="scena-svg scena-' + tipo + (classe ? ' ' + classe : '') + '" viewBox="0 0 ' + larghezza + ' 170" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false">' +

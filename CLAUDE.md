@@ -92,9 +92,16 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   (Utenti, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Registro), `js/porto.js` (la scena si tocca:
   gruppi `.t-*` di `disegni.js` animati per la durata di una classe; tre tocchi sulla gru o «gioca» scritto fuori dai campi aprono
   il gioco; «nave», «festa», «magic» e cinque tocchi sul logo; l'albero si scuote e fa cadere quello della stagione; `[data-gioca]`
-  nelle pagine d'attesa), `js/calendario.js` (`T.calendario(data)`: stagione per mesi interi e feste italiane, Pasqua calcolata;
-  `T.oggi` e le classi su `<html>`, prima di `disegni.js`, che disegna solo le decorazioni di oggi; colori `--d-*` e cielo
-  `--d-velo-*` della stagione in `app.css`; si prova con `node tests/prova_calendario.js`), `js/gioco.js` (`T.gioco()`, «Carica la nave»: SVG con le variabili `--d-*`, record in `localStorage`
+  nelle pagine d'attesa; pioggia di benvenuto `.pioggia`, una volta al giorno), `js/calendario.js` (nell'`<head>` di ogni pagina:
+  `T.calendario(data)` con stagione per mesi interi, feste italiane con Pasqua calcolata, `tema` (la festa più importante,
+  altrimenti la stagione) e `auguri`; `T.oggi` e le classi su `<html>`: stagione, feste, `con-tema`, `tema-<nome>`; spento da
+  `localStorage` `magic-hs.stagioni`, anteprima di un giorno da `sessionStorage` `magic-hs.prova-giorno`, tutti e due dal
+  profilo). In `app.css` ogni `tema-*` ha l'accento chiaro e scuro (`--tema-chiaro`, `--tema-scuro`, controllati per il contrasto
+  da `node tests/prova_calendario.js`) e un secondo colore `--tema-2`; le forme (motivo dello sfondo, simbolo delle schede,
+  neve, pioggia) sono maschere SVG generate da `strumenti/forme_stagioni.py` tra «forme: inizio» e «forme: fine»
+  (`tests/test_forme.py`). `disegni.js` disegna nella scena solo le decorazioni di oggi e dà `T.ornamento` (auguri, vignette),
+  `T.festone` (striscia in cima alla barra) e `T.accessorio` (logo); `comune.js` li inserisce con `data-auguri` e
+  l'avviso dell'anteprima), `js/gioco.js` (`T.gioco()`, «Carica la nave»: SVG con le variabili `--d-*`, record in `localStorage`
   `magic-hs.gioco`), `T.vignetta()` di `disegni.js` per gli elenchi vuoti, codici recenti di `app.js` (`magic-hs.recenti`),
   `js/attiva-ia.js` (festa alla prima «Prova» riuscita
   dell'amministratore: `T.festaIA`, scena `T.festa()` di `disegni.js`, animazioni `.festa` in `app.css` con lo stato
