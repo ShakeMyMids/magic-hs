@@ -683,6 +683,10 @@ html.con-finestra{overflow:hidden}
 .b-mancanti .link{text-align:left}
 .b-campi .largo{grid-column:span 2}
 .b-campi textarea.campo{resize:vertical;min-height:62px}
+/* data delle misure nella scheda del codice (app.js, giornoMisure) */
+.data-misure{align-items:flex-end;margin:2px 0 10px}
+.data-misure label{display:flex;flex-direction:column;gap:5px;flex:0 1 210px;min-width:0;font-size:13px;font-weight:600;color:var(--secondario)}
+.data-misure label .campo{flex:none}
 /* campo data: Safari su iPhone gli dà una larghezza minima e un'altezza sue e centra il testo; qui segue gli altri campi */
 .campo[type="date"]{-webkit-appearance:none;appearance:none;display:block;width:100%;min-width:0;max-width:100%;
   height:calc(1.3em + 22px);text-align:left}
