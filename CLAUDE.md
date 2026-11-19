@@ -13,7 +13,9 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 ## Struttura
 
 - `taric/app.py`: pagine e API. Accesso: `/accedi`, `/api/registrazione` (modulo firmato, trappola `sito_web`),
-  `/api/accedi`, `/api/esci`, `/api/io/password`, `/api/reimposta-password` (link dell'amministratore). Comuni: profilo,
+  `/api/accedi`, `/api/esci`, `/api/io/password`, `/api/reimposta-password` (link dell'amministratore); le email dei domini
+  dell'impostazione `domini_automatici` (predefinito `dhl.com`) entrano subito con `quota_ia = 0` (IA spenta, codice
+  `ia_non_autorizzata`, testo `T.IA_NON_AUTORIZZATA` di `comune.js`; i comandi dell'IA restano visibili, bloccati con `.con-divieto`). Comuni: profilo,
   storico (colonna `condivisa` dalla preferenza `condividi`), preferiti (`/api/preferiti/cambi`: differenze con la versione
   precedente dei dati, da `taric/cambi.py`), archivio aziendale (`/api/archivio`), sinonimi (`/api/sinonimi`), parole senza
   risultati (`/api/ricerche-vuote`, anonime), bolle simulate (`/api/bolle`, personali) e cambio doganale del mese

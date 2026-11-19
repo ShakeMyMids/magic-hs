@@ -2,7 +2,7 @@
 
 Sito per cercare le voci doganali in modo più rapido di AIDA, ad uso interno dell'azienda. Descrivi la merce a parole: l'intelligenza artificiale (Google Gemini) propone il codice a 10 cifre con le alternative e fa le domande che servono per scegliere. MAGIC HS mostra dazi, misure e documenti richiesti per ogni paese, presi dai dati ufficiali TARIC dell'Unione europea.
 
-Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'amministratore**. L'intelligenza artificiale usa **una sola chiave a pagamento**, inserita dall'amministratore su Render e mai visibile ai browser, con un limite mensile di classificazioni per persona. I dati TARIC del mese arrivano da soli.
+Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'amministratore** (le email @dhl.com sono approvate subito, con l'IA spenta). L'intelligenza artificiale usa **una sola chiave a pagamento**, inserita dall'amministratore su Render e mai visibile ai browser, con un limite mensile di classificazioni per persona. I dati TARIC del mese arrivano da soli.
 
 > Strumento non ufficiale e senza valore legale: prima di dichiarare verifica sempre codice e misure su AIDA o sul TARIC dell'UE.
 
@@ -24,7 +24,7 @@ Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'ammini
   - password, uscita dagli altri dispositivi, esportazione e importazione di storico e preferiti.
 - **Gestione**, per l'amministratore:
   - **Utenti**: richieste di account da approvare (con il messaggio di chi la chiede), limite personale, link per reimpostare la password, amministratori, sospensione ed eliminazione;
-  - **Intelligenza artificiale**: stato e prova del servizio, limite mensile per persona, tetto mensile per tutti, registrazioni aperte o chiuse, uso del mese per persona;
+  - **Intelligenza artificiale**: stato e prova del servizio, limite mensile per persona, tetto mensile per tutti, registrazioni aperte o chiuse, domini delle email approvate subito, uso del mese per persona;
   - **Dati TARIC**: versioni, aggiornamento immediato, caricamento manuale, ritorno alla versione precedente, copia del database (anche fuori da Render, vedi sotto);
   - **Ricerca**: le parole cercate senza risultati (quante volte, quando), da trasformare in **sinonimi** che valgono subito per tutti; un sinonimo si accetta solo se i termini esistono nella nomenclatura;
   - **Registro** degli eventi.
@@ -46,6 +46,7 @@ Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'ammini
    Conferma con **Apply**. Costo indicativo: istanza Starter più pochi centesimi al mese per il disco.
 3. **Il tuo account.** Apri l'indirizzo che Render mostra (per esempio `https://magic-hs.onrender.com`), premi **Richiedi un account** e usa la stessa email di `MAGIC_HS_AMMINISTRATORI`: entri subito come amministratore. In *Gestione → Intelligenza artificiale* premi **Prova**: se il servizio risponde, parte la festa con la nave.
 4. **I colleghi.** Manda loro l'indirizzo. Ognuno preme *Richiedi un account*. Sulla scheda *Gestione* compare un puntino arancio e in *Gestione → Utenti* approvi le richieste. Chi non è approvato non entra.
+   Le email dei domini scelti in *Gestione → Intelligenza artificiale* (all'inizio solo dhl.com, esatto: non i sottodomini) entrano subito, con l'IA spenta: l'interruttore «Usa l'IA» e i pulsanti dell'IA restano visibili ma bloccati, con il divieto e la scritta «Chiedere autorizzazione all'admin per l'utilizzo dell'IA». Per dargliela: *Utenti → Modifica*, limite vuoto (predefinito) o un numero. Il sito non manda email, quindi non può verificare che l'indirizzo esista davvero: chi conosce il dominio può entrare con un indirizzo inventato. Se succede, sospendi l'account; per chiudere la porta togli il dominio dall'elenco.
 
 Se vuoi un indirizzo tuo (per esempio `magic-hs.azienda.it`), aggiungilo in Render → *Settings → Custom Domains*.
 

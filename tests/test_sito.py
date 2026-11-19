@@ -94,6 +94,38 @@ def test_registrazione_e_approvazione(sito: Sito):
     assert "registrazione" in eventi and "approvato" in eventi
 
 
+def test_dominio_approvato_in_automatico_con_ia_spenta(sito: Sito):
+    capo = sito.capo()
+    anna, r = sito.registra("Anna Verdi", "Anna.Verdi@DHL.com")
+    assert r["stato"] == "attivo" and "magic_hs" in anna.cookies                    # entra subito
+    io_ = anna.get("/api/io").json()
+    assert io_["email"] == "anna.verdi@dhl.com" and io_["ruolo"] == "utente"
+    assert (io_["ia"]["limite"], io_["ia"]["disponibile"], io_["ia"]["configurata"]) == (0, False, True)
+    r = anna.post("/api/ia", json={"prompt": "trapano", "livello": "rapido", "operazione": "x"})
+    assert r.status_code == 403 and r.json() == {"errore": "Chiedere autorizzazione all'admin per l'utilizzo dell'IA.", "codice": "ia_non_autorizzata"}
+    r = anna.post("/api/ia", json={"prompt": "drill", "livello": "rapido", "tipo": "traduzione"})
+    assert r.json()["codice"] == "ia_non_autorizzata" and not sito.claude.richieste
+    voce = next(x for x in capo.get("/api/admin/utenti").json()["utenti"] if x["email"] == "anna.verdi@dhl.com")
+    assert (voce["stato"], voce["quota_ia"], voce["limite"]) == ("attivo", 0, 0)
+    assert any(e["tipo"] == "registrazione" and "approvato in automatico per @dhl.com, IA spenta" in (e["dettagli"] or "")
+               for e in capo.get("/api/admin/eventi").json()["eventi"])
+    assert capo.get("/api/admin/riepilogo").json()["in_attesa"] == 0
+    # l'amministratore concede l'IA (limite predefinito)
+    assert capo.patch(f"/api/admin/utenti/{voce['id']}", json={"quota_ia": None}).status_code == 200
+    assert anna.post("/api/ia", json={"prompt": "trapano", "livello": "rapido", "operazione": "y"}).status_code == 200
+    # solo il dominio esatto: altri domini e sottodomini aspettano l'approvazione
+    assert sito.registra("Piero Neri", "piero@dhl.it")[1]["stato"] == "in_attesa"
+    assert sito.registra("Gino Rossi", "gino@posta.dhl.com")[1]["stato"] == "in_attesa"
+    # i domini si cambiano in Gestione
+    assert capo.get("/api/admin/ia").json()["domini_automatici"] == ["dhl.com"]
+    assert capo.put("/api/admin/impostazioni", json={"domini_automatici": [" @Azienda.it", "dhl.com", "azienda.it", ""]}).status_code == 200
+    assert capo.get("/api/admin/ia").json()["domini_automatici"] == ["azienda.it", "dhl.com"]
+    r = capo.put("/api/admin/impostazioni", json={"domini_automatici": ["non valido"]})
+    assert r.status_code == 422 and r.json()["codice"] == "dominio"
+    assert capo.put("/api/admin/impostazioni", json={"domini_automatici": []}).status_code == 200
+    assert sito.registra("Marta Blu", "marta@dhl.com")[1]["stato"] == "in_attesa"
+
+
 @pytest.mark.parametrize("caso,codice", [("doppio", "esiste"), ("email", "email"), ("password", "password"), ("bot", "modulo"), ("modulo", "modulo")])
 def test_registrazioni_rifiutate(sito: Sito, caso: str, codice: str):
     sito.registra("Luca Bianchi", "luca@azienda.it")
@@ -203,6 +235,7 @@ def test_ia_unica_con_limite_personale_e_tetto(sito: Sito):
     assert chiedi(luca, "b").status_code == 200
     assert capo.patch(f"/api/admin/utenti/{uid}", json={"quota_ia": 0}).status_code == 200
     assert luca.get("/api/io").json()["ia"]["disponibile"] is False
+    assert chiedi(luca, "b2").json()["codice"] == "ia_non_autorizzata"
     capo.patch(f"/api/admin/utenti/{uid}", json={"quota_ia": None})
     # l'amministratore non ha limite personale, il tetto mensile vale per tutti
     for k in range(3):

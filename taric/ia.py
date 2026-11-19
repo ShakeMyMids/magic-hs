@@ -256,7 +256,7 @@ class ServizioIA:
         with self.db.connessione() as c:
             lim = self.limite(c, utente)
             if lim == 0:
-                raise ErroreIA("quota_esaurita", 429)
+                raise ErroreIA("ia_non_autorizzata", 403)
             if tipo == "classifica":
                 gia = c.execute("SELECT COUNT(*) FROM uso_ia WHERE utente_id = ? AND operazione = ? AND operazione != ''",
                                 (uid, operazione)).fetchone()[0]
