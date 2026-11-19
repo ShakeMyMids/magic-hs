@@ -424,7 +424,9 @@ ul.cambi b{color:var(--inchiostro)}
 ul.docs{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
 ul.docs li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px;align-items:baseline}
 ul.docs.sg li{grid-template-columns:minmax(150px,max-content) minmax(0,1fr)}
-.cc{font:650 14.5px/1.3 var(--f);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* codici (documenti, soglie, note) in colore, la spiegazione accanto nel colore del testo: l'accento forte resta leggibile
+   con ogni tema, chiaro, scuro e delle stagioni */
+.cc{font:650 14.5px/1.3 var(--f);font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--accento-forte)}
 details.piu{font-size:14px}
 details.piu > summary{display:inline-flex;align-items:center;gap:6px;cursor:var(--mano,pointer);color:var(--accento);font-weight:600;padding:3px 0;list-style:none}
 details.piu > summary::-webkit-details-marker{display:none}
@@ -1087,6 +1089,7 @@ input[type="checkbox"].in-conflitto{outline:2px solid var(--timbro);outline-offs
 .con-valuta .campo.corto{flex:0 0 86px;width:86px}
 .b-desc{margin:-4px 0 8px}
 .b-doc{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.spunta.doc > b{color:var(--accento-forte);font-variant-numeric:tabular-nums}
 .b-doc .et,.b-blocchi .et,.b-avvisi .et{display:flex;align-items:center;gap:8px;margin:0;font:600 13.5px var(--f);color:var(--secondario)}
 .b-alt{display:flex;flex-direction:column;gap:4px;padding-left:10px;border-left:2px solid var(--linea)}
 .spunta.doc{display:flex;align-items:flex-start;gap:8px;font-size:14px;color:var(--inchiostro);cursor:var(--mano,pointer)}
