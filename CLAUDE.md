@@ -73,8 +73,11 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   senza pagina, `window.TARIC_CALCOLO` e modulo di node: dazi, condizioni con i documenti, regimi, codice addizionale del
   produttore per famiglia, ripartizione al centesimo, `calcolaImport`/`calcolaExport`; ogni cosa incerta diventa un blocco
   con il motivo, mai una stima; i `conflitti` tra i campi (con il `campo` da evidenziare) non bloccano il totale; codici della
-  casella 36 con `codicePreferenza` e della 47 con `codiceTributo`; si prova con `node tests/prova_calcolo.js`), `js/bolla.js` (sezione Bolla: elenco, intestazione,
-  articoli, tributi, documenti della casella 44, foglio `#bolla-stampa` con `body.stampa-bolla`), `js/profilo.js` (anche gli avvisi
+  casella 36 con `codicePreferenza` e della 47 con `codiceTributo`; `datiMancanti` elenca i dati obbligatori vuoti del tracciato H1
+  EUCDM 6.2 o della colonna B1, senza bloccare; si prova con `node tests/prova_calcolo.js`), `js/codici-dogana.js` (liste di codici delle
+  tabelle ADM: imballaggi, natura della transazione, modi di trasporto, aggiunte e detrazioni, metodi, rappresentanza), `js/bolla.js`
+  (sezione Bolla: elenco, intestazione, articoli, tributi, documenti della casella 44, riferimenti DE e casella di ogni campo in
+  `RIF_IMP`/`RIF_EXP`, foglio `#bolla-stampa` con `body.stampa-bolla`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
   (Utenti, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Registro), `js/attiva-ia.js` (festa alla prima «Prova» riuscita
   dell'amministratore: `T.festaIA`, scena `T.festa()` di `disegni.js`, animazioni `.festa` in `app.css` con lo stato
