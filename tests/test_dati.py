@@ -145,7 +145,7 @@ def test_nomi_dei_file_dell_estrazione():
             "BOX 44 codes of the SAD.xlsx": "Box 44 codes of the SAD.xlsx", "Declarable codes (1).xlsx": "Declarable codes.xlsx",
             "Geographical areas descriptions(1).xlsx": "Geographical areas description.xlsx", "Measure Exclusions.xlsx": "Measure exclusions.xlsx",
             "Nomenclature IT.xlsx": "Nomenclature IT.xlsx", "Nomenclature DE.XLSX": None, "Legal basis.xlsx": None,
-            "Taric measures 20261104.xlsx": None, "Duties Import 01-99.zip": None}
+            "Taric measures 20261104.xlsx": None, "Duties Import 01-99.zip": None, "CCT EURO Exchange rates.xlsx": "CCT Exchange rates.xlsx"}
     assert {k: nome_ufficiale(k) for k in casi} == casi
 
 

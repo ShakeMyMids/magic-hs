@@ -51,7 +51,7 @@ FILE_ESTRAZIONE = ("Nomenclature EN", "Nomenclature IT", "Declarable codes", "Du
                    "Measure conditions", "Measure exclusions", "Measure footnotes", "Footnotes descriptions",
                    "Box 44 codes of the SAD", "Geographical areas description", "Geographical areas composition",
                    "Additional codes descriptions", "CCT Exchange rates")
-SINONIMI_ESTRAZIONE = {"geographical areas descriptions": "Geographical areas description"}
+SINONIMI_ESTRAZIONE = {"geographical areas descriptions": "Geographical areas description", "cct euro exchange rates": "CCT Exchange rates"}
 
 
 def nome_ufficiale(nome: str) -> str | None:
