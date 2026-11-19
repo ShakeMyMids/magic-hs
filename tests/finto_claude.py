@@ -3,7 +3,8 @@
   (/v1beta/models/<modello>:generateContent) e compatibile OpenAI (/v1/chat/completions); accetta solo la chiave
   «chiave-finta».
 - GitHub: la pagina /github/releases/tags/dati con i dati pronti indicati sulla riga di comando (archivi
-  dati-AAAA-MM-01.zip, per esempio fatti con strumenti/dati_mese.py).
+  dati-AAAA-MM-01.zip, per esempio fatti con strumenti/dati_mese.py) e, per la prova dei mesi passati, una loro copia
+  datata settembre 2025 (MESE_PASSATO).
 - Cambi della BCE per la bolla simulata: /bce/D.<VALUTA>.EUR.SP00.A?startPeriod=...&endPeriod=...&format=csvdata, in CSV
   con le colonne TIME_PERIOD e OBS_VALUE, un cambio fisso per ogni giorno feriale (USD 1.0867, CNY 7.7341, GBP 0.8712);
   le altre valute rispondono 404 come la BCE (MAGIC_HS_BCE_URL=http://127.0.0.1:9100/bce).
@@ -14,13 +15,31 @@ TARIC_IA_URL=http://127.0.0.1:9100/v1, TARIC_IA_CHIAVE=chiave-finta e TARIC_DATI
 (vedi README, «Sviluppo», e tests/e2e_sito.js)."""
 import datetime
 import hashlib
+import io
 import json
+import re
 import sys
+import zipfile
 from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 DATI: dict[str, bytes] = {}            # nome dell'archivio -> contenuto
+MESE_PASSATO = "2025-09-01"
+
+
+def come_mese(b: bytes, versione: str) -> bytes:
+    """Lo stesso archivio dei dati come se fosse di un altro mese: cambiano versione.json e la data della nomenclatura."""
+    entra, esce = zipfile.ZipFile(io.BytesIO(b)), io.BytesIO()
+    with zipfile.ZipFile(esce, "w", zipfile.ZIP_DEFLATED) as z:
+        for i in entra.infolist():
+            d = entra.read(i)
+            if i.filename == "versione.json":
+                d = json.dumps({**json.loads(d), "data": versione}).encode()
+            elif i.filename == "nomenclatura.js":
+                d = re.sub(rb'"data_riferimento":"\d{4}-\d{2}-\d{2}"', f'"data_riferimento":"{versione}"'.encode(), d, count=1)
+            z.writestr(i.filename, d)
+    return esce.getvalue()
 S3: dict[str, bytes] = {}              # percorso -> contenuto (copia esterna del database)
 CAMBI = {"USD": "1.0867", "CNY": "7.7341", "GBP": "0.8712"}
 
@@ -169,4 +188,6 @@ class Gestore(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     for f in sys.argv[2:]:
         DATI[Path(f).name] = Path(f).read_bytes()
+    if DATI and f"dati-{MESE_PASSATO}.zip" not in DATI:
+        DATI[f"dati-{MESE_PASSATO}.zip"] = come_mese(next(iter(DATI.values())), MESE_PASSATO)
     ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1] if len(sys.argv) > 1 else 9100)), Gestore).serve_forever()

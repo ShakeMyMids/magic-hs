@@ -4,7 +4,12 @@ e cambia solo dopo che lo script di generazione ha superato tutti i controlli.
 
 Il sito prova prima i dati gia' pronti su GitHub (pagina «dati», preparata ogni mese da strumenti/dati_mese.py con
 gli stessi controlli): pochi MB, controllati con l'impronta SHA-256. Se non ci sono ancora, scarica l'estrazione
-dalla fonte e la prepara da se' con aggiorna.py (circa un minuto)."""
+dalla fonte e la prepara da se' con aggiorna.py (circa un minuto).
+
+Mesi passati: ogni estrazione contiene solo le misure valide dal suo giorno in poi, quindi per consultare le misure di una
+data passata serve l'estrazione di quel mese. I mesi pubblicati su GitHub si scaricano quando servono e restano in
+dati/taric/archivio come dati-AAAA-MM-01.zip (circa 1,2 MB l'uno): il server ne serve i file direttamente dall'archivio,
+senza estrarli."""
 from __future__ import annotations
 
 import hashlib
@@ -40,6 +45,39 @@ VERSIONI_TENUTE = 3
 MAX_ZIP = 300 * 1024 * 1024
 MAX_ESTRATTO = 1536 * 1024 * 1024
 MAX_DATI = 200 * 1024 * 1024          # dati pronti di un mese una volta estratti (oggi circa 12 MB)
+ELENCO_VALIDO = 3600                  # secondi per cui vale l'elenco dei mesi pubblicati su GitHub
+# file dell'estrazione che servono ad aggiorna.py (e il testo italiano e i cambi, quando ci sono)
+FILE_ESTRAZIONE = ("Nomenclature EN", "Nomenclature IT", "Declarable codes", "Duties Import 01-99", "Duties Export 01-99",
+                   "Measure conditions", "Measure exclusions", "Measure footnotes", "Footnotes descriptions",
+                   "Box 44 codes of the SAD", "Geographical areas description", "Geographical areas composition",
+                   "Additional codes descriptions", "CCT Exchange rates")
+SINONIMI_ESTRAZIONE = {"geographical areas descriptions": "Geographical areas description"}
+
+
+def nome_ufficiale(nome: str) -> str | None:
+    """Il nome con cui aggiorna.py cerca un file dell'estrazione, None per gli altri file. Sulla pagina della Commissione
+    (CIRCABC) lo stesso file compare con maiuscole diverse, spazi in piu', «(1)» quando e' stato caricato di nuovo
+    («Duties Import 01-99(1).xlsx», «BOX 44 codes of the SAD.xlsx») o al plurale («Geographical areas descriptions»)."""
+    if not nome.lower().endswith(".xlsx"):
+        return None
+    chiave = re.sub(r"\s+", " ", re.sub(r"\s*\(\d+\)\s*$", "", nome[:-5])).strip().lower()
+    chiave = SINONIMI_ESTRAZIONE.get(chiave, chiave)
+    return next((f + ".xlsx" for f in FILE_ESTRAZIONE if f.lower() == chiave.lower()), None)
+
+
+def controlla_archivio(archivio: Path, versione: str) -> None:
+    """Archivio dei dati di un mese da servire senza estrarlo: integro, entro i limiti, con i dati di quel mese."""
+    with zipfile.ZipFile(archivio) as z:
+        membri = [i for i in z.infolist() if not i.is_dir()]
+        if len(membri) > 500 or sum(i.file_size for i in membri) > MAX_DATI:
+            raise ValueError("archivio dei dati troppo grande")
+        nomi = {i.filename for i in membri if RE_FILE.match(i.filename)}
+        if "nomenclatura.js" not in nomi or "versione.json" not in nomi:
+            raise ValueError("l'archivio non contiene i dati di un mese")
+        if z.testzip() is not None:
+            raise ValueError("archivio dei dati danneggiato")
+        if json.loads(z.read("versione.json")).get("data") != versione:
+            raise ValueError("l'archivio non contiene i dati del mese")
 
 
 def estrai_dati(archivio: Path, dest: Path) -> None:
@@ -85,13 +123,16 @@ class GestoreDati:
         self.versioni = self.base / "versioni"
         self.lavoro = self.base / "lavoro"
         self.it = self.base / "nomenclatura_it.json"
-        for d in (self.versioni, self.lavoro):
+        self.archivio = self.base / "archivio"
+        for d in (self.versioni, self.lavoro, self.archivio):
             d.mkdir(parents=True, exist_ok=True)
         if not self.it.exists():
             shutil.copyfile(TABELLA_IT, self.it)
         for vecchio in self.lavoro.iterdir():          # resti di un aggiornamento interrotto
             shutil.rmtree(vecchio, ignore_errors=True)
         self._lock = threading.Lock()
+        self._lock_storico = threading.Lock()
+        self._pubblicati: tuple[float, dict[str, dict[str, Any]]] = (0.0, {})
         self.in_corso: dict[str, Any] | None = None
         self._fermo = threading.Event()
         with db.connessione() as c:   # un aggiornamento rimasto "in corso" e' stato interrotto da un riavvio
@@ -135,6 +176,107 @@ class GestoreDati:
                 info["attiva"] = d.name == att
                 out.append(info)
         return out
+
+    # ------------------------------------------------------------------ mesi passati (misure a una data passata)
+    def archiviata(self, versione: str) -> Path | None:
+        p = self.archivio / f"dati-{versione}.zip"
+        return p if RE_VERSIONE.match(versione) and p.is_file() else None
+
+    def disponibile(self, versione: str) -> bool:
+        return self.file(versione, "nomenclatura.js") is not None or self.archiviata(versione) is not None
+
+    def contenuto(self, versione: str, percorso: str) -> bytes | None:
+        """Un file dei dati di un mese archiviato, letto dal suo archivio (controllato quando e' arrivato)."""
+        z = self.archiviata(versione)
+        if z is None or not RE_FILE.match(percorso):
+            return None
+        try:
+            with zipfile.ZipFile(z) as f:
+                return f.read(percorso)
+        except (KeyError, OSError, zipfile.BadZipFile):
+            return None
+
+    def locali(self) -> set[str]:
+        out = {d.name for d in self.versioni.iterdir() if d.is_dir() and RE_VERSIONE.match(d.name) and (d / "nomenclatura.js").is_file()}
+        return out | {p.name[5:15] for p in self.archivio.glob("dati-*.zip") if RE_VERSIONE.match(p.name[5:15])}
+
+    def pubblicati(self) -> dict[str, dict[str, Any]]:
+        """I mesi pubblicati nella pagina «dati» di GitHub ({versione: asset}), ricordati per un'ora. Se GitHub non
+        risponde vale l'ultimo elenco avuto."""
+        quando, elenco = self._pubblicati
+        if quando and time.monotonic() - quando < ELENCO_VALIDO:
+            return elenco
+        if not self.cfg.dati_url:
+            return {}
+        try:
+            r = self.client.get(self.cfg.dati_url, headers={"accept": "application/vnd.github+json"}, timeout=20)
+            r.raise_for_status()
+            nuovo = {}
+            for a in r.json().get("assets") or []:
+                m = re.fullmatch(r"dati-(\d{4}-\d{2}-01)\.zip", str(a.get("name") or "")) if isinstance(a, dict) else None
+                if m:
+                    nuovo[m.group(1)] = a
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("elenco dei mesi su GitHub non disponibile: %s", e)
+            if not quando:
+                raise ValueError("elenco dei mesi su GitHub non disponibile") from None
+            return elenco
+        self._pubblicati = (time.monotonic(), nuovo)
+        return nuovo
+
+    def versione_per(self, giorno: str) -> str | None:
+        """La versione con cui consultare le misure del giorno 'AAAA-MM-GG': la piu' recente non successiva a quel giorno,
+        tra quelle installate, archiviate e pubblicate su GitHub (scaricata se serve). None se non ce n'e'."""
+        try:
+            pubblicati = self.pubblicati()
+        except ValueError:
+            pubblicati = {}
+            if not any(v <= giorno for v in self.locali()):
+                raise
+        candidate = sorted(v for v in self.locali() | set(pubblicati) if v <= giorno)
+        if not candidate:
+            return None
+        v = candidate[-1]
+        if not self.disponibile(v):
+            self._scarica_storico(v, pubblicati[v])
+        return v
+
+    def prima(self) -> str | None:
+        """Il mese piu' vecchio che si puo' consultare."""
+        try:
+            pubblicati = set(self.pubblicati())
+        except ValueError:
+            pubblicati = set()
+        tutte = sorted(self.locali() | pubblicati)
+        return tutte[0] if tutte else None
+
+    def _scarica_storico(self, versione: str, asset: dict[str, Any]) -> None:
+        with self._lock_storico:
+            if self.disponibile(versione):
+                return
+            url = str(asset.get("browser_download_url") or "")
+            if not (url.startswith("https://") or url.startswith("http://127.0.0.1:")):
+                raise ValueError("indirizzo dei dati non valido")
+            tmp = self.archivio / f".{versione}.{secrets.token_hex(4)}.zip"
+            try:
+                h, totale = hashlib.sha256(), 0
+                with self.client.stream("GET", url, timeout=httpx.Timeout(120, connect=15)) as d:
+                    d.raise_for_status()
+                    with open(tmp, "wb") as f:
+                        for blocco in d.iter_bytes(1 << 20):
+                            totale += len(blocco)
+                            if totale > MAX_ZIP:
+                                raise ValueError("archivio dei dati troppo grande")
+                            h.update(blocco)
+                            f.write(blocco)
+                digest = str(asset.get("digest") or "")
+                if digest.startswith("sha256:") and h.hexdigest() != digest[7:].lower():
+                    raise ValueError("i dati scaricati non corrispondono a quelli pubblicati")
+                controlla_archivio(tmp, versione)
+                sposta(tmp, self.archivio / f"dati-{versione}.zip")
+                log.info("dati TARIC di %s archiviati per la consultazione a una data passata", versione)
+            finally:
+                tmp.unlink(missing_ok=True)
 
     def _pota(self) -> None:
         att = self.attiva()
@@ -332,10 +474,16 @@ class GestoreDati:
                 raise ValueError("l'archivio non contiene file .xlsx")
             if len(membri) > 100 or sum(i.file_size for i in membri) > MAX_ESTRATTO:
                 raise ValueError("archivio con troppi file o troppo grande una volta estratto")
+            # ogni file con il nome che vuole aggiorna.py; se lo stesso file c'e' due volte vale il caricato per ultimo
+            scelti: dict[str, zipfile.ZipInfo] = {}
             for i in membri:
                 nome = Path(i.filename.replace("\\", "/")).name
                 if not nome or nome.startswith("."):
                     continue
+                ufficiale = nome_ufficiale(nome) or nome
+                if ufficiale not in scelti or i.date_time >= scelti[ufficiale].date_time:
+                    scelti[ufficiale] = i
+            for nome, i in scelti.items():
                 with z.open(i) as sorgente, open(dest / nome, "wb") as f:
                     copiati = 0
                     while blocco := sorgente.read(1 << 20):

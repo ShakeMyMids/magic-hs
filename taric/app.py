@@ -15,6 +15,7 @@ import os
 import re
 import secrets
 import sqlite3
+import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Literal, Optional
@@ -332,7 +333,11 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         v = dati.attiva()
         if v is None:
             return pagina("attesa.html")
-        html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{DATI}}", f"/data/{v}/")
+        # ?dati=AAAA-MM-01: l'app con i dati di un mese passato (misure a una data passata), se il sito li ha
+        mostra = request.query_params.get("dati") or v
+        if mostra != v and not (RE_VERSIONE.match(mostra) and dati.disponibile(mostra)):
+            return RedirectResponse("/", 303)
+        html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{DATI}}", f"/data/{mostra}/").replace("{{ATTIVI}}", v)
         return HTMLResponse(con_impronte(html), headers={"Cache-Control": "no-cache"})
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
@@ -350,10 +355,14 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         if utente_corrente(request) is None:
             return PlainTextResponse("Accesso richiesto.", status_code=401)
         f = dati.file(versione, percorso)
-        if f is None:
+        tipo = "text/javascript" if percorso.endswith(".js") else ("application/json" if percorso.endswith(".json") else "text/plain")
+        cache = {"Cache-Control": "private, max-age=31536000, immutable"}
+        if f is not None:
+            return FileResponse(f, media_type=tipo, headers=cache)
+        contenuto = dati.contenuto(versione, percorso)          # mese passato, servito dal suo archivio
+        if contenuto is None:
             return PlainTextResponse("Non trovato.", status_code=404)
-        tipo = "text/javascript" if f.suffix == ".js" else ("application/json" if f.suffix == ".json" else "text/plain")
-        return FileResponse(f, media_type=tipo, headers={"Cache-Control": "private, max-age=31536000, immutable"})
+        return Response(contenuto, media_type=tipo, headers=cache)
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
@@ -361,6 +370,30 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.get("/api/stato")
     def stato() -> dict[str, Any]:
         return {"dati_pronti": dati.attiva() is not None, "aggiornamento": (dati.in_corso or {}).get("fase")}
+
+    @app.get("/api/dati/storico")
+    def dati_storico(data: str, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Con quali dati TARIC consultare le misure del giorno `data` (AAAA-MM-GG): quelli in uso se il giorno non e'
+        precedente, altrimenti il mese piu' recente non successivo, scaricato da GitHub se serve."""
+        try:
+            giorno = dt.date.fromisoformat(data)
+        except ValueError:
+            raise Errore(422, "Data non valida.", "data") from None
+        att = dati.attiva()
+        if att is None:
+            raise Errore(503, "I dati TARIC non sono ancora pronti.", "dati_non_pronti")
+        if giorno.isoformat() >= att:
+            return {"versione": att, "attuale": True}
+        try:
+            v = dati.versione_per(giorno.isoformat())
+        except (httpx.HTTPError, OSError, ValueError, zipfile.BadZipFile) as e:
+            log.warning("dati TARIC per il %s non disponibili: %s", giorno, e)
+            raise Errore(503, "Non riesco a prendere da GitHub i dati TARIC di quel mese: riprova tra poco.", "storico_non_raggiungibile") from None
+        if v is None:
+            prima = dati.prima()
+            raise Errore(404, f"MAGIC HS non ha i dati TARIC del {giorno.strftime('%d/%m/%Y')}" +
+                         (f": l'archivio parte dal {dt.date.fromisoformat(prima).strftime('%d/%m/%Y')}." if prima else "."), "storico_non_disponibile")
+        return {"versione": v, "attuale": False, "giorni": (giorno - dt.date.fromisoformat(v)).days}
 
     @app.get("/api/salute", include_in_schema=False)
     def salute() -> dict[str, Any]:

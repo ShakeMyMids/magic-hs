@@ -35,6 +35,10 @@ var byCode = new Map();
 var DATA_ISO = D.meta.data_riferimento || '';
 var DATA_IT = DATA_ISO ? DATA_ISO.split('-').reverse().join('/') : 'n.d.';
 var IT_DATA = D.meta.it_data ? D.meta.it_data.split('-').reverse().join('/') : '';
+/* dati di un mese passato (/?dati=AAAA-MM-01): la pagina usa quelli, il sito ha come dati in uso ATTIVI */
+var ATTIVI = /^\d{4}-\d{2}-01$/.test(document.documentElement.getAttribute('data-attivi') || '') ? document.documentElement.getAttribute('data-attivi') : DATA_ISO;
+var STORICO = !!(DATA_ISO && ATTIVI && DATA_ISO < ATTIVI);
+var QS = (function () { try { return new URLSearchParams(location.search); } catch (e) { return { get: function () { return null; } }; } })();
 var N_EN = D.meta.righe_en || 0;
 
 function kids(i) { var o = []; for (var j = i + 1; j < END[i]; j = END[j]) o.push(j); return o; }
@@ -512,6 +516,40 @@ function giornoMisure() { return state.dataMisure || oggiNum(); }
 function giornoDati() { return parseInt(DATA_ISO.replace(/-/g, ''), 10) || 0; }
 function primaDeiDati(g) { return giornoDati() > 0 && g < giornoDati(); }
 function isoDi(g) { var s = String(g); return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8); }
+function numDi(iso) { return parseInt(String(iso || '').replace(/-/g, ''), 10) || 0; }
+/* il primo giorno del mese dopo quello dei dati: da lì in poi conviene consultare i dati di quel mese */
+function giornoMeseDopo() { var a = +DATA_ISO.slice(0, 4), m = +DATA_ISO.slice(5, 7); return m === 12 ? (a + 1) * 10000 + 101 : a * 10000 + (m + 1) * 100 + 1; }
+/* con quali dati consultare un giorno (/api/dati/storico): {versione, attuale} oppure {errore}; ricordato per giorno */
+var STORICI = {};
+function storicoPer(g, poi) {
+  var k = String(g);
+  if (STORICI[k] && !STORICI[k].attesa) return STORICI[k];
+  if (!STORICI[k]) {
+    STORICI[k] = { attesa: true };
+    T.api('GET', '/api/dati/storico?data=' + isoDi(g)).then(function (r) { STORICI[k] = r; }, function (e) {
+      STORICI[k] = { errore: e.errore || 'Dati di quel mese non disponibili.', codice: e.codice || '' };
+      if (e.codice === 'storico_non_raggiungibile') setTimeout(function () { delete STORICI[k]; }, 30000);
+    }).then(function () { if (poi) poi(); });
+  }
+  return STORICI[k];
+}
+/* indirizzo dell'app con i dati della versione v, per il giorno g e, se c'è, il codice aperto */
+function urlStorico(v, g, extra) {
+  var p = [];
+  if (v && v !== ATTIVI) p.push('dati=' + v);
+  if (g) p.push('giorno=' + isoDi(g));
+  Object.keys(extra || {}).forEach(function (k) { if (extra[k]) p.push(k + '=' + encodeURIComponent(extra[k])); });
+  return '/' + (p.length ? '?' + p.join('&') : '');
+}
+/* il riquadro che rimanda ai dati del mese giusto per il giorno g (o, se non ci sono, lo dice) */
+function rimandoStorico(g, extra, vista) {
+  var s = storicoPer(g, function () { renderEsito(); });
+  if (s.attesa) return '<p class="nota">Cerco i dati TARIC di quel mese…</p>';
+  if (s.errore) return '<p class="nota">' + esc(s.errore) + '</p>';
+  if (s.versione === DATA_ISO) return '';
+  return '<div class="fila"><a class="btn sm pri" href="' + esc(urlStorico(s.versione, s.attuale ? (g === oggiNum() ? 0 : g) : g, extra) + '#' + (vista || 'classifica')) + '">' + T.icona('calendario') +
+    (s.attuale ? 'Apri i dati TARIC in uso (' + esc(dataIt(numDi(s.versione))) + ')' : 'Apri i dati TARIC del ' + esc(dataIt(numDi(s.versione)))) + '</a></div>';
+}
 function urlTaric(code, area, g) {
   return 'https://ec.europa.eu/taxation_customs/dds2/taric/measures.jsp?Lang=it&SimDate=' + (g || oggiNum()) + '&Area=' + (area || '') +
     '&MeasType=&StartPub=&EndPub=&MeasText=&GoodsText=&op=&Taric=' + code + '&search_text=goods&textSearch=&LangDescr=it&OrderNum=&Regulation=&measStartDat=&measEndDat=';
@@ -937,8 +975,8 @@ function boxMisure(sel) {
     paesi.map(function (p) { return '<option value="' + p[1] + '"' + (p[1] === c && freq.indexOf(c) < 0 ? ' selected' : '') + '>' + esc(p[0]) + ' (' + p[1] + ')</option>'; }).join('') + '</optgroup>';
   var dichiarabile = i >= 0 && isLeaf(i);
   var iso = c === 'XS' ? 'RS' : c;
-  var g = giornoMisure(), passato = primaDeiDati(g);
-  var uTaric = urlTaric(code, c, g);
+  var g = giornoMisure(), passato = primaDeiDati(g), oltre = STORICO && g >= giornoMeseDopo();
+  var uTaric = urlTaric(code, c, g), dove = { codice: code, paese: c, flusso: state.flow };
   var uA2M = c ? 'https://trade.ec.europa.eu/access-to-markets/it/results?product=' + code + (exp ? '&origin=IT&destination=' + iso : '&origin=' + iso + '&destination=IT') : '';
   var links = dichiarabile ? '<div class="fila"><span class="et">Verifica sulla fonte</span>' +
     '<a class="btn sm" href="' + esc(uTaric) + '" target="_blank" rel="noopener">TARIC UE</a>' +
@@ -950,8 +988,9 @@ function boxMisure(sel) {
   if (st === 'nessuno') h47 = h44 = '<p class="nota">Il codice non è nella nomenclatura: nessuna misura da mostrare.</p>';
   else if (passato) {
     state.calcDazi = null;
-    h47 = '<p class="avviso">I dati TARIC di MAGIC HS partono dal ' + esc(DATA_IT) + ': per il ' + esc(dataIt(g)) + ' mancano le misure finite nel frattempo.</p>' +
-      (dichiarabile ? '<div class="fila"><a class="btn sm pri" href="' + esc(uTaric) + '" target="_blank" rel="noopener">' + T.icona('link') + 'Misure sul TARIC UE al ' + esc(dataIt(g)) + '</a></div>' : '');
+    h47 = '<p class="avviso">I dati TARIC ' + (STORICO ? 'aperti sono' : 'in uso sono') + ' del ' + esc(DATA_IT) + ': per il ' + esc(dataIt(g)) + ' mancano le misure finite nel frattempo.</p>' +
+      rimandoStorico(g, dove) +
+      (dichiarabile ? '<div class="fila"><a class="btn sm" href="' + esc(uTaric) + '" target="_blank" rel="noopener">' + T.icona('link') + 'Misure sul TARIC UE al ' + esc(dataIt(g)) + '</a></div>' : '');
     h44 = '<p class="nota">Divieti, restrizioni e documenti del ' + esc(dataIt(g)) + ': vedili sul TARIC dell\'UE.</p>';
   }
   else if (st === 'attesa') h47 = h44 = '<p class="nota">Carico le misure del capitolo ' + esc(code.slice(0, 2)) + '…</p>';
@@ -995,6 +1034,7 @@ function boxMisure(sel) {
     h44 = ctl.length ? '<div class="cat">' + ctl.map(function (g) { return htmlGruppo(g, gid++); }).join('') + '</div>'
       : '<p class="nota">Nessun divieto, restrizione o controllo TARIC ' + (c ? 'per ' + esc(nomeArea(c)) : 'valido per tutti i paesi') + ' su questo codice.</p>';
     var avvisi = '';
+    if (oltre) avvisi += '<p class="avviso">I dati TARIC aperti sono del ' + esc(DATA_IT) + ': per il ' + esc(dataIt(g)) + ' possono esserci misure nuove che qui mancano.</p>' + rimandoStorico(g, dove);
     if (!dichiarabile) avvisi += '<p class="avviso">Vedi solo le misure definite a questo livello e ai livelli superiori. Per il quadro completo scegli un codice dichiarabile.</p>';
     if (!c && res.altri) avvisi += '<p class="avviso">Altre ' + res.altri + ' misure valgono solo per singoli paesi o gruppi di paesi: scegli il paese nella casella 34.</p>';
     h47 = avvisi + h47;
@@ -1006,7 +1046,8 @@ function boxMisure(sel) {
     '<button class="chip" type="button" data-act="flusso" data-f="export" aria-pressed="' + exp + '">Esportazione</button></div></div>' +
     '<div class="box s8"><div class="lab">' + T.icona('percento') + 'Misure TARIC al ' + dataIt(g) + '</div>' +
     '<div class="fila data-misure"><label>Data delle misure<input class="campo" type="date" id="data-misure" value="' + isoDi(g) + '"></label>' +
-    (state.dataMisure ? '<button class="btn sm" type="button" data-act="data-oggi">' + T.icona('calendario') + 'Oggi</button>' : '') + '</div>' + links + '</div>' +
+    (STORICO ? '<a class="btn sm" href="' + esc(urlStorico('', 0, dove) + '#classifica') + '">' + T.icona('calendario') + 'Oggi</a>'
+      : state.dataMisure ? '<button class="btn sm" type="button" data-act="data-oggi">' + T.icona('calendario') + 'Oggi</button>' : '') + '</div>' + links + '</div>' +
     '<div class="box"><div class="lab"><b>47</b> Calcolo delle imposizioni <span class="dx">' + (exp ? 'esportazione' : 'dazi all\'importazione') + '</span></div>' + h47 + '</div>' +
     '<div class="box"><div class="lab"><b>44</b> Documenti presentati, certificati e autorizzazioni <span class="dx">' + (n44 ? n44 + (n44 === 1 ? ' misura' : ' misure') + ' di controllo' : 'divieti, restrizioni e controlli') + '</span></div>' + h44 + '</div>' +
     '</div>';
@@ -1463,11 +1504,27 @@ function ripristina(d) {
   if (state.result && state.modo !== 'ia' && !$('#interruttore-ia').hidden) { state.modo = 'ia'; applicaModo(); }
 }
 function start() {
-  var m = D.meta, txt = 'Dati TARIC al ' + DATA_IT;
+  var m = D.meta, txt = 'Dati TARIC al ' + DATA_IT + (STORICO ? ' · archivio' : '');
   // the extraction of each month is expected within the first days: after the 9th, older data is flagged
   var ora = new Date(), att = ora.getDate() < 10 ? new Date(ora.getFullYear(), ora.getMonth() - 1, 1) : ora;
   var atteso = att.getFullYear() + '-' + ('0' + (att.getMonth() + 1)).slice(-2);
-  if (DATA_ISO && DATA_ISO.slice(0, 7) < atteso) { txt += ' · manca l\'aggiornamento di questo mese'; $('#dato').classList.add('tardi'); }
+  if (!STORICO && DATA_ISO && DATA_ISO.slice(0, 7) < atteso) { txt += ' · manca l\'aggiornamento di questo mese'; $('#dato').classList.add('tardi'); }
+  // dati di un mese passato: si dice in cima a ogni sezione; dall'indirizzo il giorno, il codice e il paese da aprire
+  if (STORICO) {
+    var gq = numDi(QS.get('giorno'));
+    state.dataMisure = gq >= giornoDati() ? gq : giornoDati();
+    $('#storico').innerHTML = '<p>' + T.icona('calendario') + '<span>Stai consultando i <b>dati TARIC del ' + esc(DATA_IT) + '</b>, per le misure di quel periodo.</span></p>' +
+      '<a class="btn sm" href="/">' + T.icona('indietro') + 'Torna ai dati in uso</a>';
+    $('#storico').hidden = false;
+  } else {
+    var gq2 = numDi(QS.get('giorno'));
+    if (gq2 >= giornoDati() && gq2 !== oggiNum()) state.dataMisure = gq2;
+  }
+  var cq = digits(QS.get('codice') || '');
+  if (cq && byCode.has(cq)) { state.sel = { code: cq, idx: byCode.get(cq) }; state.risChiusi = true; }
+  var pq = String(QS.get('paese') || '').toUpperCase();
+  if (pq && RIF.aree[pq]) state.country = pq;
+  if (QS.get('flusso') === 'export' || QS.get('flusso') === 'import') state.flow = QS.get('flusso');
   $('#dato').innerHTML = T.icona('calendario') + esc(txt);
   $('#fonte').textContent = 'Dati TARIC dell\'UE (DG TAXUD) al ' + DATA_IT + '.';
   if (!N) { state.error = 'Non riesco a caricare la nomenclatura. Ricarica la pagina.'; }
@@ -1486,6 +1543,10 @@ T.app = {
   paesi: elencoPaesi,
   dati: function () { return { iso: DATA_ISO, it: DATA_IT }; },
   urlTaric: urlTaric,
+  storico: function () { return STORICO; },
+  storicoPer: storicoPer,
+  urlStorico: urlStorico,
+  giornoMeseDopo: giornoMeseDopo,
   utente: function () { return state.utente; },
   aggiornaIo: aggiornaIo,
   caricaSinonimi: caricaSinonimi,

@@ -88,7 +88,13 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
 
 ## Misure a una data passata
 
-Ogni estrazione mensile del TARIC (Commissione europea, DG TAXUD) contiene solo le misure valide dal suo giorno in poi: quelle finite prima e i codici cessati non ci sono. Per questo MAGIC HS calcola le misure solo dalla data dei dati in poi (anche per date future, per esempio il 1° gennaio). Con una data precedente, scelta nella scheda del codice o come data della bolla, lo dice e apre il TARIC dell'UE già impostato su quel giorno, che vale per qualsiasi data passata. I dati di ogni mese restano nella pagina «dati» delle versioni su GitHub (non si cancellano più dopo tre mesi), per poter consultare in futuro anche i mesi passati.
+Ogni estrazione mensile del TARIC (Commissione europea, DG TAXUD) contiene solo le misure valide dal suo giorno in poi: quelle finite prima e i codici cessati non ci sono. Per una data passata servono quindi i dati di quel mese.
+
+- **Archivio dei mesi**: i dati di ogni mese restano nella pagina «dati» delle versioni su GitHub. Quelli da luglio 2025, il primo mese che la Commissione tiene su CIRCABC, si preparano con il flusso *Actions → Dati TARIC dei mesi passati → Run workflow* (`strumenti/dati_storici.py`, con gli stessi controlli dei dati del mese); i mesi già pubblicati si saltano.
+- **Nella scheda del codice**, con una data precedente ai dati in uso, compare *Apri i dati TARIC del …*: la pagina si riapre con i dati del mese più recente non successivo a quel giorno, sullo stesso codice, paese e flusso. In cima a ogni sezione un avviso ricorda che sono dati di un mese passato, con *Torna ai dati in uso*. Ricerca, nomenclatura, misure e bolla usano quei dati.
+- **Nella bolla**, con una data precedente ai dati in uso, *Ricalcola con i dati TARIC del …* salva la bolla e la riapre con i dati di quel mese.
+- Per un giorno oltre il mese dei dati aperti la scheda avvisa che possono mancare le misure nuove. Per una data prima di luglio 2025 resta il TARIC dell'UE, che si apre già impostato su quel giorno.
+- Il server scarica un mese la prima volta che serve (circa 1,2 MB) e lo tiene in `dati/taric/archivio`, senza estrarlo. Il testo italiano della nomenclatura è quello dell'estrazione di gennaio o luglio più recente, ma non successiva al mese; le righe cambiate dopo restano in inglese.
 
 ## Bolla simulata
 

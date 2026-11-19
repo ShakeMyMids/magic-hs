@@ -698,6 +698,12 @@ html.con-finestra{overflow:hidden}
 .b-mancanti .link{text-align:left}
 .b-campi .largo{grid-column:span 2}
 .b-campi textarea.campo{resize:vertical;min-height:62px}
+/* dati di un mese passato (/?dati=AAAA-MM-01): l'avviso in cima a ogni sezione */
+.storico{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;margin:0 0 14px;padding:10px 14px;
+  border-radius:var(--r-m);background:var(--ambra-tenue);color:var(--ambra);font-size:14.5px;line-height:1.4}
+.storico p{display:flex;align-items:center;gap:8px;margin:0}
+.storico .ico{flex:none}
+@media print{.storico{display:none !important}}
 /* data delle misure nella scheda del codice (app.js, giornoMisure) */
 .data-misure{align-items:flex-end;margin:2px 0 10px}
 .data-misure label{display:flex;flex-direction:column;gap:5px;flex:0 1 210px;min-width:0;font-size:13px;font-weight:600;color:var(--secondario)}
