@@ -100,7 +100,7 @@
   T.marchio = '<svg class="marchio" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect class="m-fondo" width="32" height="32" rx="8"/>' +
     '<rect class="m-t" x="8.4" y="7.2" width="5.2" height="4.4" rx=".9"/><rect class="m-c" x="8.4" y="12.4" width="5.2" height="4.4" rx=".9"/><rect class="' +
     'm-t" x="14.4" y="12.4" width="5.2" height="4.4" rx=".9"/><rect class="m-r" x="20.4" y="12.4" width="5.2" height="4.4" rx=".9"/><path class="m-c" d="M4' +
-    '.6 18h22.8l-2.9 6.4a1.6 1.6 0 0 1-1.46.95H8.96a1.6 1.6 0 0 1-1.46-.95z"/>' + '</svg>';
+    '.6 18h22.8l-2.9 6.4a1.6 1.6 0 0 1-1.46.95H8.96a1.6 1.6 0 0 1-1.46-.95z"/>' + (T.accessorio ? T.accessorio() : '') + '</svg>';   // stagioni e feste: js/disegni.js
 
   /* tema: auto | chiaro | scuro (la pagina usa data-theme="light"/"dark") */
   var TEMI = { auto: ['auto', 'Tema: come il dispositivo'], chiaro: ['sole', 'Tema chiaro'], scuro: ['luna', 'Tema scuro'] };
@@ -151,6 +151,7 @@
       el.insertAdjacentHTML('afterbegin', T.marchio);
       el.removeAttribute('data-marchio');
     });
+    stagioni();
     var b = document.getElementById('tema');
     if (b) {
       T.tema(T.temaAttuale);
@@ -162,5 +163,32 @@
       window.addEventListener('scroll', segna, { passive: true }); segna();
     }
   }
+  /* stagioni e feste (js/calendario.js, js/disegni.js): il festone in cima alla barra, gli auguri dove c'è data-auguri,
+     l'avviso dell'anteprima di un altro giorno */
+  function stagioni() {
+    var o = T.oggi || {}, barra = document.querySelector('.barra');
+    var f = o.tema && barra && T.festone ? T.festone(o.tema) : '';
+    if (f) {
+      barra.insertAdjacentHTML('afterbegin', '<div class="festone" aria-hidden="true">' + f + '</div>');
+      document.documentElement.classList.add('con-festone');
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-auguri]'), function (el) {
+      if (o.tema && o.auguri) {
+        el.innerHTML = (T.ornamento ? T.ornamento(o.tema) : '') + '<span>' + T.esc(o.auguri) + '</span>';
+        el.hidden = false;
+      }
+      el.removeAttribute('data-auguri');
+    });
+    var main = document.querySelector('main');
+    if (o.prova && main) {
+      var giorno = o.prova.split('-').reverse().join('/');
+      var nome = ((T.prove ? T.prove(+o.prova.slice(0, 4)) : []).filter(function (x) { return x[2] === o.prova; })[0] || [])[1];
+      main.insertAdjacentHTML('afterbegin', '<div class="anteprima" role="status">' + T.icona('scintille') + '<span>Anteprima: <b>' +
+        T.esc(nome ? nome + ' (' + giorno + ')' : giorno) + '</b></span><button class="btn sm" type="button" data-prova="fine">Torna a oggi</button></div>');
+    }
+  }
+  document.addEventListener('click', function (ev) {
+    if (ev.target.closest && ev.target.closest('[data-prova="fine"]') && T.provaGiorno) T.provaGiorno('');
+  });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', prepara); else prepara();
 })();

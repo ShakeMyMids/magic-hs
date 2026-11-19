@@ -6,11 +6,14 @@
    nuvole, onde, nave e aereo e fa arrivare i mezzi; "in-viaggio" li fa viaggiare (pagina d'attesa). Con «movimento
    ridotto» nel sistema la scena resta ferma. T.festa() è la scena dell'intelligenza artificiale appena collegata.
    Ogni mezzo sta in un gruppo .t-* che js/porto.js anima quando lo si tocca (sirena e fumo della nave, carico della gru,
-   giro dell'aereo, partenza di camion e treno, pioggia dalle nuvole, gabbiano dal mare); le parti nascoste (stelle col tema
-   scuro, albero e luci a dicembre, fuochi a Capodanno) le mostra app.css. */
+   giro dell'aereo, partenza di camion e treno, pioggia dalle nuvole, gabbiano dal mare, l'albero che si scuote); le parti
+   nascoste (stelle col tema scuro, luci sulla gru a dicembre, fuochi) le mostra app.css.
+   Stagioni e feste (T.oggi di js/calendario.js): nella scena ci sono solo le decorazioni di oggi, vedi «stagioni e feste». */
 (function () {
   'use strict';
   var T = window.TARIC = window.TARIC || {};
+  var OGGI = T.oggi || { stagione: '', feste: [], ha: function () { return false; } };
+  var INVERNO = OGGI.stagione === 'inverno';
 
   /* ---------------------------------------------------------------- pezzi comuni
      Scala: i container da 20 piedi sulla nave (32 x 13), quelli da 40 sui carri e sul camion, più vicini e quindi più
@@ -54,6 +57,68 @@
       return '<g class="s-fuoco d-c' + (n % 2 ? 2 : 1) + '" style="--n:' + n + '">' + raggi + '</g>';
     }).join('') + '</g>';
   }
+  /* ---------------------------------------------------------------- stagioni e feste: solo quelle di oggi
+     Inverno: neve sui container, sulla banchina e sui tetti; estate: il sole (di giorno); l'albero della stagione (l'abete a
+     Natale); dal cielo cadono petali, foglie, neve o i coriandoli di Carnevale. Le feste nella zona comune alle due
+     composizioni (nave, gru, banchina) e nel cielo. Colori nelle variabili --d-* di app.css. */
+  function neve(x, y, l) {                  // neve sopra una superficie piana larga l, in cima a y
+    return INVERNO ? '<rect class="s-neve" x="' + x + '" y="' + (y - 1.6) + '" width="' + l + '" height="2.6" rx="1.2"/>' : '';
+  }
+  function sole(x, y) {
+    if (OGGI.stagione !== 'estate') return '';
+    var raggi = '';
+    for (var a = 0; a < 8; a++) {
+      var r = a * Math.PI / 4 + Math.PI / 8;
+      raggi += 'M' + (x + Math.cos(r) * 14).toFixed(1) + ' ' + (y + Math.sin(r) * 14).toFixed(1) + 'L' + (x + Math.cos(r) * 18.5).toFixed(1) + ' ' + (y + Math.sin(r) * 18.5).toFixed(1);
+    }
+    return '<g class="s-sole"><path class="s-raggi" d="' + raggi + '"/><circle cx="' + x + '" cy="' + y + '" r="10"/></g>';
+  }
+  var CADONO = { inverno: 'fiocchi', primavera: 'petali', autunno: 'foglie' };
+  function cadono(larghezza) {              // in cima a tutto, partono appena sopra il bordo
+    var tipo = OGGI.ha('carnevale') ? 'coriandoli' : CADONO[OGGI.stagione];
+    if (!tipo) return '';
+    var h = '<g class="s-cadono s-' + tipo + '">', quanti = Math.round(larghezza / 70);
+    for (var i = 0; i < quanti; i++) {
+      var x = Math.round(((i * 0.618034) % 1) * (larghezza - 24) + 12), forma;
+      if (tipo === 'fiocchi') forma = '<circle cx="' + x + '" cy="-6" r="' + (1.3 + (i % 3) * 0.5) + '"/>';
+      else if (tipo === 'coriandoli') forma = '<rect class="s-col' + (i % 5) + '" x="' + x + '" y="-8" width="3.4" height="3.4"/>';
+      else if (tipo === 'petali') forma = '<path d="M' + x + ' -6q2.6-2.4 5.2 0q-2.6 2.4-5.2 0z"/>';
+      else forma = '<path class="s-col' + (i % 2) + '" d="M' + x + ' -6q4-3.4 8 0q-4 3.4-8 0z"/>';
+      h += '<g class="s-cade" style="--n:' + i + ';--v:' + ((i * 3) % 5) + '">' + forma + '</g>';
+    }
+    return h + '</g>';
+  }
+  /* bandierine appese sotto una fune da (x1, y1) a (x2, y2), dalla frazione da alla frazione a */
+  function bandierine(x1, y1, x2, y2, da, a, quante) {
+    var h = '', COL = ['d-c1', 's-verde', 'd-c2', 's-giallo', 's-rosso', 's-bianco'];
+    for (var i = 0; i < quante; i++) {
+      var t0 = da + (a - da) * i / quante, t1 = t0 + (a - da) / quante * 0.72;
+      var p = [x1 + (x2 - x1) * t0, y1 + (y2 - y1) * t0, x1 + (x2 - x1) * t1, y1 + (y2 - y1) * t1];
+      h += '<path class="' + COL[i % COL.length] + '" d="M' + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + 'L' + p[2].toFixed(1) + ' ' + p[3].toFixed(1) +
+        'L' + ((p[0] + p[2]) / 2).toFixed(1) + ' ' + ((p[1] + p[3]) / 2 + 6).toFixed(1) + 'Z"/>';
+    }
+    return h;
+  }
+  function cuore(x, y, s) {
+    return '<path d="M' + x + ' ' + (y + s * 0.9) + 'C' + (x - s * 1.6) + ' ' + (y - s * 0.1) + ' ' + (x - s * 0.6) + ' ' + (y - s * 1.3) + ' ' + x + ' ' + (y - s * 0.35) +
+      'C' + (x + s * 0.6) + ' ' + (y - s * 1.3) + ' ' + (x + s * 1.6) + ' ' + (y - s * 0.1) + ' ' + x + ' ' + (y + s * 0.9) + 'Z"/>';
+  }
+  function pipistrelli(punti) {
+    if (!OGGI.ha('halloween')) return '';
+    return '<g class="s-pipistrelli">' + punti.map(function (q, n) {
+      var x = q[0], y = q[1];
+      return '<path style="--n:' + n + '" d="M' + (x - 9) + ' ' + y + 'Q' + (x - 6) + ' ' + (y - 5) + ' ' + (x - 2) + ' ' + (y - 2) + 'L' + x + ' ' + (y - 4) + 'L' + (x + 2) + ' ' + (y - 2) +
+        'Q' + (x + 6) + ' ' + (y - 5) + ' ' + (x + 9) + ' ' + y + 'Q' + (x + 6) + ' ' + (y - 1) + ' ' + (x + 5) + ' ' + (y + 2) + 'Q' + (x + 3) + ' ' + y + ' ' + (x + 1) + ' ' + (y + 2) +
+        'L' + x + ' ' + (y + 3) + 'L' + (x - 1) + ' ' + (y + 2) + 'Q' + (x - 3) + ' ' + y + ' ' + (x - 5) + ' ' + (y + 2) + 'Q' + (x - 6) + ' ' + (y - 1) + ' ' + (x - 9) + ' ' + y + 'Z"/>';
+    }).join('') + '</g>';
+  }
+  /* la scia dell'aereo; il 2 giugno sono le Frecce Tricolori */
+  function scia(d) {
+    if (!OGGI.ha('repubblica')) return '<path class="d-scia" d="' + d + '"/>';
+    return '<g class="s-frecce"><path class="s-fondo" d="' + d + '"/><path class="s-verde" transform="translate(0 -3.2)" d="' + d + '"/><path class="s-bianco" d="' + d + '"/>' +
+      '<path class="s-rosso" transform="translate(0 3.2)" d="' + d + '"/></g>';
+  }
+
   /* aereo cargo visto di fianco, muso a destra (coordinate proprie: fusoliera lunga 132) */
   function aereo(x, y, k) {
     return '<g class="t-aereo"><g transform="translate(' + x + ' ' + y + ') rotate(-6) scale(' + k + ')">' + presa(-12, -26, 152, 56) + '<g class="s-aereo">' +
@@ -68,10 +133,11 @@
       '</g></g></g>';
   }
   var cielo = stelle([[40, 22], [120, 48], [210, 16], [300, 30], [430, 18], [640, 30], [720, 64], [990, 74], [1110, 20], [1170, 54]]) +
-    fuochi([[250, 34], [690, 30], [1010, 40]]) + nuvola(600, 22, 1) + nuvola(1060, 46, 0.86) + nuvola(170, 14, 0.62) +
-    '<path class="d-scia" d="M590 100C680 80 770 62 836 48"/>' + aereo(842, 34, 1) + gabbiano(70);
+    fuochi([[250, 34], [690, 30], [1010, 40]]) + sole(1150, 28) + nuvola(600, 22, 1) + nuvola(1060, 46, 0.86) + nuvola(170, 14, 0.62) +
+    pipistrelli([[236, 40], [262, 24], [720, 22]]) + scia('M590 100C680 80 770 62 836 48') + aereo(842, 34, 1) + gabbiano(70);
   var cieloStretto = stelle([[30, 60], [110, 22], [220, 48], [330, 18], [420, 60], [470, 26], [660, 22]]) + fuochi([[200, 32], [450, 26]]) +
-    nuvola(18, 12, 0.7) + nuvola(626, 80, 0.5) + '<path class="d-scia" d="M566 70C570 60 574 52 580 44"/>' + aereo(584, 30, 0.72) + gabbiano(80);
+    sole(200, 26) + nuvola(18, 12, 0.7) + nuvola(626, 80, 0.5) + pipistrelli([[240, 30], [266, 16]]) +
+    scia('M566 70C570 60 574 52 580 44') + aereo(584, 30, 0.72) + gabbiano(80);
 
   /* ---------------------------------------------------------------- lontano: profilo del porto dietro la banchina */
   function lontano(da, a) {
@@ -88,17 +154,23 @@
   var COLORI = [1, 2, 3, 2, 1, 3, 1, 3, 2, 3, 2, 1, 2, 1, 3, 1, 2, 3, 2, 1, 3];
   var stiva = '', ci = 0;
   [[102, 172], [175, 245], [248, 318], [321, 391]].forEach(function (b) { stiva += '<rect class="d-boccaporto" x="' + b[0] + '" y="101" width="' + (b[1] - b[0]) + '" height="3"/>'; });
-  FILE.forEach(function (x, i) { for (var r = 0; r < ALTE[i]; r++) stiva += cont(x, 101 - 13 * (r + 1), 32, 13, COLORI[ci++ % COLORI.length]); });
+  FILE.forEach(function (x, i) {
+    for (var r = 0; r < ALTE[i]; r++) stiva += cont(x, 101 - 13 * (r + 1), 32, 13, COLORI[ci++ % COLORI.length]);
+    stiva += neve(x, 101 - 13 * ALTE[i], 32);
+  });
   var finestre = function (x1, x2, y) { var h = ''; for (var x = x1; x <= x2; x += 7) h += '<rect class="d-oblo" x="' + x + '" y="' + y + '" width="4" height="3"/>'; return h; };
   var nave =
     '<g class="t-nave"><g class="s-nave">' +
     '<g class="s-fumo"><circle cx="56" cy="30" r="3.5"/><circle cx="51" cy="22" r="5"/><circle cx="58" cy="12" r="6.5"/></g>' +
     '<g class="s-sirena"><path d="M88 41q5-5 0-10"/><path d="M93 44q9-8 0-16"/><path d="M98 47q13-12 0-22"/></g>' +
+    (OGGI.ha('san-valentino') ? '<g class="s-cuori">' + cuore(57, 27, 3) + cuore(51, 18, 3.6) + cuore(59, 8, 4.2) + '</g>' : '') +
+    (OGGI.ha('festa-nazionale') ? '<path class="d-albero" d="M30 104V81"/><rect class="s-verde" x="26" y="82" width="4" height="8"/>' +
+      '<rect class="s-bianco" x="22" y="82" width="4" height="8"/><rect class="s-rosso" x="18" y="82" width="4" height="8"/>' : '') +
     stiva +
     '<rect class="d-t" x="40" y="76" width="56" height="28"/>' + finestre(45, 87, 81) + finestre(45, 87, 90) +
     '<rect class="d-t" x="46" y="60" width="44" height="16"/>' + finestre(50, 84, 66) +
     '<rect class="d-t" x="36" y="53" width="64" height="7"/><rect class="d-oblo" x="40" y="55" width="56" height="3"/>' +
-    '<rect class="d-t" x="44" y="51" width="48" height="2"/>' +
+    '<rect class="d-t" x="44" y="51" width="48" height="2"/>' + neve(44, 51, 48) +
     '<path class="d-t" d="M47 53L49 34H63L63 53Z"/><path class="d-c1" d="M48.5 39H63V43.5H48Z"/><path class="d-ombra-s" d="M49 34H63V36.5H48.8Z"/>' +
     '<path class="d-albero" d="M84 51V36M79 40h10M398 104V88M394 92h8"/>' +
     '<path class="d-t" d="M384 104L392 96h4v8z"/>' +
@@ -114,7 +186,7 @@
     '<path class="d-schiuma" d="M38 141H406M406 141q8-3 14 1"/>' +
     '<path class="d-onda" d="M12 151h18M58 158h30M126 149h14M176 160h26M240 152h20M300 162h34M372 150h16M420 158h22"/>';
   var banchina =
-    '<rect class="d-banchina" x="460" y="140" width="740" height="30"/><path class="d-suolo" d="M460 140H1200"/>' +
+    '<rect class="d-banchina" x="460" y="140" width="740" height="30"/><path class="d-suolo" d="M460 140H1200"/>' + neve(460, 140.4, 740) +
     '<rect class="d-muro" x="456" y="140" width="5" height="30"/><rect class="d-t" x="453" y="146" width="4" height="8" rx="1"/><rect class="d-t" x="453" y="158" width="4" height="8" rx="1"/>' +
     '<path class="d-t" d="M463 140v-3a3 3 0 0 1 6 0v3z"/>';
   /* gru di banchina: due gambe con il portale, braccio a traliccio sopra la nave, carrello con la cabina e il container
@@ -123,6 +195,20 @@
   for (var rx = 290; rx < 470; rx += 12) reticolo += 'L' + (rx + 6) + ' 34L' + (rx + 12) + ' 40';
   var luci = '';
   for (var lx = 296; lx < 470; lx += 16) luci += '<circle class="s-luce d-c' + (lx % 3 ? 1 : 2) + '" style="--n:' + ((lx - 296) / 16) + '" cx="' + lx + '" cy="44" r="2"/>';
+  function festeGru() {
+    var h = '';
+    if (OGGI.ha('festa-nazionale')) h += '<g class="s-pavese">' + bandierine(499, 10, 292, 34, 0.06, 0.74, 15) + bandierine(499, 10, 560, 34, 0.1, 0.86, 5) + '</g>';
+    if (OGGI.ha('carnevale')) {
+      h += '<g class="s-filanti">' + [[300, 26, 1], [312, 18, 2], [372, 30, 3], [392, 20, 1], [420, 28, 2], [446, 16, 3], [458, 24, 1]].map(function (f) {
+        var d = 'M' + f[0] + ' 40', y = 40;
+        while (y < 40 + f[1]) { d += 'q3 2.5 0 5t0 5'; y += 10; }
+        return '<path class="s-col' + f[2] + '" d="' + d + '"/>';
+      }).join('') + '</g>';
+    }
+    if (OGGI.ha('befana')) h += '<path class="d-albero" d="M552 40V43"/><path class="s-rosso" d="M547 46H556V53Q556 55 558 55.5L561 56.3Q563 57 562.5 59Q562 60.6 559.5 60.2L551 58.6Q547 57.8 547 54Z"/>' +
+      '<rect class="s-bianco" x="546" y="43" width="11" height="3.4" rx="1"/>';
+    return h;
+  }
   var gru =
     '<g class="t-gru">' + presa(276, 6, 290, 134) +
     '<g class="d-gru">' +
@@ -133,15 +219,61 @@
     '</g>' +
     '<rect class="d-t" x="466" y="134" width="20" height="6" rx="1.5"/><rect class="d-t" x="512" y="134" width="20" height="6" rx="1.5"/>' +
     '<rect class="d-c1" x="477" y="95" width="44" height="2"/>' +
-    '<rect class="d-t" x="528" y="22" width="34" height="12" rx="1"/><rect class="d-c1" x="528" y="29" width="34" height="2"/>' +
-    '<g class="s-luci">' + luci + '</g>' +
+    '<rect class="d-t" x="528" y="22" width="34" height="12" rx="1"/><rect class="d-c1" x="528" y="29" width="34" height="2"/>' + neve(528, 22, 34) +
+    '<g class="s-luci">' + luci + '</g>' + festeGru() +
     '<g class="s-carico"><rect class="d-t" x="330" y="40" width="18" height="4"/><rect class="d-t" x="334" y="44" width="10" height="7"/>' +
       '<rect class="d-oblo" x="336" y="46" width="6" height="3"/>' +
       '<path class="d-cavo" d="M333 44V60M345 44V60"/>' +
       '<g class="s-cont"><rect class="d-t" x="321" y="60" width="36" height="2"/>' + cont(323, 62, 32, 13, 2) + '</g></g>' +
     '</g>';
-  /* abete con le luci, a dicembre */
+  function festeBanchina() {               // tra le gambe della gru, comune alle due composizioni
+    if (OGGI.ha('pasqua')) {
+      return '<g class="s-uova"><ellipse class="d-c1" cx="491" cy="135" rx="3.6" ry="5"/><path class="s-bianco-t" d="M487.6 135H494.4"/>' +
+        '<ellipse class="s-giallo" cx="507" cy="135" rx="3.6" ry="5"/><path class="s-bianco-t" d="M503.6 133.4H510.4M503.8 136.6H510.2"/>' +
+        '<ellipse class="d-c2" cx="499" cy="134" rx="4.2" ry="6"/><path class="s-bianco-t" d="M495.5 133.5l1.2-1.2 1.2 1.2 1.2-1.2 1.2 1.2 1.2-1.2 1.2 1.2"/></g>';
+    }
+    if (OGGI.ha('ferragosto')) {
+      var spicchi = '', xs = [484, 491.5, 499, 506.5, 514];
+      for (var i = 0; i < 4; i++) spicchi += '<path class="' + (i % 2 ? 's-bianco' : 'd-c1') + '" d="M499 101L' + xs[i] + ' 110Q' + ((xs[i] + xs[i + 1]) / 2) + ' 112.4 ' + xs[i + 1] + ' 110Z"/>';
+      return '<g class="s-ombrellone"><path class="d-albero" d="M499 140V102"/>' + spicchi + '</g>';
+    }
+    if (OGGI.ha('halloween')) {
+      return '<g class="s-zucca"><path class="s-zucca-c" d="M499 128C491 127 489 131 489.5 134C490 138 494 140 499 140C504 140 508 138 508.5 134C509 131 507 127 499 128Z"/>' +
+        '<path class="s-spicchio" d="M495 128.6Q492.5 134 495 139.6M503 128.6Q505.5 134 503 139.6"/><path class="s-gambo" d="M498.4 128.4l.4-3.6h1.8l-.4 3.6z"/>' +
+        '<path class="s-lume" d="M493.6 132.6l2.2-2.8 2.2 2.8zM500.2 132.6l2.2-2.8 2.2 2.8zM494 135.2h10.4l-1.6 2.4-1.7-1.1-1.9 1.2-1.9-1.2-1.7 1.1z"/></g>';
+    }
+    return '';
+  }
+  /* l'albero della banchina: l'abete con le luci a Natale, altrimenti un albero che cambia con la stagione (fiori in
+     primavera, gialli di mimosa l'8 marzo; chioma piena d'estate; foglie gialle e rosse d'autunno; rami spogli e neve
+     d'inverno). Si scuote quando lo si tocca (js/porto.js). */
   function albero(x) {
+    var h = '';
+    if (OGGI.ha('natale')) h = abete(x);
+    else if (OGGI.stagione) {
+      var s = OGGI.stagione;
+      var ramo = function (punti) { return 'M' + punti.map(function (q) { return (x + q[0]) + ' ' + q[1]; }).join('L'); };
+      h = '<g class="s-pianta s-' + s + '"><path class="s-tronco" d="M' + x + ' 140V112"/>' +
+        '<path class="s-rami" d="' + ramo([[0, 128], [-9, 117], [-15, 109]]) + ramo([[-9, 117], [-11, 107]]) + ramo([[0, 123], [10, 111], [16, 103]]) +
+        ramo([[10, 111], [8, 101]]) + ramo([[0, 116], [-4, 104], [-8, 96]]) + ramo([[0, 114], [3, 101], [2, 93]]) + ramo([[-4, 104], [-1, 97]]) + '"/>';
+      if (s === 'inverno') {
+        h += '<path class="s-neve-r" d="M' + (x - 17) + ' 108.6l3.6 .6M' + (x - 13) + ' 106.2l3.4 .2M' + (x + 14) + ' 102.4l3.6 .4M' + (x + 6.4) + ' 100.4l3.4 .2M' +
+          (x - 10) + ' 95.6l3.6 .4M' + (x + 0.4) + ' 92.6l3.4 .2M' + (x - 13) + ' 115.8l3.6 .6M' + (x + 6) + ' 109.8l3.6 .4"/>';
+      } else {
+        h += '<g class="s-chioma"><circle class="s-f1" cx="' + (x - 8) + '" cy="112" r="9"/><circle class="s-f2" cx="' + (x + 9) + '" cy="109" r="10"/><circle class="s-f3" cx="' + (x + 1) + '" cy="100" r="11"/></g>';
+        if (s === 'primavera') {
+          var mimosa = OGGI.ha('mimosa'), punti = [[-12, 110], [-5, 115], [-2, 104], [4, 95], [7, 103], [12, 111], [15, 105], [-7, 98], [1, 110]];
+          h += '<g class="s-fiori' + (mimosa ? ' s-mimosa' : '') + '">' + punti.map(function (q) {
+            return '<circle cx="' + (x + q[0]) + '" cy="' + q[1] + '" r="' + (mimosa ? 2.3 : 1.7) + '"/>';
+          }).join('') + '</g>';
+        }
+      }
+      h += '</g>';
+    }
+    return h ? '<g class="t-albero">' + presa(x - 22, 84, 44, 56) + '<g class="s-scuote">' + h + '</g></g>' : '';
+  }
+  /* abete con le luci, a Natale */
+  function abete(x) {
     return '<g class="s-albero"><path class="s-abete" d="M' + x + ' 96l13 18h-7l11 13h-8l12 13h-42l12-13h-8l11-13h-7z"/>' +
       '<circle class="s-luce d-c1" style="--n:1" cx="' + (x - 4) + '" cy="112" r="1.8"/><circle class="s-luce d-c2" style="--n:3" cx="' + (x + 5) + '" cy="123" r="1.8"/>' +
       '<circle class="s-luce d-c1" style="--n:5" cx="' + (x - 8) + '" cy="135" r="1.8"/><circle class="s-luce d-c2" style="--n:7" cx="' + (x + 10) + '" cy="136" r="1.8"/>' +
@@ -152,14 +284,14 @@
   var traversine = '';
   for (var tx = 574; tx < 800; tx += 10) traversine += '<rect class="d-traversa" x="' + tx + '" y="141" width="6" height="3" rx="1"/>';
   function pianale(x, n) {
-    return cont(x + 2, 115, 56, 12, n) + '<rect class="d-t" x="' + x + '" y="127" width="60" height="3"/>' + carrello(x + 2, 130) + carrello(x + 40, 130);
+    return cont(x + 2, 115, 56, 12, n) + neve(x + 2, 115, 56) + '<rect class="d-t" x="' + x + '" y="127" width="60" height="3"/>' + carrello(x + 2, 130) + carrello(x + 40, 130);
   }
   var treno =
     traversine + '<path class="d-binario" d="M570 140H800"/>' +
     '<g class="t-treno">' + presa(600, 92, 196, 50) + '<g class="s-treno">' +
     '<g class="s-fumo"><circle cx="742" cy="96" r="3"/><circle cx="736" cy="88" r="4.5"/><circle cx="744" cy="79" r="5.5"/></g>' +
     pianale(604, 3) + '<rect class="d-t" x="664" y="127" width="4" height="2"/>' + pianale(668, 1) + '<rect class="d-t" x="728" y="127" width="4" height="2"/>' +
-    '<rect class="d-t" x="736" y="100" width="22" height="4" rx="1"/>' +
+    '<rect class="d-t" x="736" y="100" width="22" height="4" rx="1"/>' + neve(736, 100, 22) +
     '<path class="d-t" d="M731 130V109Q731 104 736 104H778L791 114Q793 116 793 119V130Z"/>' +
     '<path class="d-oblo" d="M778 107.5L788 115H778Z"/><rect class="d-oblo" x="762" y="108" width="11" height="6" rx="1"/>' +
     '<rect class="d-c1" x="731" y="121" width="62" height="3"/><path class="d-filo" d="M734 117H758"/>' +
@@ -169,11 +301,12 @@
   /* ---------------------------------------------------------------- strada con il camion (trattore e semirimorchio) */
   var pila = '';
   [[1036, 127, 2], [1070, 127, 1], [1104, 127, 3], [1053, 114, 1], [1087, 114, 3], [1070, 101, 2]].forEach(function (p) { pila += cont(p[0], p[1], 32, 13, p[2]); });
+  [[1036, 127, 17], [1119, 127, 17], [1053, 114, 17], [1102, 114, 17], [1070, 101, 32]].forEach(function (p) { pila += neve(p[0], p[1], p[2]); });
   function camion(x, k) {
     var su = (151 * (1 - k)).toFixed(1);
     return '<g class="t-camion"><g transform="translate(' + x + ' ' + su + ') scale(' + k + ')">' + presa(-4, 96, 160, 58) + '<g class="s-camion">' +
       '<g class="s-fumo"><circle cx="104" cy="96" r="3"/><circle cx="98" cy="88" r="4.5"/><circle cx="106" cy="79" r="5.5"/></g>' +
-      cont(0, 110, 100, 24, 1) +
+      cont(0, 110, 100, 24, 1) + neve(0, 110, 100) +
       '<rect class="d-t" x="0" y="134" width="104" height="4"/><rect class="d-t" x="74" y="138" width="3" height="7"/>' +
       ruota(16, 145, 6) + ruota(31, 145, 6) +
       '<rect class="d-t" x="103" y="100" width="3" height="22" rx="1"/>' +
@@ -186,7 +319,7 @@
       '</g></g></g>';
   }
   var camionLargo = '<path class="d-strada" d="M800 160H1200"/>' + pila + albero(1176) + camion(846, 1);
-  var camionStretto = '<path class="d-strada" d="M530 160H700"/>' + albero(690) + camion(534, 0.78);
+  var camionStretto = '<path class="d-strada" d="M530 160H700"/>' + albero(678) + camion(534, 0.78);
 
   /* festa per l'intelligenza artificiale collegata (js/attiva-ia.js): la gru cala sulla nave un container con le
      scintille, che si illumina; la nave suona la sirena e salpa. Le animazioni sono in app.css (.festa) */
@@ -265,15 +398,158 @@
       '<path class="v-luce" d="M74 18l40-10v20z"/>'
   };
   T.vignetta = function (nome) {
-    return '<svg class="vignetta" viewBox="0 0 132 64" aria-hidden="true" focusable="false">' + (VIGNETTE[nome] || '') + '</svg>';
+    var o = OGGI.tema && ORNAMENTI[OGGI.tema] ? '<g class="v-ornamento" transform="translate(112 1) scale(.78)">' + ORNAMENTI[OGGI.tema] + '</g>' : '';
+    return '<svg class="vignetta" viewBox="0 0 132 64" aria-hidden="true" focusable="false">' + (VIGNETTE[nome] || '') + o + '</svg>';
   };
+
+  /* ---------------------------------------------------------------- stagioni e feste nel resto dell'app (js/calendario.js)
+     T.ornamento(tema): il simbolo della festa o della stagione (24 x 24), per gli auguri e le vignette; T.festone(tema): la
+     striscia in cima alla barra (un motivo ripetuto: luci, bandierine, ghiaccioli...); T.accessorio(tema): l'aggiunta al
+     logo (cappello di Babbo Natale, bandierina, neve...), nelle coordinate del marchio di js/comune.js (32 x 32). */
+  function giro(cx, cy, n, r1, r2, sfasa) {      // raggi da r1 a r2 attorno a un centro
+    var d = '';
+    for (var a = 0; a < n; a++) {
+      var r = a * 2 * Math.PI / n + (sfasa || 0), c = Math.cos(r), s = Math.sin(r);
+      d += 'M' + (cx + c * r1).toFixed(1) + ' ' + (cy + s * r1).toFixed(1) + 'L' + (cx + c * r2).toFixed(1) + ' ' + (cy + s * r2).toFixed(1);
+    }
+    return d;
+  }
+  function stellina(x, y, r, classe) {           // stella a quattro punte
+    return '<path class="' + classe + '" d="M' + x + ' ' + (y - r) + 'Q' + (x + r * 0.18) + ' ' + (y - r * 0.18) + ' ' + (x + r) + ' ' + y + 'Q' + (x + r * 0.18) + ' ' + (y + r * 0.18) + ' ' + x + ' ' + (y + r) +
+      'Q' + (x - r * 0.18) + ' ' + (y + r * 0.18) + ' ' + (x - r) + ' ' + y + 'Q' + (x - r * 0.18) + ' ' + (y - r * 0.18) + ' ' + x + ' ' + (y - r) + 'Z"/>';
+  }
+  function fiore(x, y, r, classe) {
+    var h = '';
+    for (var a = 0; a < 5; a++) { var g = a * 2 * Math.PI / 5 - Math.PI / 2; h += '<circle class="' + classe + '" cx="' + (x + Math.cos(g) * r).toFixed(1) + '" cy="' + (y + Math.sin(g) * r).toFixed(1) + '" r="' + (r * 0.82).toFixed(1) + '"/>'; }
+    return h + '<circle class="s-giallo" cx="' + x + '" cy="' + y + '" r="' + (r * 0.62).toFixed(1) + '"/>';
+  }
+  function uovo(x, y, k, classe, fascia) {
+    return '<path class="' + classe + '" d="M' + x + ' ' + (y - 5 * k) + 'C' + (x + 3.6 * k) + ' ' + (y - 5 * k) + ' ' + (x + 4 * k) + ' ' + (y + 1.6 * k) + ' ' + (x + 3.8 * k) + ' ' + (y + 2.4 * k) +
+      'C' + (x + 3.4 * k) + ' ' + (y + 5.4 * k) + ' ' + (x - 3.4 * k) + ' ' + (y + 5.4 * k) + ' ' + (x - 3.8 * k) + ' ' + (y + 2.4 * k) + 'C' + (x - 4 * k) + ' ' + (y + 1.6 * k) + ' ' + (x - 3.6 * k) + ' ' + (y - 5 * k) + ' ' + x + ' ' + (y - 5 * k) + 'Z"/>' +
+      (fascia ? '<path class="s-bianco-t" d="M' + (x - 3.6 * k) + ' ' + (y + 0.6 * k) + 'l' + (1.2 * k) + ' ' + (-1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + ' ' + (-1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + ' ' + (-1.2 * k) + ' ' + (1.2 * k) + ' ' + (1.2 * k) + '"/>' : '');
+  }
+  function zucca(x, y, k) {
+    return '<path class="s-zucca-c" d="M' + x + ' ' + (y - 6 * k) + 'C' + (x - 8 * k) + ' ' + (y - 7 * k) + ' ' + (x - 10 * k) + ' ' + (y - 2 * k) + ' ' + (x - 9.6 * k) + ' ' + (y + 0.6 * k) +
+      'C' + (x - 9 * k) + ' ' + (y + 5.4 * k) + ' ' + (x - 4.6 * k) + ' ' + (y + 6.4 * k) + ' ' + x + ' ' + (y + 6.4 * k) + 'C' + (x + 4.6 * k) + ' ' + (y + 6.4 * k) + ' ' + (x + 9 * k) + ' ' + (y + 5.4 * k) + ' ' + (x + 9.6 * k) + ' ' + (y + 0.6 * k) +
+      'C' + (x + 10 * k) + ' ' + (y - 2 * k) + ' ' + (x + 8 * k) + ' ' + (y - 7 * k) + ' ' + x + ' ' + (y - 6 * k) + 'Z"/>' +
+      '<path class="s-spicchio" d="M' + (x - 4 * k) + ' ' + (y - 5.4 * k) + 'Q' + (x - 6.6 * k) + ' ' + y + ' ' + (x - 4 * k) + ' ' + (y + 6 * k) + 'M' + (x + 4 * k) + ' ' + (y - 5.4 * k) + 'Q' + (x + 6.6 * k) + ' ' + y + ' ' + (x + 4 * k) + ' ' + (y + 6 * k) + '"/>' +
+      '<path class="s-gambo" d="M' + (x - 0.8 * k) + ' ' + (y - 5.8 * k) + 'l' + (0.6 * k) + ' ' + (-3.4 * k) + 'h' + (1.8 * k) + 'l' + (-0.4 * k) + ' ' + (3.4 * k) + 'z"/>' +
+      '<path class="s-lume" d="M' + (x - 5.4 * k) + ' ' + (y - 0.4 * k) + 'l' + (2 * k) + ' ' + (-2.6 * k) + ' ' + (2 * k) + ' ' + (2.6 * k) + 'zM' + (x + 1.4 * k) + ' ' + (y - 0.4 * k) + 'l' + (2 * k) + ' ' + (-2.6 * k) + ' ' + (2 * k) + ' ' + (2.6 * k) + 'zM' +
+      (x - 5 * k) + ' ' + (y + 2 * k) + 'h' + (10 * k) + 'l' + (-1.6 * k) + ' ' + (2.2 * k) + '-' + (1.6 * k) + ' ' + (-1 * k) + '-' + (1.8 * k) + ' ' + (1.1 * k) + '-' + (1.8 * k) + ' ' + (-1.1 * k) + '-' + (1.6 * k) + ' ' + (1 * k) + 'z"/>';
+  }
+  function pipistrello(x, y, k) {
+    var q = function (dx, dy) { return (x + dx * k).toFixed(1) + ' ' + (y + dy * k).toFixed(1); };
+    return '<path class="o-pipistrello" d="M' + q(-9, 0) + 'Q' + q(-6, -5) + ' ' + q(-2, -2) + 'L' + q(0, -4) + 'L' + q(2, -2) + 'Q' + q(6, -5) + ' ' + q(9, 0) + 'Q' + q(6, -1) + ' ' + q(5, 2) +
+      'Q' + q(3, 0) + ' ' + q(1, 2) + 'L' + q(0, 3) + 'L' + q(-1, 2) + 'Q' + q(-3, 0) + ' ' + q(-5, 2) + 'Q' + q(-6, -1) + ' ' + q(-9, 0) + 'Z"/>';
+  }
+  var ORNAMENTI = {
+    primavera: fiore(12, 12, 4.6, 's-fiore-o'),
+    estate: '<path class="o-raggi" d="' + giro(12, 12, 8, 8, 11, Math.PI / 8) + '"/><circle class="s-giallo" cx="12" cy="12" r="5.6"/>',
+    autunno: '<path class="s-foglia-o" d="M12 2.5C18 6 19.5 12.5 12 21.5C4.5 12.5 6 6 12 2.5Z"/><path class="o-venatura" d="M12 6.5V22M12 11.5l3-2.4M12 15l-3.2-2.6M12 18.2l2.8-2.2"/>',
+    inverno: '<path class="o-fiocco" d="' + giro(12, 12, 6, 0, 9.6, Math.PI / 2) + (function () {
+      var d = '';
+      for (var a = 0; a < 6; a++) {
+        var r = a * Math.PI / 3 + Math.PI / 2, x = 12 + Math.cos(r) * 6.2, y = 12 + Math.sin(r) * 6.2;
+        [-1, 1].forEach(function (v) { var g = r + v * Math.PI / 4; d += 'M' + x.toFixed(1) + ' ' + y.toFixed(1) + 'l' + (Math.cos(g) * 3).toFixed(1) + ' ' + (Math.sin(g) * 3).toFixed(1); });
+      }
+      return d;
+    })() + '"/>',
+    natale: '<path class="s-abete-o" d="M12 3.4l5.2 6.2h-2.6l4.2 5.2h-2.9l4.6 5.4H3.5l4.6-5.4H5.2l4.2-5.2H6.8z"/><rect class="s-tronco-o" x="10.6" y="20.2" width="2.8" height="2.6"/>' +
+      '<circle class="s-rosso" cx="9.6" cy="12.6" r="1.3"/><circle class="d-c2" cx="14.4" cy="16.6" r="1.3"/><circle class="s-giallo" cx="8.6" cy="18" r="1.2"/>' + stellina(12, 3, 2.6, 's-giallo'),
+    befana: '<path class="s-rosso" d="M7.6 6h8.4v8q0 1.4 1.2 2.1l2.6 1.4q2 1.1 1.1 3-.9 1.6-2.9 1L10.6 19.4Q7.6 18.4 7.6 15.4z"/><rect class="s-bianco-o" x="6.6" y="2.6" width="10.4" height="4.2" rx="1.6"/>',
+    capodanno: '<path class="o-scintille" d="' + giro(12, 12, 8, 5, 10.5) + '"/>' + stellina(12, 12, 4.4, 's-oro'),
+    'san-valentino': cuore(12, 12, 6.6).replace('<path ', '<path class="s-cuore-o" '),
+    carnevale: '<path class="s-maschera" d="M2.5 8.5Q12 4.5 21.5 8.5Q22 16 15.6 16Q13.4 16 12 13.4Q10.6 16 8.4 16Q2 16 2.5 8.5Z"/>' +
+      '<path class="o-occhi" d="M5.6 10.6Q7.6 9 9.8 10.6Q7.6 12.4 5.6 10.6ZM14.2 10.6Q16.4 9 18.4 10.6Q16.4 12.4 14.2 10.6Z"/><circle class="s-giallo" cx="12" cy="7.4" r="1.2"/>' +
+      '<path class="o-filante" d="M21 9q2.2 3-.4 5.4t-.2 5.6"/>',
+    mimosa: '<path class="o-stelo" d="M5 21C9 15 13 10 19 4M10.2 14.6l-3.4-1.4M13.6 10.6l-1.2-3.6M15.6 8.2l3.8 1"/>' +
+      [[17.6, 4.6], [19.8, 7.2], [15.2, 5.6], [12, 6], [13.4, 8.6], [6.4, 12.4], [8.6, 11.4], [20.2, 10.4]].map(function (q) { return '<circle class="s-mimosa-o" cx="' + q[0] + '" cy="' + q[1] + '" r="1.9"/>'; }).join(''),
+    pasqua: uovo(12, 12.4, 1.75, 's-uovo-o', true),
+    'festa-nazionale': '<circle class="s-rosso" cx="12" cy="12" r="10"/><circle class="s-bianco" cx="12" cy="12" r="6.8"/><circle class="s-verde" cx="12" cy="12" r="3.6"/>',
+    halloween: zucca(12, 13.4, 1)
+  };
+  T.ornamento = function (tema, classe) {
+    var o = ORNAMENTI[tema];
+    return o ? '<svg class="ornamento' + (classe ? ' ' + classe : '') + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + o + '</svg>' : '';
+  };
+
+  /* festone: un riquadro del motivo, largo 60 e alto 20; la corda scende a festoni tra un riquadro e l'altro */
+  var CORDA = '<path class="f-corda" d="M0 2Q30 11 60 2"/>';
+  function suCorda(x) { var t = x / 60; return 2 * (1 - t) * (1 - t) + 22 * t * (1 - t) + 2 * t * t; }   // altezza della corda in x
+  function appesi(xs, fatto) { return xs.map(function (x, n) { return fatto(x, suCorda(x), n); }).join(''); }
+  var FESTONI = {
+    natale: CORDA + appesi([12, 30, 48], function (x, y, n) {
+      return '<rect class="f-attacco" x="' + (x - 1.3) + '" y="' + (y - 0.4) + '" width="2.6" height="2.4" rx=".6"/><ellipse class="f-luce ' + ['s-rosso', 's-oro', 'd-c2'][n] + '" cx="' + x + '" cy="' + (y + 5) + '" rx="2.5" ry="3.4"/>';
+    }),
+    capodanno: CORDA + appesi([12, 32, 48], function (x, y, n) {
+      var giu = [8, 4, 9][n];
+      return '<path class="f-filo" d="M' + x + ' ' + y + 'V' + (y + giu) + '"/>' + stellina(x, y + giu + 3, [3.6, 2.6, 3.2][n], n === 1 ? 's-argento' : 's-oro');
+    }),
+    'san-valentino': CORDA + appesi([12, 30, 48], function (x, y, n) { return cuore(x, y + 4.6, n === 1 ? 2.6 : 3.4).replace('<path ', '<path class="' + (n === 1 ? 's-rosa' : 's-cuore-o') + '" '); }),
+    carnevale: '<path class="f-filante s-col1" d="M0 4q7.5-4 15 0t15 0 15 0 15 0"/><path class="f-filante s-col2" d="M0 10q7.5 4 15 0t15 0 15 0 15 0"/>' +
+      '<path class="f-filante s-col3" d="M0 15q7.5-3 15 0t15 0 15 0 15 0"/>' +
+      [[6, 7, 1], [22, 13, 4], [37, 6, 0], [51, 12, 2], [29, 2, 3]].map(function (c) { return '<rect class="f-coriandolo s-col' + c[2] + '" x="' + c[0] + '" y="' + c[1] + '" width="2.6" height="2.6"/>'; }).join(''),
+    mimosa: '<path class="f-stelo" d="M0 5Q15 1 30 5T60 5"/>' + [[8, 7], [22, 6.4], [38, 7], [52, 6.4]].map(function (q, n) {
+      return '<ellipse class="s-foglia-v" cx="' + (q[0] + 4) + '" cy="' + (q[1] - 2.6) + '" rx="3" ry="1.3" transform="rotate(-24 ' + (q[0] + 4) + ' ' + (q[1] - 2.6) + ')"/>' +
+        '<circle class="s-mimosa-o" cx="' + q[0] + '" cy="' + (q[1] + 3) + '" r="2.1"/><circle class="s-mimosa-o" cx="' + (q[0] - 2.6) + '" cy="' + (q[1] + 6) + '" r="1.8"/><circle class="s-mimosa-o" cx="' + (q[0] + 2) + '" cy="' + (q[1] + 6.6) + '" r="1.7"/>';
+    }).join(''),
+    pasqua: CORDA + appesi([12, 30, 48], function (x, y, n) { return '<path class="f-filo" d="M' + x + ' ' + y + 'v1.6"/>' + uovo(x, y + 6.4, 0.78, ['s-uovo-o', 's-foglia-v', 's-giallo'][n], n !== 1); }),
+    'festa-nazionale': CORDA + appesi([4, 22, 40], function (x, y, n) {
+      var y2 = suCorda(x + 13);
+      return '<path class="' + ['s-verde', 's-bianco-o', 's-rosso'][n] + '" d="M' + x + ' ' + y.toFixed(1) + 'L' + (x + 13) + ' ' + y2.toFixed(1) + 'L' + (x + 6.5) + ' ' + ((y + y2) / 2 + 9).toFixed(1) + 'Z"/>';
+    }),
+    halloween: CORDA + appesi([15, 45], function (x, y, n) {
+      return n ? '<path class="f-filo" d="M' + x + ' ' + y + 'v2"/>' + zucca(x, y + 7.6, 0.5) : pipistrello(x, y + 4, 0.62);
+    }),
+    primavera: '<path class="f-stelo" d="M0 7Q15 2 30 7T60 7"/>' + '<ellipse class="s-foglia-v" cx="8" cy="3.6" rx="3.2" ry="1.4" transform="rotate(-28 8 3.6)"/>' +
+      '<ellipse class="s-foglia-v" cx="37" cy="10.4" rx="3.2" ry="1.4" transform="rotate(24 37 10.4)"/>' + fiore(20, 6.4, 2.4, 's-fiore-o') + fiore(50, 8, 2.4, 's-fiore-o'),
+    estate: CORDA + appesi([5, 20, 35, 49], function (x, y, n) {   // bandiere di segnalazione nautica
+      var col = ['d-c2', 's-giallo', 's-rosso', 's-bianco-o'][n];
+      return '<rect class="' + col + '" x="' + x + '" y="' + (y + 0.6).toFixed(1) + '" width="8" height="8"/>' +
+        (n === 0 ? '<rect class="s-bianco" x="' + (x + 2.6) + '" y="' + (y + 3.2).toFixed(1) + '" width="2.8" height="2.8"/>' : n === 2 ? '<path class="f-croce" d="M' + x + ' ' + (y + 4.6).toFixed(1) + 'h8M' + (x + 4) + ' ' + (y + 0.6).toFixed(1) + 'v8"/>' : n === 3 ? '<rect class="d-c2" x="' + (x + 2) + '" y="' + (y + 2.6).toFixed(1) + '" width="4" height="4"/>' : '');
+    }),
+    autunno: CORDA + appesi([12, 30, 48], function (x, y, n) {
+      return '<path class="' + ['s-foglia-o', 's-foglia-r', 's-foglia-o'][n] + '" transform="rotate(' + [-18, 12, -6][n] + ' ' + x + ' ' + y + ')" d="M' + x + ' ' + y + 'C' + (x + 4) + ' ' + (y + 3) + ' ' + (x + 4.6) + ' ' + (y + 7) + ' ' + x + ' ' + (y + 11) + 'C' + (x - 4.6) + ' ' + (y + 7) + ' ' + (x - 4) + ' ' + (y + 3) + ' ' + x + ' ' + y + 'Z"/>';
+    }),
+    inverno: '<path class="f-ghiacciolo" d="M0 0H60V2.6Q55 4 50 2.6Q45 4.4 40 2.6Q35 4 30 2.6Q25 4.4 20 2.6Q15 4 10 2.6Q5 4.4 0 2.6Z"/>' +
+      [[5, 9], [13, 5], [22, 13], [31, 6.5], [40, 11], [48, 4.5], [55, 8]].map(function (g) { return '<path class="f-ghiacciolo" d="M' + (g[0] - 2.2) + ' 2.6L' + g[0] + ' ' + (2.6 + g[1]) + 'L' + (g[0] + 2.2) + ' 2.6Z"/>'; }).join('')
+  };
+  FESTONI.befana = FESTONI.natale; FESTONI.ferragosto = FESTONI.estate;
+  T.festone = function (tema) {
+    var m = FESTONI[tema];
+    if (!m) return '';
+    return '<svg class="festone-svg" width="100%" height="20" aria-hidden="true" focusable="false"><defs><pattern id="festone-motivo" width="60" height="20" patternUnits="userSpaceOnUse">' +
+      m + '</pattern></defs><rect width="100%" height="20" fill="url(#festone-motivo)"/></svg>';
+  };
+
+  /* aggiunta al logo (marchio 32 x 32 di js/comune.js, disegnata anche fuori dal riquadro) */
+  var ACCESSORI = {
+    natale: '<path class="s-rosso" d="M15 5.2Q19 -4.4 28.6 -5.2Q33.6 -5 33.4 1.6L30 5.6Z"/><rect class="s-bianco-o" x="13.6" y="3.4" width="19" height="4.4" rx="2.2" transform="rotate(-6 23 5.6)"/>' +
+      '<circle class="s-bianco-o" cx="33.6" cy="2.4" r="2.6"/>',
+    capodanno: '<path class="s-oro" d="M21 5.4L27.4 -9L31.8 4.4Z" transform="rotate(14 26 0)"/><path class="f-croce" d="M23.6 -1.4l5 1.6M25.4 -5.4l3.8 1.2" transform="rotate(14 26 0)"/>' +
+      '<circle class="s-argento" cx="30.6" cy="-8.2" r="1.8"/>' + stellina(35, 8, 2.6, 's-oro'),
+    'san-valentino': '<g class="a-contorno">' + cuore(28.6, 2, 4.6).replace('<path ', '<path class="s-cuore-o" ') + '</g>',
+    carnevale: '<path class="s-maschera" d="M21 5.4L27.4 -9L31.8 4.4Z" transform="rotate(14 26 0)"/><circle class="s-giallo" cx="26.6" cy="-1.6" r="1.2"/><circle class="s-col0" cx="28.6" cy="2.4" r="1.1"/>' +
+      '<circle class="s-giallo" cx="30.6" cy="-8.2" r="1.9"/>',
+    mimosa: '<path class="o-stelo" d="M23 7C26 3 28.6 0 33 -3.4"/>' + [[32.6, -3], [30.6, -4.8], [34.4, -0.6], [29.6, -1], [31.6, 0.8], [27, 1.8]].map(function (q) { return '<circle class="s-mimosa-o" cx="' + q[0] + '" cy="' + q[1] + '" r="1.7"/>'; }).join(''),
+    pasqua: '<g class="a-contorno">' + uovo(29, 1.6, 1.05, 's-uovo-o', true) + '</g>',
+    'festa-nazionale': '<path class="a-asta" d="M27 9V-9"/><rect class="s-verde" x="27" y="-9" width="3.2" height="6.4"/><rect class="s-bianco-o" x="30.2" y="-9" width="3.2" height="6.4"/><rect class="s-rosso" x="33.4" y="-9" width="3.2" height="6.4"/>',
+    halloween: '<path class="s-strega" d="M16.6 5.4Q24 -1 25.6 -8.6Q28 -4 31.6 4.2Z"/><ellipse class="s-strega" cx="24.4" cy="5.2" rx="10.6" ry="2"/><path class="s-zucca-c" d="M19.6 3.2Q24 1.6 30 2.8L30.6 4.2Q24.6 3 19.2 4.6Z"/>',
+    primavera: '<g class="a-contorno">' + fiore(29, 2.6, 3, 's-fiore-o') + '</g>',
+    estate: '<path class="o-raggi" d="' + giro(29, 2.6, 8, 5.6, 8, Math.PI / 8) + '"/><circle class="s-giallo a-bordo" cx="29" cy="2.6" r="4"/>',
+    autunno: '<path class="s-foglia-o a-bordo" transform="rotate(32 29 2)" d="M29 -4.6C33 -2 34 2.6 29 8.6C24 2.6 25 -2 29 -4.6Z"/><path class="o-venatura" transform="rotate(32 29 2)" d="M29 -2V9"/>',
+    inverno: '<path class="s-neve-l" d="M.6 7Q.4 .2 8 .2H24Q31.6 .2 31.4 7Q29 4.6 26.2 6.4Q23.4 3.6 20 5.8Q16.6 3.4 13 5.6Q9.6 3.4 6.6 5.8Q3.4 4.2 .6 7Z"/>'
+  };
+  ACCESSORI.befana = ACCESSORI.natale; ACCESSORI.ferragosto = ACCESSORI.estate;
+  T.accessorio = function () { return ACCESSORI[OGGI.tema] || ''; };
 
   function svg(tipo, classe, larghezza, interno) {
     return '<svg class="scena-svg scena-' + tipo + (classe ? ' ' + classe : '') + '" viewBox="0 0 ' + larghezza + ' 170" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false">' +
       interno + '</svg>';
   }
   T.scena = function (classe) {
-    return svg('larga', classe, 1200, cielo + lontano(600, 1000) + lontano(1150, 1200) + mareDietro + banchina + nave + marePrima + gru + treno + camionLargo) +
-      svg('stretta', classe, 700, cieloStretto + lontano(580, 700) + mareDietro + banchina + nave + marePrima + gru + camionStretto);
+    return svg('larga', classe, 1200, cielo + lontano(600, 1000) + lontano(1150, 1200) + mareDietro + banchina + nave + marePrima + gru + festeBanchina() +
+        treno + camionLargo + cadono(1200)) +
+      svg('stretta', classe, 700, cieloStretto + lontano(580, 700) + mareDietro + banchina + nave + marePrima + gru + festeBanchina() + camionStretto + cadono(700));
   };
 })();

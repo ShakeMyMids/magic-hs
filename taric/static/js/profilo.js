@@ -59,7 +59,9 @@
       paesi.map(function (x) { return '<option value="' + esc(x[1]) + '"' + (x[1] === p.paese ? ' selected' : '') + '>' + esc(x[0]) + '</option>'; }).join('') + '</select></label>' +
       '<label>Flusso predefinito<select class="campo" data-p="pref" name="flusso"><option value="import"' + (p.flusso !== 'export' ? ' selected' : '') + '>Importazione</option><option value="export"' + (p.flusso === 'export' ? ' selected' : '') + '>Esportazione</option></select></label>' +
       '<label>Tema<select class="campo" data-p="pref" name="tema"><option value="auto"' + (p.tema === 'auto' ? ' selected' : '') + '>Come il dispositivo</option><option value="chiaro"' + (p.tema === 'chiaro' ? ' selected' : '') + '>Chiaro</option><option value="scuro"' + (p.tema === 'scuro' ? ' selected' : '') + '>Scuro</option></select></label>' +
+      selettoreProva() +
       '</div><label class="spunta"><input type="checkbox" data-p="pref" name="condividi"' + (p.condividi !== false ? ' checked' : '') + '> Condividi le mie classificazioni con i colleghi: le ritrovano nella ricerca e non le rifanno con l\'IA</label>' +
+      '<label class="spunta"><input type="checkbox" data-p="stagioni"' + (T.oggi && T.oggi.spento ? '' : ' checked') + '> Colori e decorazioni delle stagioni e delle feste (su questo dispositivo)</label>' +
       '</div></div></div>';
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Storico delle classificazioni<span class="dx">' + st.totale + ' salvate</span></div>';
@@ -92,6 +94,12 @@
   }
 
   /* ------------------------------------------------------------------ uso dell'IA */
+  /* anteprima di stagioni e feste (js/calendario.js): un giorno dell'anno, finché resta aperta la scheda del browser */
+  function selettoreProva() {
+    var o = T.oggi || {}, prove = T.prove ? T.prove(new Date().getFullYear()) : [];
+    return '<label>Anteprima di stagioni e feste<select class="campo" data-p="prova"' + (o.spento ? ' disabled' : '') + '><option value="">Oggi</option>' +
+      prove.map(function (x) { return '<option value="' + esc(x[2]) + '"' + (x[2] === o.prova ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>';
+  }
   function usoIA(io) {
     var ia = io.ia, h = '<div class="foglio"><div class="box piano"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita</div>';
     if (!ia.configurata) h += '<p class="nota">Non è attiva: la attiva l\'amministratore di MAGIC HS.</p>';
@@ -201,6 +209,8 @@
 
   el.addEventListener('change', function (ev) {
     if (ev.target.getAttribute('data-p') === 'importa') { importa(ev.target); return; }
+    if (ev.target.getAttribute('data-p') === 'stagioni' && T.stagioni) { T.stagioni(ev.target.checked); return; }
+    if (ev.target.getAttribute('data-p') === 'prova' && T.provaGiorno) { T.provaGiorno(ev.target.value); return; }
     if (ev.target.getAttribute('data-p') !== 'pref') return;
     var io = u(), p = { paese: io.preferenze.paese, flusso: io.preferenze.flusso, tema: io.preferenze.tema, condividi: io.preferenze.condividi !== false };
     p[ev.target.name] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value;
