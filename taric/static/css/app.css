@@ -33,6 +33,7 @@
   /* illustrazioni: mezzi e container */
   --d-tratto:#1b5584; --d-cont-1:#e9772e; --d-cont-2:#2f7bbf; --d-cont-3:#9fb4c8; --d-mare:#c3d6e8; --d-cielo:#dbe6f0; --d-nuvola:#f5f8fb;
   --d-luce:#dbe6f0; --d-abete:#2f7d5b; --d-stelle:0; --d-fumo:#b9c6d3; --d-gabbiano:#4f5d6c;
+  --d-lontano:#cbd8e4; --d-schiuma:#eef4f9; --d-nuvola-ombra:#e2eaf2;
   --ombra:0 1px 2px rgba(20,40,60,.07);
   --ombra-alta:0 18px 40px -24px rgba(20,40,60,.45),0 2px 6px -2px rgba(20,40,60,.1);
   --vetro:rgba(225,230,235,.86);
@@ -52,6 +53,7 @@
     --su-accento:#0a1119; --marchio-t:#f08a3c; --ombra:0 1px 2px rgba(0,0,0,.3); --ombra-alta:0 22px 44px -26px rgba(0,0,0,.85),0 2px 6px -2px rgba(0,0,0,.4);
     --d-tratto:#7fb8e6; --d-cont-1:#e9772e; --d-cont-2:#3d8fd6; --d-cont-3:#4d6378; --d-mare:#17324d; --d-cielo:#122638; --d-nuvola:#1c3550;
     --d-luce:#f2c46b; --d-abete:#3f9c74; --d-stelle:1; --d-fumo:#3a5068; --d-gabbiano:#c9d6e2;
+    --d-lontano:#172c42; --d-schiuma:#2c5277; --d-nuvola-ombra:#183049;
     --vetro:rgba(13,21,30,.84); color-scheme:dark;
     --alone-1:rgba(127,184,230,.1); --alone-2:rgba(233,119,46,.07);
     --ombra-scheda:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.35),0 18px 40px -26px rgba(0,0,0,.9);
@@ -64,6 +66,7 @@
     --su-accento:#0a1119; --marchio-t:#f08a3c; --ombra:0 1px 2px rgba(0,0,0,.3); --ombra-alta:0 22px 44px -26px rgba(0,0,0,.85),0 2px 6px -2px rgba(0,0,0,.4);
     --d-tratto:#7fb8e6; --d-cont-1:#e9772e; --d-cont-2:#3d8fd6; --d-cont-3:#4d6378; --d-mare:#17324d; --d-cielo:#122638; --d-nuvola:#1c3550;
     --d-luce:#f2c46b; --d-abete:#3f9c74; --d-stelle:1; --d-fumo:#3a5068; --d-gabbiano:#c9d6e2;
+    --d-lontano:#172c42; --d-schiuma:#2c5277; --d-nuvola-ombra:#183049;
     --vetro:rgba(13,21,30,.84); color-scheme:dark;
     --alone-1:rgba(127,184,230,.1); --alone-2:rgba(233,119,46,.07);
     --ombra-scheda:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.35),0 18px 40px -26px rgba(0,0,0,.9);
@@ -474,6 +477,7 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .vuoto.illustrato{display:flex;align-items:center;gap:16px;padding:10px 0}
 .vignetta{flex:none;width:112px;height:auto;overflow:visible}
 .vignetta rect,.vignetta line{shape-rendering:crispEdges}
+.vignetta .d-gru .g-forte{stroke-width:2.6} .vignetta .d-gru .g-medio{stroke-width:2} .vignetta .d-gru .g-sottile{stroke-width:1}
 .d-cavo-v{fill:none;stroke:var(--d-tratto);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .v-ombra{fill:rgba(0,0,0,.14)}
 .v-luce{fill:var(--d-luce);opacity:.55;transform-box:view-box;transform-origin:68px 18px}
@@ -540,13 +544,24 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 @media (max-width:560px){.scena{margin:-16px -16px 0;border-radius:16px 16px 0 0}.accesso .scena{margin:-22px -18px 0}}
 .d-t{fill:var(--d-tratto)}
 .d-c1{fill:var(--d-cont-1)} .d-c2{fill:var(--d-cont-2)} .d-c3{fill:var(--d-cont-3)}
-.d-nervo{stroke:rgba(0,0,0,.2);stroke-width:1.3}
+.d-nervo{stroke:rgba(0,0,0,.17);stroke-width:1}
+.d-porta{fill:rgba(0,0,0,.16)} .d-lucido{fill:rgba(255,255,255,.3)}
+.d-boccaporto{fill:var(--d-cont-3)} .d-ombra-s{fill:rgba(0,0,0,.16)}
+.d-filo{fill:none;stroke:rgba(255,255,255,.35);stroke-width:1.2;stroke-linecap:round}
+.d-albero{fill:none;stroke:var(--d-tratto);stroke-width:1.6;stroke-linecap:round}
+.d-parafango{fill:none;stroke:var(--d-tratto);stroke-width:2;stroke-linecap:round}
+.d-porta-a{fill:none;stroke:rgba(255,255,255,.3);stroke-width:.8}
+.d-lontano rect{fill:var(--d-lontano)} .d-lontano-tratto{fill:none;stroke:var(--d-lontano);stroke-width:3;stroke-linecap:round}
+.d-schiuma{fill:none;stroke:var(--d-schiuma);stroke-width:2;stroke-linecap:round;opacity:.9}
+.d-muro{fill:var(--linea-forte)}
+.d-nuvola-ombra{fill:var(--d-nuvola-ombra)}
 .d-mozzo{fill:var(--carta)} .d-oblo{fill:var(--d-luce)}
 .d-mare{fill:var(--d-mare)} .d-banchina{fill:var(--carta-2)}
-.d-onda{fill:none;stroke:var(--d-tratto);stroke-width:2;stroke-linecap:round;opacity:.42}
+.d-onda{fill:none;stroke:var(--d-schiuma);stroke-width:2;stroke-linecap:round;opacity:.85}
 .d-nuvola{fill:var(--d-nuvola)}
 .d-scia{fill:none;stroke:var(--d-tratto);stroke-width:2;stroke-linecap:round;stroke-dasharray:2 9;opacity:.45}
 .d-gru path{fill:none;stroke:var(--d-tratto);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.d-gru .g-forte{stroke-width:4} .d-gru .g-medio{stroke-width:3} .d-gru .g-sottile{stroke-width:1.4}
 .d-gru .d-cavo{stroke-width:2}
 .d-suolo{stroke:var(--linea-forte);stroke-width:2}
 .d-traversa{fill:var(--d-tratto);opacity:.3}
@@ -585,12 +600,10 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .t-nave.suona{animation:sussulta .9s ease-in-out}
 @keyframes sussulta{30%{transform:translateY(2px)}65%{transform:translateY(-1px)}}
 /* la gru porta il container sopra la colonna più bassa della nave, lo appoggia e torna */
-.t-gru.cala .s-carico{animation:carrello 2.8s ease-in-out}
 .t-gru.cala .s-cont{animation:cala 2.8s ease-in-out}
 .t-gru.cala .d-cavo{animation:cavo 2.8s ease-in-out}
-@keyframes carrello{25%,75%{transform:translateX(14px)}}
-@keyframes cala{0%,25%{transform:none}45%,58%{transform:translateY(19px)}78%,100%{transform:none}}
-@keyframes cavo{0%,25%{transform:none}45%,58%{transform:scaleY(4.17)}78%,100%{transform:none}}
+@keyframes cala{0%,15%{transform:none}40%,60%{transform:translateY(13px)}85%,100%{transform:none}}
+@keyframes cavo{0%,15%{transform:none}40%,60%{transform:scaleY(1.8125)}85%,100%{transform:none}}
 .scena-svg.fuochi .s-fuochi{display:inline}
 .t-aereo.gira{animation:giro 1.8s cubic-bezier(.45,0,.3,1);transform-box:fill-box;transform-origin:center}
 @keyframes giro{0%{transform:none}50%{transform:translate(-30px,-14px) rotate(-180deg)}100%{transform:rotate(-360deg)}}
@@ -758,7 +771,7 @@ html.con-finestra{overflow:hidden}
 .f-cavo{fill:none;stroke:var(--d-tratto);stroke-width:2;transform-box:fill-box;transform-origin:50% 0;transform:scaleY(.06);animation:f-cavo 1.9s .25s ease-in-out both}
 @keyframes f-cavo{0%{transform:scaleY(.06)}55%,70%{transform:scaleY(1)}100%{transform:scaleY(.06)}}
 .f-ia{animation:f-cala 1.05s .25s cubic-bezier(.45,0,.3,1) both}
-@keyframes f-cala{from{transform:translateY(-54px)}}
+@keyframes f-cala{from{transform:translateY(-50px)}}
 .f-ia .d-c1{animation:f-luce .7s 1.3s ease-in-out 4 alternate both}
 @keyframes f-luce{from{filter:drop-shadow(0 0 0 transparent)}to{filter:drop-shadow(0 0 7px var(--d-cont-1))}}
 .f-stella{fill:#fff}
@@ -768,7 +781,7 @@ html.con-finestra{overflow:hidden}
 .f-sirena path:nth-child(1){animation-delay:1.6s}.f-sirena path:nth-child(2){animation-delay:1.75s}.f-sirena path:nth-child(3){animation-delay:1.9s}
 @keyframes f-sirena{0%{opacity:0;transform:translateX(0)}35%{opacity:.85}100%{opacity:0;transform:translateX(9px)}}
 .f-nave{animation:f-salpa 2.8s 2.3s ease-in-out both}
-@keyframes f-salpa{from{transform:translateX(0)}to{transform:translateX(30px)}}
+@keyframes f-salpa{from{transform:translateX(0)}to{transform:translateX(16px)}}
 @media (max-width:560px){.finestra{padding:16px 16px 18px}.finestra.festa{padding:0 0 18px}.festa-testo{padding:6px 16px 0}.festa-testo h2{font-size:20px}}
 
 
