@@ -1,6 +1,7 @@
 /* MAGIC HS - il porto da toccare: piccole sorprese sopra la scena di js/disegni.js, in tutte le pagine che la mostrano.
    - Toccando i mezzi: la nave suona la sirena e sbuffa, la gru appoggia il container sulla nave, l'aereo fa un giro,
-     il camion parte e torna, il treno fa manovra, le nuvole piovono, dal mare si alza un gabbiano; l'albero si scuote e
+     il camion parte e torna, il treno fa manovra, le nuvole piovono, dal mare si alza un gabbiano, Simone (l'autore, sulla
+     banchina tra le gambe della gru) saluta; l'albero si scuote e
      dal cielo cade quello della stagione (petali, foglie, neve, coriandoli a Carnevale).
    - Tre tocchi veloci sulla gru aprono il gioco «Carica la nave» (js/gioco.js).
    - Parole scritte fuori dai campi: «gioca» apre il gioco, «nave» fa suonare le navi, «festa» accende i fuochi,
@@ -30,11 +31,11 @@
 
   var tocchiGru = [];
   var GESTI = { 't-nave': ['suona', 1900], 't-gru': ['cala', 2900], 't-aereo': ['gira', 1900], 't-camion': ['parte', 3500],
-    't-treno': ['fischia', 2100], 't-nuvola': ['piove', 2400], 't-albero': ['scuote', 1300] };
+    't-treno': ['fischia', 2100], 't-nuvola': ['piove', 2400], 't-albero': ['scuote', 1300], 't-simone': ['saluta', 1700] };
   document.addEventListener('click', function (ev) {
     var svg = ev.target.closest ? ev.target.closest('.scena-svg') : null;
     if (svg) {
-      var t = ev.target.closest('.t-nave,.t-gru,.t-aereo,.t-camion,.t-treno,.t-nuvola,.t-albero');
+      var t = ev.target.closest('.t-simone,.t-nave,.t-gru,.t-aereo,.t-camion,.t-treno,.t-nuvola,.t-albero');
       if (t) {
         var nome = Object.keys(GESTI).filter(function (k) { return t.classList.contains(k); })[0];
         anima(t, GESTI[nome][0], GESTI[nome][1]);

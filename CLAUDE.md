@@ -28,7 +28,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   `{"errore": "<messaggio italiano>", "codice": "<codice>"}`.
 - `taric/config.py`: configurazione dalle variabili d'ambiente (`TARIC_*`, `GEMINI_API_KEY`, `MAGIC_HS_*`,
   `RENDER_EXTERNAL_URL` per `config.indirizzo`, `MAGIC_HS_COPIA_*` per la copia esterna, `MAGIC_HS_BCE_URL` per i cambi,
-  `MAGIC_HS_CARBURANTE_URL` per il carburante di DHL, vuota = solo a mano).
+  `MAGIC_HS_CARBURANTE_URL` per il carburante di DHL, vuota = solo a mano; `autore`: `MAGIC_HS_AUTORE`, altrimenti il primo indirizzo
+  di `MAGIC_HS_AMMINISTRATORI`, le cui risposte alle segnalazioni hanno l'avatar di Simone).
 - `taric/valute.py`: cambio doganale del mese per la bolla (penultimo mercoledì del mese precedente, art. 146 Reg. UE
   2015/2447), dalla BCE in CSV (`TIME_PERIOD`, `OBS_VALUE`), tenuto nella tabella `cambi_doganali`.
 - `taric/ricerca.py`: le regole della ricerca di `app.js` (`piano`, `radice`) lato server, per controllare che i termini
@@ -91,7 +92,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   `js/accesso.js` (accesso, richiesta di account, nuova password), `attesa.html` con `js/attesa.js` (dati non ancora
   pronti), `js/comune.js` (chiamate API, tema, logo, finestre `T.finestra`, mesi in parole `T.meseIt`, testi accorciati `T.taglia`), `js/installa.js` (tasto Installa: finestra
   d'installazione del browser con `beforeinstallprompt`, altrimenti i passi per iPhone/iPad, Safari, Firefox; registra
-  `sw.js`, servito come `/sw.js`, che non conserva niente e senza rete mostra solo un avviso), `js/disegni.js` (scena con nave, gru, treno, camion e aereo, inserita
+  `sw.js`, servito come `/sw.js`, che non conserva niente e senza rete mostra solo un avviso), `js/disegni.js` (Simone, l'autore: `T.AUTORE`, busto `T.autore({esulta})` e testa `T.autoreTesta` con le variabili `--av-*`,
+  firma negli elementi `data-autore` inserita da `comune.js`, figura `.t-simone` sulla banchina che saluta, cabina del gioco; scena con nave, gru, treno, camion e aereo, inserita
   negli elementi `data-scena`: due composizioni, larga e compatta, scelte in `app.css` con una container query sulla
   larghezza del riquadro, così sul telefono niente viene tagliato; `data-scena="vivo"` la anima piano), `js/app.js` (prima pagina: ricerca per parola o codice con `cerca()`, che ignora le parole vuote e usa i sinonimi di
   `js/sinonimi.js`, e risultati in `#risultati`, oppure con

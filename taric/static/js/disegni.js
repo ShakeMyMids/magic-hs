@@ -540,13 +540,78 @@
   };
   T.accessorio = function () { return ACCESSORI[OGGI.tema] || ''; };
 
+  /* ---------------------------------------------------------------- Simone, l'autore di MAGIC HS
+     Stile da cartone animato: contorno nero sottile e uniforme, colori piatti, testa grande, occhi grandi con le palpebre
+     un po' abbassate, naso a ricciolo, bocca a una linea. Capelli mossi sopra e rasati sfumati ai lati, occhiali tondi
+     neri, barba corta, orecchino, felpa con il cappuccio. Il busto (T.autore) firma le pagine e le risposte alle
+     segnalazioni; a braccia alzate esulta nel gioco. La testa (120 x 140) si riusa piccola per la figura sulla banchina, che
+     saluta quando la si tocca (js/porto.js), e nella cabina del gioco. Colori nelle variabili --av-* di app.css. */
+  T.AUTORE = 'Simone';
+  function testaAutore() {
+    var occhio = function (x) {
+      return '<ellipse class="av-occhio av-t" cx="' + x + '" cy="56" rx="7.6" ry="8.4"/><circle class="av-nero" cx="' + (x + (x < 60 ? 1.2 : -1.2)) + '" cy="58" r="1.55"/>' +
+        '<path class="av-pelle av-t" d="M' + (x - 7.2) + ' 53.4A7.6 8.4 0 0 1 ' + (x + 7.2) + ' 53.4Q' + x + ' 51.4 ' + (x - 7.2) + ' 53.4Z"/>';
+    };
+    return '<path class="av-pelle av-t" d="M30.2 54C27 54 26.5 63 31.6 64.6"/><path class="av-pelle av-t" d="M89.8 54C93 54 93.5 63 88.4 64.6"/>' +
+      '<circle class="av-nero" cx="90.2" cy="66.8" r="1.6"/>' +
+      '<path class="av-pelle av-t" d="M31 48C31 26 44 14.5 60 14.5C76 14.5 89 26 89 48V62C89 86 76 99.5 60 99.5C44 99.5 31 86 31 62Z"/>' +
+      // lati rasati: scuri in alto, chiari verso le orecchie
+      '<path class="av-sfuma2" d="M31.2 44C31.6 36 34 30 37.5 26.5L40 52.5C37 53 34 54 31.2 55ZM88.8 44C88.4 36 86 30 82.5 26.5L80 52.5C83 53 86 54 88.8 55Z"/>' +
+      '<path class="av-sfuma1" d="M31.5 40C32.2 33.5 34.6 28.8 37.5 26.5L39.2 42C36.4 41.6 33.8 41 31.5 40ZM88.5 40C87.8 33.5 85.4 28.8 82.5 26.5L80.8 42C83.6 41.6 86.2 41 88.5 40Z"/>' +
+      '<path class="av-linea" d="M31 48C31 26 44 14.5 60 14.5C76 14.5 89 26 89 48"/>' +
+      // barba corta lungo la mascella e sul mento, baffi sottili
+      '<path class="av-barba av-t" d="M31.6 62C32.6 85 45 99 60 99.5C75 99 87.4 85 88.4 62C86.8 70 83 75.6 77.6 78.6C74 80.6 71.6 83.4 69.6 86.4C66.8 88 63.4 88.2 60 88.2' +
+      'C56.6 88.2 53.2 88 50.4 86.4C48.4 83.4 46 80.6 42.4 78.6C37 75.6 33.2 70 31.6 62Z"/>' +
+      '<path class="av-barba av-t" d="M50.6 77.4C53.8 74.8 57.2 74.8 60 76.2C62.8 74.8 66.2 74.8 69.4 77.4C66.2 77.2 63 77.6 60 78.2C57 77.6 53.8 77.2 50.6 77.4Z"/>' +
+      '<path class="av-linea" d="M54.6 82.2Q60.2 85 65.6 81.8"/><path class="av-linea" d="M61 62.5C57.8 64.2 58.2 68.4 62.2 68"/>' +
+      occhio(49.5) + occhio(70.5) +
+      '<circle class="av-montatura" cx="49.5" cy="56" r="10.1"/><circle class="av-montatura" cx="70.5" cy="56" r="10.1"/>' +
+      '<path class="av-montatura" d="M59.4 55Q60 54 60.6 55M39.4 54.6L31.4 53.4M80.6 54.6L88.6 53.4"/>' +
+      // capelli mossi solo sopra
+      '<path class="av-capelli av-t" d="M36.6 31C37 21.5 43.6 15.6 48.6 17.8C51.6 11.2 59.6 10.2 62.2 14.8C66.2 10.4 74.4 12 75.4 17.6C80.6 16.6 84.6 22.6 83.4 31' +
+      'C81.6 33.6 79 34.2 76.8 32.4C73.6 34.6 69.4 34.4 66.8 32.4C63.6 34.8 58.8 34.6 56.2 32.4C53 34.6 48.6 34.4 46 32.2C43.2 34.2 39 34 36.6 31Z"/>' +
+      '<path class="av-fine av-ricci" d="M45 22.6Q48.8 25.8 53 23.6M61.6 18.8Q65 22.8 69.6 20.8M74.6 25.6Q77.4 28.4 80.8 27.6"/>';
+  }
+  T.autoreTesta = testaAutore;
+  T.autore = function (opz) {
+    opz = opz || {};
+    // a braccia alzate: busto stretto che scende dalle ascelle, braccia dalle spalle aperte a V (lontane dalla testa)
+    var braccia = 'M31 117Q21 101 16.5 83Q14.5 75 13.5 68M89 117Q99 101 103.5 83Q105.5 75 106.5 68';
+    var su = opz.esulta ? '<path class="av-bordo-m" d="' + braccia + '"/><path class="av-manica" d="' + braccia + '"/>' +
+      '<circle class="av-pelle av-t" cx="13" cy="62" r="6"/><circle class="av-pelle av-t" cx="107" cy="62" r="6"/>' : '';
+    var busto = opz.esulta ? 'M23 140C24 131 25.5 125 27 120.5C33 110.5 44 106.5 60 106.5C76 106.5 87 110.5 93 120.5C94.5 125 96 131 97 140Z'
+      : 'M12 140C13 118 30 106.5 60 106.5C90 106.5 107 118 108 140Z';
+    return '<svg class="avatar' + (opz.esulta ? ' esulta' : '') + (opz.classe ? ' ' + opz.classe : '') + '" viewBox="0 0 120 140" aria-hidden="true" focusable="false">' + su +
+      '<path class="av-felpa av-t" d="' + busto + '"/>' +
+      (opz.esulta ? '' : '<path class="av-linea" d="M30 140C31 130 32 124 34 120M90 140C89 130 88 124 86 120"/>') +
+      '<path class="av-felpa2 av-t" d="M38 109.6C38 100.6 47.4 96 60 96C72.6 96 82 100.6 82 109.6C82 116 72.4 119.6 60 119.6C47.6 119.6 38 116 38 109.6Z"/>' +
+      '<path class="av-pelle av-t" d="M54 95V109C57 111.4 63 111.4 66 109V95Z"/>' +
+      '<path class="av-felpa av-t" d="M44 111C49 116.4 54.6 118 60 118C65.4 118 71 116.4 76 111C73 120.4 67 124.4 60 124.4C53 124.4 47 120.4 44 111Z"/>' +
+      '<path class="av-laccio" d="M55.4 121V133M64.6 121V133"/><path class="av-linea" d="M53.8 132.6H57M63 132.6H66.2"/>' +
+      testaAutore() + '</svg>';
+  };
+  /* Simone sulla banchina, tra le gambe della gru: felpa, gilet ad alta visibilità e cartellina per i container */
+  function simone(x) {
+    return '<g class="t-simone">' + presa(x - 11, 108, 24, 33) + '<g class="s-simone" transform="translate(' + x + ' 140)">' +
+      '<rect class="av-pantaloni" x="-3.6" y="-9.6" width="3" height="8.6" rx="1"/><rect class="av-pantaloni" x="0.6" y="-9.6" width="3" height="8.6" rx="1"/>' +
+      '<ellipse class="av-scarpa" cx="-2.3" cy="-0.8" rx="2.4" ry="1.1"/><ellipse class="av-scarpa" cx="2.3" cy="-0.8" rx="2.4" ry="1.1"/>' +
+      '<path class="av-braccio-s" d="M-4.6 -17L-6.6 -11.5"/>' +
+      '<rect class="av-cartellina" x="-9.6" y="-14.6" width="4.6" height="5.8" rx=".6"/><rect class="av-foglio" x="-9" y="-13.6" width="3.4" height="4.4"/>' +
+      '<path class="av-felpa av-t-s" d="M-5.2 -18.4Q0 -19.8 5.2 -18.4L5.6 -8.6H-5.6Z"/>' +
+      '<path class="av-gilet" d="M-5.2 -18.4L-1.5 -17.8V-9H-5.6ZM5.2 -18.4L1.5 -17.8V-9H5.6Z"/><path class="av-catarifrangente" d="M-5.4 -12.6H-1.5M1.5 -12.6H5.4"/>' +
+      '<g class="s-saluto"><path class="av-braccio-s" d="M4.8 -17L6.6 -11.6"/><circle class="av-pelle" cx="6.8" cy="-10.9" r="1.15"/></g>' +
+      '<g class="av-piccola" transform="translate(-4.8 -26.1) scale(.08)">' + testaAutore() + '</g>' +
+      '<g class="s-ciao"><rect class="av-nuvoletta" x="-1" y="-41" width="22" height="10" rx="3"/><path class="av-nuvoletta" d="M2 -31.5L1 -27L6 -31.5Z"/>' +
+      '<text class="av-ciao" x="10" y="-33.6" text-anchor="middle">Ciao!</text></g></g></g>';
+  }
+
   function svg(tipo, classe, larghezza, interno) {
     return '<svg class="scena-svg scena-' + tipo + (classe ? ' ' + classe : '') + '" viewBox="0 0 ' + larghezza + ' 170" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false">' +
       interno + '</svg>';
   }
   T.scena = function (classe) {
     return svg('larga', classe, 1200, cielo + lontano(600, 1000) + lontano(1150, 1200) + mareDietro + banchina + nave + marePrima + gru + festeBanchina() +
-        treno + camionLargo + cadono(1200)) +
-      svg('stretta', classe, 700, cieloStretto + lontano(580, 700) + mareDietro + banchina + nave + marePrima + gru + festeBanchina() + camionStretto + cadono(700));
+        simone(499) + treno + camionLargo + cadono(1200)) +
+      svg('stretta', classe, 700, cieloStretto + lontano(580, 700) + mareDietro + banchina + nave + marePrima + gru + festeBanchina() + simone(499) + camionStretto + cadono(700));
   };
 })();

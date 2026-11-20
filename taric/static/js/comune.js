@@ -162,6 +162,10 @@
       if (T.scena) el.insertAdjacentHTML('afterbegin', T.scena(el.getAttribute('data-scena')));
       el.removeAttribute('data-scena');
     });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-autore]'), function (el) {    // firma di Simone, l'autore (js/disegni.js)
+      if (T.autore) { el.innerHTML = '<span class="firma-volto">' + T.autore() + '</span><span>Fatto da ' + T.esc(T.AUTORE) + '</span>'; el.classList.add('firma'); }
+      el.removeAttribute('data-autore');
+    });
     Array.prototype.forEach.call(document.querySelectorAll('[data-marchio]'), function (el) {
       el.insertAdjacentHTML('afterbegin', T.marchio);
       el.removeAttribute('data-marchio');

@@ -54,6 +54,8 @@ class Config:
     dati_url: str = "https://api.github.com/repos/ShakeMyMids/magic-hs/releases/tags/dati"        # dati pronti; "" = sempre in locale
     indirizzo: str = ""                    # indirizzo pubblico, per esempio https://magic-hs.onrender.com (Render: RENDER_EXTERNAL_URL)
     amministratori: frozenset[str] = frozenset()   # email che entrano subito come amministratori (MAGIC_HS_AMMINISTRATORI)
+    autore: str = ""                       # l'autore (Simone): le sue risposte alle segnalazioni hanno il suo avatar;
+                                           # MAGIC_HS_AUTORE, altrimenti il primo indirizzo di MAGIC_HS_AMMINISTRATORI
     copia_url: str = ""                    # copia settimanale del database in un archivio S3 (MAGIC_HS_COPIA_*, vedi copia.py)
     copia_regione: str = ""
     copia_chiave: str = ""
@@ -112,6 +114,7 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
     dati = Path(v.get("TARIC_DATI", "dati")).resolve()
     dati.mkdir(parents=True, exist_ok=True)
     ia = _ia(v)
+    amministratori = [e.strip().lower() for e in re.split(r"[\s,;]+", v.get("MAGIC_HS_AMMINISTRATORI", "")) if "@" in e]   # in ordine
     return Config(
         dati=dati,
         porta=int(v.get("TARIC_PORTA", "8765")),
@@ -123,7 +126,8 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         backup_copie=max(0, int(v.get("TARIC_BACKUP_COPIE", "7") or 7)),
         dati_url=v.get("TARIC_DATI_URL", Config.dati_url).strip(),
         indirizzo=(v.get("MAGIC_HS_INDIRIZZO") or v.get("RENDER_EXTERNAL_URL") or "").strip().rstrip("/"),
-        amministratori=frozenset(e.strip().lower() for e in re.split(r"[\s,;]+", v.get("MAGIC_HS_AMMINISTRATORI", "")) if "@" in e),
+        amministratori=frozenset(amministratori),
+        autore=(v.get("MAGIC_HS_AUTORE") or (amministratori[0] if amministratori else "")).strip().lower(),
         copia_url=v.get("MAGIC_HS_COPIA_URL", "").strip().rstrip("/"),
         copia_regione=v.get("MAGIC_HS_COPIA_REGIONE", "").strip(),
         copia_chiave=v.get("MAGIC_HS_COPIA_CHIAVE", "").strip(),

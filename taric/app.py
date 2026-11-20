@@ -931,7 +931,10 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     def riga_segnalazione(r: sqlite3.Row, admin: bool) -> dict[str, Any]:
         v = {"id": r["id"], "creata": r["creata"], "testo": r["testo"], "sezione": r["sezione"], "stato": r["stato"],
-             "risposta": r["risposta"], "chiusa": r["chiusa"], "letta": bool(r["letta"])}
+             "risposta": r["risposta"], "chiusa": r["chiusa"], "letta": bool(r["letta"]),
+             # chi ha risposto: l'autore di MAGIC HS (cfg.autore) compare con il suo avatar, gli altri con le iniziali
+             "risposta_di": ({"nome": r["risposta_nome"], "autore": bool(cfg.autore) and r["risposta_email"] == cfg.autore}
+                             if r["risposta"] and r["risposta_nome"] else None)}
         if admin:
             try:
                 contesto = json.loads(r["contesto"] or "{}")
@@ -961,7 +964,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.get("/api/segnalazioni")
     def mie_segnalazioni(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
         with db.connessione() as c:
-            righe = c.execute("SELECT * FROM segnalazioni WHERE autore_id = ? ORDER BY creata DESC, id DESC LIMIT 50", (u["id"],)).fetchall()
+            righe = c.execute("SELECT s.*, r.nome AS risposta_nome, r.email AS risposta_email FROM segnalazioni s "
+                              "LEFT JOIN utenti r ON r.id = s.risposta_da WHERE s.autore_id = ? ORDER BY s.creata DESC, s.id DESC LIMIT 50",
+                              (u["id"],)).fetchall()
         return {"voci": [riga_segnalazione(r, False) for r in righe]}
 
     @app.post("/api/segnalazioni/lette")
@@ -973,8 +978,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.get("/api/admin/segnalazioni")
     def admin_segnalazioni(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         with db.connessione() as c:
-            righe = c.execute("SELECT s.*, u.nome AS autore, u.email AS email, d.nome AS chiusa_da_nome FROM segnalazioni s "
-                              "LEFT JOIN utenti u ON u.id = s.autore_id LEFT JOIN utenti d ON d.id = s.chiusa_da "
+            righe = c.execute("SELECT s.*, u.nome AS autore, u.email AS email, d.nome AS chiusa_da_nome, r.nome AS risposta_nome, "
+                              "r.email AS risposta_email FROM segnalazioni s LEFT JOIN utenti u ON u.id = s.autore_id "
+                              "LEFT JOIN utenti d ON d.id = s.chiusa_da LEFT JOIN utenti r ON r.id = s.risposta_da "
                               "ORDER BY s.stato = 'chiusa', s.creata DESC, s.id DESC LIMIT 300").fetchall()
         return {"voci": [riga_segnalazione(r, True) for r in righe]}
 
@@ -987,9 +993,10 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 raise Errore(404, "Segnalazione non trovata.", "non_trovato")
             # l'autore la vede come nuova se cambia la risposta o la segnalazione viene risolta
             nuova = risposta != r["risposta"] or (body.stato == "chiusa" and r["stato"] != "chiusa")
-            c.execute("UPDATE segnalazioni SET stato = ?, risposta = ?, chiusa = ?, chiusa_da = ?, letta = ? WHERE id = ?",
+            c.execute("UPDATE segnalazioni SET stato = ?, risposta = ?, chiusa = ?, chiusa_da = ?, letta = ?, risposta_da = ? WHERE id = ?",
                       (body.stato, risposta, iso() if body.stato == "chiusa" else None, a["id"] if body.stato == "chiusa" else None,
-                       0 if nuova and (risposta or body.stato == "chiusa") else r["letta"], sid))
+                       0 if nuova and (risposta or body.stato == "chiusa") else r["letta"],
+                       None if not risposta else (a["id"] if risposta != r["risposta"] else r["risposta_da"]), sid))
             if body.stato != r["stato"]:
                 db.evento(c, "segnalazione_risolta" if body.stato == "chiusa" else "segnalazione_riaperta", r["autore_id"], a["id"], breve(r["testo"]))
         return json_ok()
