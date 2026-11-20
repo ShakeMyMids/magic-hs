@@ -211,6 +211,17 @@ SCHEMA = [
     );
     CREATE INDEX segnalazioni_autore ON segnalazioni(autore_id, creata);
     """,
+    # versione 8: regole delle aziende (gruppi di utenti con lo stesso campo azienda): limite IA per persona o IA spenta
+    """
+    CREATE TABLE aziende (
+        chiave TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        quota_ia INTEGER,
+        ia INTEGER NOT NULL DEFAULT 1,
+        aggiornata TEXT NOT NULL,
+        autore_id INTEGER REFERENCES utenti(id) ON DELETE SET NULL
+    );
+    """,
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {

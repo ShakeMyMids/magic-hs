@@ -21,7 +21,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   risultati (`/api/ricerche-vuote`, anonime), bolle simulate (`/api/bolle`, personali) e cambio doganale del mese
   (`/api/cambio`), tariffa del trasporto (`/api/trasporto`), segnalazioni di problemi (`/api/segnalazioni`, le proprie con la
   risposta, `lette`; `risposte` di `/api/io` conta quelle nuove), IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
-  `ia`, `impostazioni`, `backup`, `copia-esterna`, dati TARIC (con lo stato della copia esterna), `ricerca` e `sinonimi`,
+  `aziende` (`regole`, `azione` disconnetti/sospendi/riattiva, `nome` per rinominare o unire), `ia`, `impostazioni`, `backup`,
+  `copia-esterna`, dati TARIC (con lo stato della copia esterna), `ricerca` e `sinonimi`,
   `trasporto` (PDF delle tariffe, versioni, `trasporto/carburante` a mano, `trasporto/carburante/aggiorna`), `segnalazioni`
   (risposta, `stato` aperta/chiusa, eliminazione; quelle aperte nel `riepilogo`), registro. `/api/salute` per Render. Middleware: compressione gzip e cache lunga per i file con `?v=`. Gli errori si restituiscono come
   `{"errore": "<messaggio italiano>", "codice": "<codice>"}`.
@@ -32,6 +33,9 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   2015/2447), dalla BCE in CSV (`TIME_PERIOD`, `OBS_VALUE`), tenuto nella tabella `cambi_doganali`.
 - `taric/ricerca.py`: le regole della ricerca di `app.js` (`piano`, `radice`) lato server, per controllare che i termini
   di un sinonimo esistano nella nomenclatura (`presente`). `taric/cambi.py`: cosa cambia per un codice tra due versioni.
+- `taric/aziende.py`: il campo `azienda` degli utenti fa da gruppo (`chiave`: minuscole, spazi ridotti); le regole nella tabella
+  `aziende` (`quota_ia`, `ia`) si scrivono in `utenti.quota_ia` di chi c'è (`applica`, non gli amministratori) e di chi entra dopo
+  (approvazione, cambio di azienda in Gestione); `/api/io` non cambia più l'azienda (la cambia l'amministratore).
 - `taric/copia.py`: copia settimanale del database in un archivio compatibile S3 (firma AWS Signature V4 con httpx, senza
   librerie in più; nomi a rotazione su 8 settimane; dopo un errore si riprova dopo 6 ore; esito in `impostazioni`
   `copia_esterna`). Il pianificatore la chiama tra i suoi `compiti`; il backup si scrive con `Backup.scrivi` in un file a
@@ -113,7 +117,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   (sezione Bolla: elenco, intestazione, articoli, tributi, documenti della casella 44, riferimenti DE e casella di ogni campo in
   `RIF_IMP`/`RIF_EXP`, foglio `#bolla-stampa` con `body.stampa-bolla`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
-  (Utenti, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Registro), `js/porto.js` (la scena si tocca:
+  (Utenti con azienda e «Disconnetti», Aziende, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Trasporto,
+  Segnalazioni, Registro), `js/porto.js` (la scena si tocca:
   gruppi `.t-*` di `disegni.js` animati per la durata di una classe; tre tocchi sulla gru o «gioca» scritto fuori dai campi aprono
   il gioco; «nave», «festa», «magic» e cinque tocchi sul logo; l'albero si scuote e fa cadere quello della stagione; `[data-gioca]`
   nelle pagine d'attesa; pioggia di benvenuto `.pioggia`, una volta al giorno), `js/calendario.js` (nell'`<head>` di ogni pagina:
@@ -127,7 +132,7 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   `T.festone` (striscia in cima alla barra) e `T.accessorio` (logo); `comune.js` li inserisce con `data-auguri` e
   l'avviso dell'anteprima), `js/gioco.js` (`T.gioco()`, «Carica la nave»: SVG con le variabili `--d-*`, record in `localStorage`
   `magic-hs.gioco`), `T.vignetta()` di `disegni.js` per gli elenchi vuoti, codici recenti di `app.js` (`magic-hs.recenti`),
-  `js/aiuto.js` (Marino, il gabbiano marinaio dell'aiuto: tasto `#aiuto` «?» nella barra, nascosto in Gestione, o il tasto ?; visita a passi della sezione aperta con `PASSI[vista]`, ogni passo con `t`, `d` ed `e` che trova l'elemento da illuminare, spesso il `.box` dalla sua `.lab` con `box(/^…/)`: i passi senza elemento si saltano, quindi se cambi un'etichetta o un riquadro controlla i passi; luce `.aiuto-luce` e fumetto `.aiuto-posto` seguiti a ogni fotogramma; la prima volta in una sezione l'invito `.aiuto.invito`
+  `js/aiuto.js` (Marino, il gabbiano marinaio dell'aiuto: tasto `#aiuto` «?» nella barra, nascosto in Gestione, o il tasto ?; visita a passi della sezione aperta con `PASSI[vista]`, ogni passo con `t`, `d` ed `e` che trova l'elemento da illuminare, spesso il `.box` dalla sua `.lab` con `box(/^…/)`: i passi senza elemento si saltano, quindi se cambi un'etichetta o un riquadro controlla i passi; luce `.aiuto-luce` e fumetto `.aiuto-posto` seguiti a ogni fotogramma; nella pagina d'accesso (`accedi.html`, `data-pagina="accedi"`) la vista `accesso`, che presenta l'app; la prima volta in una sezione l'invito `.aiuto.invito`
   (niente velo né fuoco; sezioni già viste in `localStorage` `magic-hs.aiuto-visto`, che `tests/e2e_sito.js` riempie in ogni contesto); disegno SVG con le classi `mr-*` e i colori `--g-*`; le prove sono in `tests/e2e_sito.js`),
   `js/segnala.js` (`T.segnala()`, finestra «Segnala un problema» aperta dagli elementi `[data-segnala]` e dall'ultimo passo di
   Marino: testo e contesto, cioè sezione, codice aperto, schermo, browser, dati in uso; tabella `segnalazioni` con `letta` per la

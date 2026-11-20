@@ -2,6 +2,7 @@
    volo e spiega la sezione aperta a passi: illumina una parte della pagina alla volta e la racconta nel fumetto, con
    Indietro, Avanti e Chiudi (anche con le frecce e con Esc). Gestione no: lì il tasto non c'è. La prima volta che si apre
    una sezione arriva da solo e chiede se spiegarla (invito che non blocca la pagina, una volta per sezione e dispositivo).
+   Nella pagina d'accesso (accedi.html, vista «accesso») si presenta e presenta l'app, nello stesso modo.
    I passi di ogni vista sono in PASSI: «e» trova l'elemento da illuminare nella pagina com'è adesso; se non c'è il passo
    si salta (il primo e l'ultimo parlano senza indicare niente). I colori del disegno sono le variabili --g-* di app.css;
    con il movimento ridotto Marino compare e sparisce senza volare. */
@@ -35,8 +36,9 @@
   T.marino = function () { return MARINO; };
 
   /* ------------------------------------------------------------------ dove siamo e cosa c'è nella pagina */
-  function sezione() { return document.querySelector('main > section[id^="view-"]:not([hidden])'); }
-  function vista() { var s = sezione(); return s ? s.id.slice(5) : ''; }
+  var ACCESSO = document.body.getAttribute('data-pagina') === 'accedi';          // pagina d'accesso: Marino presenta l'app
+  function sezione() { return ACCESSO ? document.querySelector('main') : document.querySelector('main > section[id^="view-"]:not([hidden])'); }
+  function vista() { if (ACCESSO) return 'accesso'; var s = sezione(); return s ? s.id.slice(5) : ''; }
   function visibile(e) { return !!(e && e.isConnected && e.getClientRects().length && !e.closest('[hidden]')); }
   function q(sel) { var s = sezione(), e = s && s.querySelector(sel); return visibile(e) ? e : null; }
   function tutti(sel) { var s = sezione(); return s ? Array.prototype.filter.call(s.querySelectorAll(sel), visibile) : []; }
@@ -128,6 +130,17 @@
         FINE
       ];
     },
+    accesso: function () {
+      return [
+        { t: 'MAGIC HS', d: 'Il sito dell\'azienda per classificare le merci in dogana: trovi il codice TARIC a 10 cifre cercando per parola ' +
+          'o per codice, oppure descrivendo la merce all\'intelligenza artificiale.' },
+        { t: 'Tutto per la dogana', d: 'Per ogni codice: dazi, antidumping, IVA, certificati e documenti richiesti, per il paese e il giorno che scegli. ' +
+          'Poi puoi simulare una bolla doganale e calcolare il costo di una spedizione con DHL Express.', e: sel('.scena') },
+        { t: 'Accedi', d: 'Se hai già un account, entra con la tua email e la password.', e: function () { return q('#accedi') || q('[data-a="accedi"]'); } },
+        { t: 'Richiedi un account', d: 'Se non ce l\'hai, chiedilo qui: l\'amministratore approva la richiesta e poi entri con la tua email.', e: sel('[data-a="richiedi"]') },
+        { t: 'Ci vediamo dentro', d: 'Una volta dentro premi «?» in ogni sezione: ti spiego io come funziona.', e: function () { return visibile(tasto) ? tasto : null; } }
+      ];
+    },
     profilo: function () {
       return [
         { t: 'Profilo', d: 'Qui ci sono il tuo account, le preferenze e quello che hai classificato.' },
@@ -192,6 +205,7 @@
   /* la prima volta che si apre una sezione (su questo dispositivo) Marino arriva da solo e chiede se spiegarla; l'invito
      non blocca la pagina e non prende il fuoco. Le sezioni già viste sono in localStorage magic-hs.aiuto-visto. */
   var NOMI = { classifica: 'Classifica', nomenclatura: 'Nomenclatura', bolla: 'Bolla', profilo: 'Profilo' }, CHIAVE = 'magic-hs.aiuto-visto', attesaInvito = 0;
+  function pronta() { return ACCESSO || !!(T.app && T.app.utente && T.app.utente()); }
   function giaViste() {
     try { var l = JSON.parse(localStorage.getItem(CHIAVE) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return null; }   // null: senza archivio, niente inviti
   }
@@ -206,10 +220,11 @@
     segnaVista(v);
     var el = aperto.el;
     el.querySelector('#aiuto-titolo').textContent = 'Ciao, sono Marino!';
-    el.querySelector('#aiuto-testo').textContent = 'Vuoi che ti spieghi la sezione ' + NOMI[v] + '? Bastano pochi passi.';
+    el.querySelector('#aiuto-testo').textContent = v === 'accesso' ? 'Sono il gabbiano di MAGIC HS. Vuoi che ti presenti l\'app? Bastano pochi passi.'
+      : 'Vuoi che ti spieghi la sezione ' + NOMI[v] + '? Bastano pochi passi.';
     el.querySelector('[data-aiuto="indietro"]').hidden = true;
     el.querySelector('[data-aiuto="no"]').hidden = false;
-    el.querySelector('[data-aiuto="avanti"]').innerHTML = T.icona('spunta') + 'Sì, spiegami';
+    el.querySelector('[data-aiuto="avanti"]').innerHTML = T.icona('spunta') + (v === 'accesso' ? 'Sì, presentamela' : 'Sì, spiegami');
   }
   function forseInvita() {
     clearTimeout(attesaInvito);
@@ -218,7 +233,7 @@
     attesaInvito = setTimeout(function () {
       if (vista() !== v || aperto) return;
       // pagina non ancora pronta, una finestra aperta o la scheda del browser in secondo piano: si riprova tra poco
-      if (document.querySelector('.velo') || document.hidden || !(T.app && T.app.utente && T.app.utente())) { forseInvita(); return; }
+      if (document.querySelector('.velo') || document.hidden || !pronta()) { forseInvita(); return; }
       invita(v);
     }, 1500);
   }

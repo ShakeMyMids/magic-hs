@@ -48,7 +48,8 @@
     h += '<div class="foglio"><div class="box s6"><div class="lab">' + T.icona('utente') + 'Il tuo account</div>' +
       '<form class="modulo" data-p="salva-account"><p class="nota">Accedi con <b>' + esc(io.email) + '</b></p><div class="due">' +
       '<label>Nome e cognome<input class="campo" name="nome" required minlength="2" maxlength="100" value="' + esc(io.nome) + '"></label>' +
-      '<label>Azienda<input class="campo" name="azienda" maxlength="150" value="' + esc(io.azienda) + '"></label></div>' +
+      '<label>Azienda<input class="campo" value="' + esc(io.azienda || 'nessuna') + '" readonly aria-describedby="azienda-nota"></label></div>' +
+      '<p class="nota" id="azienda-nota">L\'azienda la cambia l\'amministratore.</p>' +
       '<div class="fila"><button class="btn pri" type="submit">Salva</button></div>' + riga('account') + '</form></div>';
     h += '<div class="box s6"><div class="lab">' + T.icona('lucchetto') + 'Password</div>' +
       '<form class="modulo" data-p="password"><input class="trappola" name="username" autocomplete="username" value="' + esc(io.email) + '" tabindex="-1" aria-hidden="true">' +
@@ -201,7 +202,7 @@
     ev.preventDefault();
     var dati = new FormData(f);
     if (azione === 'salva-account') {
-      T.api('PUT', '/api/io', { nome: dati.get('nome'), azienda: dati.get('azienda') }).then(function () {
+      T.api('PUT', '/api/io', { nome: dati.get('nome') }).then(function () {
         var nome = String(dati.get('nome') || '').trim();
         messaggio('account', 'Dati salvati.', true); document.getElementById('chi-nome').textContent = nome;
         document.getElementById('chi-iniziali').textContent = nome.split(/\s+/).slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase();

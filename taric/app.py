@@ -34,6 +34,7 @@ from . import __version__
 from . import sicurezza as S
 from .backup import Backup, ErroreBackup
 from .cambi import cambi
+from . import aziende as AZ
 from .carburante import Carburante, ErroreCarburante
 from .config import Config
 from .copia import CopiaEsterna
@@ -85,8 +86,7 @@ class Errore(HTTPException):
 
 # ------------------------------------------------------------------ modelli delle richieste
 class Profilo(BaseModel):
-    nome: str = Field(min_length=2, max_length=100)
-    azienda: str = Field(default="", max_length=150)
+    nome: str = Field(min_length=2, max_length=100)        # l'azienda la cambia l'amministratore (fa da gruppo)
 
 
 class Preferenze(BaseModel):
@@ -203,6 +203,23 @@ class ModificaUtente(BaseModel):
     azienda: Optional[str] = Field(default=None, max_length=150)
     ruolo: Optional[Literal["utente", "amministratore"]] = None
     quota_ia: Optional[int] = Field(default=None, ge=0, le=100000)     # None (inviato) = limite predefinito
+
+
+# aziende: regole comuni, azioni su tutte le persone, nuovo nome (o unione con un'altra azienda)
+class AziendaRegole(BaseModel):
+    azienda: str = Field(min_length=1, max_length=150)
+    quota_ia: Optional[int] = Field(default=None, ge=0, le=100000)     # None = limite predefinito
+    ia: bool = True
+
+
+class AziendaAzione(BaseModel):
+    azienda: str = Field(min_length=1, max_length=150)
+    azione: Literal["disconnetti", "sospendi", "riattiva"]
+
+
+class AziendaNome(BaseModel):
+    azienda: str = Field(min_length=1, max_length=150)
+    nome: str = Field(min_length=1, max_length=150)
 
 
 class Motivo(BaseModel):
@@ -643,13 +660,17 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                     raise Errore(409, "Questo ruolo non si può cambiare da qui.", "ruolo")
                 c.execute("UPDATE utenti SET ruolo = ? WHERE id = ?", (body.ruolo, uid))
                 db.evento(c, "ruolo", uid, a["id"], body.ruolo)
+            if "azienda" in campi and body.azienda is not None and AZ.nome_pulito(body.azienda) != AZ.nome_pulito(u["azienda"]):
+                nuova = AZ.nome_pulito(body.azienda)
+                c.execute("UPDATE utenti SET azienda = ? WHERE id = ?", (nuova, uid))
+                db.evento(c, "azienda", uid, a["id"], f"{AZ.nome_pulito(u['azienda']) or '–'} → {nuova or '–'}")
+                if AZ.chiave(nuova) != AZ.chiave(u["azienda"]):       # entra in un'altra azienda: ne prende le regole
+                    AZ.applica(c, AZ.regole(c, AZ.chiave(nuova)), [utente_o_404(c, uid)])
             if "quota_ia" in campi:
                 c.execute("UPDATE utenti SET quota_ia = ? WHERE id = ?", (body.quota_ia, uid))
                 db.evento(c, "quota_ia", uid, a["id"], "predefinito" if body.quota_ia is None else str(body.quota_ia))
             if "nome" in campi and body.nome:
                 c.execute("UPDATE utenti SET nome = ? WHERE id = ?", (nome_pulito(body.nome), uid))
-            if "azienda" in campi and body.azienda is not None:
-                c.execute("UPDATE utenti SET azienda = ? WHERE id = ?", (body.azienda.strip(), uid))
             c.execute("UPDATE utenti SET aggiornato = ? WHERE id = ?", (iso(), uid))
         return json_ok()
 
@@ -666,6 +687,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                     raise Errore(409, "L'utente non ha una password: prepara un link per impostarla.", "senza_password")
                 c.execute("UPDATE utenti SET stato = 'attivo', motivo_stato = '', aggiornato = ? WHERE id = ?", (iso(), uid))
                 db.evento(c, "approvato" if azione == "approva" else "riattivato", uid, a["id"], u["email"])
+                if azione == "approva":                                  # entra nella sua azienda: ne prende le regole
+                    AZ.applica(c, AZ.regole(c, AZ.chiave(u["azienda"])), [u])
             elif azione in ("rifiuta", "sospendi"):
                 c.execute("UPDATE utenti SET stato = ?, motivo_stato = ?, aggiornato = ? WHERE id = ?",
                           ("rifiutato" if azione == "rifiuta" else "sospeso", motivo, iso(), uid))
@@ -689,6 +712,99 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             c.execute("DELETE FROM utenti WHERE id = ?", (uid,))
             db.evento(c, "utente_eliminato", None, a["id"], f"{u['email']} ({u['nome']})")
         return json_ok()
+
+    # ---------------------------------------------------------------- aziende: gruppi di persone con regole comuni (taric/aziende.py)
+    @app.get("/api/admin/aziende")
+    def admin_aziende(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        mese = mese_corrente()
+        with db.connessione() as c:
+            gruppi: dict[str, dict[str, Any]] = {}
+            for r in c.execute("SELECT * FROM aziende").fetchall():
+                gruppi[r["chiave"]] = {"chiave": r["chiave"], "nome": r["nome"], "persone": [],
+                                       "regole": {"quota_ia": r["quota_ia"], "ia": bool(r["ia"]), "aggiornate": r["aggiornata"]}}
+            senza, righe = 0, {}
+            for u in c.execute("SELECT * FROM utenti ORDER BY nome").fetchall():
+                k = AZ.chiave(u["azienda"])
+                if not k:
+                    senza += 1
+                    continue
+                g = gruppi.setdefault(k, {"chiave": k, "nome": "", "persone": [], "regole": None})
+                righe.setdefault(k, []).append(u)
+                g["persone"].append({"id": u["id"], "nome": u["nome"], "email": u["email"], "stato": u["stato"], "ruolo": u["ruolo"],
+                                     "quota_ia": u["quota_ia"], "limite": ia.limite(c, u), "classificazioni": ia.usate(c, u["id"], mese)})
+            for k, g in gruppi.items():
+                g["nome"] = g["nome"] or AZ.nome_di(righe.get(k, []))
+                g["classificazioni"] = sum(p["classificazioni"] for p in g["persone"])
+        return {"aziende": sorted(gruppi.values(), key=lambda g: g["nome"].casefold()), "senza_azienda": senza, "mese": mese}
+
+    def azienda_o_404(c: sqlite3.Connection, nome: str) -> tuple[str, list[sqlite3.Row], sqlite3.Row | None, str]:
+        k = AZ.chiave(nome)
+        persone, r = AZ.membri(c, k), AZ.regole(c, k)
+        if not persone and r is None:
+            raise Errore(404, "Azienda inesistente.", "non_trovato")
+        return k, persone, r, (r["nome"] if r else AZ.nome_di(persone))
+
+    @app.put("/api/admin/aziende/regole")
+    def admin_azienda_regole(body: AziendaRegole, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Limite al mese per persona (o IA spenta) per chi c'è e per chi entra dopo."""
+        with db.transazione() as c:
+            k, persone, _r, nome = azienda_o_404(c, body.azienda)
+            c.execute("INSERT INTO aziende(chiave, nome, quota_ia, ia, aggiornata, autore_id) VALUES (?, ?, ?, ?, ?, ?) "
+                      "ON CONFLICT(chiave) DO UPDATE SET quota_ia = excluded.quota_ia, ia = excluded.ia, aggiornata = excluded.aggiornata, "
+                      "autore_id = excluded.autore_id", (k, nome, body.quota_ia, int(body.ia), iso(), a["id"]))
+            n = AZ.applica(c, AZ.regole(c, k), persone)
+            regola = "IA spenta" if not body.ia else ("limite predefinito" if body.quota_ia is None else f"{body.quota_ia} al mese per persona")
+            db.evento(c, "azienda_regole", None, a["id"], f"{nome}: {regola} ({n} persone)")
+        return json_ok(persone=n)
+
+    @app.post("/api/admin/aziende/azione")
+    def admin_azienda_azione(body: AziendaAzione, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Disconnette, sospende o riattiva tutte le persone dell'azienda, tranne gli amministratori."""
+        with db.transazione() as c:
+            _k, persone, _r, nome = azienda_o_404(c, body.azienda)
+            n = 0
+            for u in persone:
+                if u["ruolo"] == "amministratore" or u["email"] in cfg.amministratori:
+                    continue
+                if body.azione == "disconnetti":
+                    n += c.execute("DELETE FROM sessioni WHERE utente_id = ?", (u["id"],)).rowcount > 0
+                elif body.azione == "sospendi" and u["stato"] == "attivo":
+                    c.execute("UPDATE utenti SET stato = 'sospeso', motivo_stato = ?, aggiornato = ? WHERE id = ?", (f"Sospesa l'azienda {nome}", iso(), u["id"]))
+                    S.chiudi_tutte(c, u["id"])
+                    n += 1
+                elif body.azione == "riattiva" and u["stato"] == "sospeso" and u["hash_password"] is not None:
+                    c.execute("UPDATE utenti SET stato = 'attivo', motivo_stato = '', aggiornato = ? WHERE id = ?", (iso(), u["id"]))
+                    n += 1
+            tipo = {"disconnetti": "azienda_disconnessa", "sospendi": "azienda_sospesa", "riattiva": "azienda_riattivata"}[body.azione]
+            db.evento(c, tipo, None, a["id"], f"{nome} ({n} persone)")
+        return json_ok(persone=n)
+
+    @app.put("/api/admin/aziende/nome")
+    def admin_azienda_nome(body: AziendaNome, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Nuovo nome per tutte le persone dell'azienda; se un'altra azienda ha già quel nome, le due si uniscono: valgono
+        le regole di quella che c'era (se ne ha), altrimenti quelle dell'azienda rinominata, per tutti."""
+        nuovo = AZ.nome_pulito(body.nome)
+        kn = AZ.chiave(nuovo)
+        if not kn:
+            raise Errore(422, "Scrivi il nuovo nome dell'azienda.", "nome")
+        with db.transazione() as c:
+            k, persone, r, vecchio = azienda_o_404(c, body.azienda)
+            gia = [u for u in AZ.membri(c, kn)] if kn != k else []
+            rn = AZ.regole(c, kn) if kn != k else None
+            for u in persone:
+                c.execute("UPDATE utenti SET azienda = ?, aggiornato = ? WHERE id = ?", (nuovo, iso(), u["id"]))
+            if kn == k:                                   # solo maiuscole o spazi
+                c.execute("UPDATE aziende SET nome = ? WHERE chiave = ?", (nuovo, k))
+            elif rn is not None:                          # le regole dell'azienda che c'era valgono anche per chi arriva
+                c.execute("DELETE FROM aziende WHERE chiave = ?", (k,))
+                c.execute("UPDATE aziende SET nome = ? WHERE chiave = ?", (nuovo, kn))
+                AZ.applica(c, rn, persone)
+            elif r is not None:                           # le regole passano al nuovo nome, anche per chi c'era già
+                c.execute("UPDATE aziende SET chiave = ?, nome = ? WHERE chiave = ?", (kn, nuovo, k))
+                AZ.applica(c, AZ.regole(c, kn), gia)
+            unite = kn != k and (bool(gia) or rn is not None)
+            db.evento(c, "azienda_rinominata", None, a["id"], f"{vecchio} → {nuovo}" + (" (unite)" if unite else ""))
+        return json_ok(nome=nuovo, unite=unite)
 
     # ---------------------------------------------------------------- intelligenza artificiale e regole del sito
     @app.get("/api/admin/ia")
@@ -785,7 +901,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.put("/api/io")
     def modifica_io(body: Profilo, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
         with db.transazione() as c:
-            c.execute("UPDATE utenti SET nome = ?, azienda = ?, aggiornato = ? WHERE id = ?", (nome_pulito(body.nome), body.azienda.strip(), iso(), u["id"]))
+            c.execute("UPDATE utenti SET nome = ?, aggiornato = ? WHERE id = ?", (nome_pulito(body.nome), iso(), u["id"]))
         return json_ok()
 
     @app.put("/api/io/preferenze")

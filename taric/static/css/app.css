@@ -961,7 +961,7 @@ html.con-finestra{overflow:hidden}
    La parte spiegata resta chiara dentro un velo (ombra enorme intorno a un riquadro trasparente); il fumetto sta in basso
    a destra, sopra la barra delle sezioni sul telefono, e va in alto se copre la parte spiegata. Marino arriva e riparte in
    volo (.vola: ali alzate che battono); stato finale delle animazioni uguale a quello senza animazioni. */
-.aiuto{position:fixed;inset:0;z-index:80;pointer-events:none}
+.aiuto{position:fixed;inset:0;z-index:95;pointer-events:none}          /* sopra la pioggia di benvenuto (90), sotto le finestre (100) */
 .aiuto-blocco{position:absolute;inset:0;pointer-events:auto;cursor:var(--freccia,default)}
 .aiuto-luce{position:fixed;border-radius:14px;box-shadow:0 0 0 3px var(--accento),0 0 0 200vmax var(--aiuto-velo);pointer-events:none;
   transition:top .35s var(--dolce),left .35s var(--dolce),width .35s var(--dolce),height .35s var(--dolce);animation:velo .3s ease both}
@@ -1024,6 +1024,8 @@ html.con-finestra{overflow:hidden}
   .aiuto-gabbiano{width:74px}
   .aiuto-fumetto{margin-bottom:24px;padding:12px 14px}
   .aiuto-fumetto::before{bottom:20px}
+  .accesso .aiuto-posto{bottom:calc(14px + env(safe-area-inset-bottom))}       /* nella pagina d'accesso non c'è la barra in basso */
+  .accesso .aiuto.invito .aiuto-posto{top:calc(8px + env(safe-area-inset-top));bottom:auto}   /* l'invito sopra il disegno: il modulo resta libero */
 }
 @media (max-height:500px) and (orientation:landscape){
   .aiuto-gabbiano{width:58px}
@@ -1054,6 +1056,12 @@ html.con-finestra{overflow:hidden}
 .pannello label.corto{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--secondario)}
 .pannello label.corto .campo{width:140px;flex:none}
 .pannello .campo[readonly]{flex:1 1 260px;font-size:13px}
+.pannello label.corto .campo.largo{width:min(320px,70vw)}
+.pannello form.fila .spunta{display:inline-flex;align-items:center;min-height:40px}
+/* aziende in Gestione: le persone del gruppo */
+.az-persone{margin:0;padding:0;list-style:none;display:grid;gap:6px;font-size:14px}
+.az-persone li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding-top:6px;border-top:1px solid var(--linea)}
+.campo[readonly]:not(.pannello .campo){background:var(--carta-2);color:var(--secondario)}
 
 /* festa: la gru carica sulla nave il container dell'IA, che si illumina; sirena, timbro e la nave salpa.
    Lo stato finale è quello senza animazioni (movimento ridotto) */

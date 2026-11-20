@@ -31,13 +31,14 @@ async function cerca(p, testo) {
   await p.waitForSelector('#risultati[data-q="' + testo + '"] .trow.ris');
 }
 async function senzaScorrimento(p) { return p.evaluate(() => document.documentElement.scrollWidth <= innerWidth); }
-async function richiedi(p, nome, email, password, messaggio) {
+async function richiedi(p, nome, email, password, messaggio, azienda) {
   await p.goto(B + '/accedi#richiedi');
   await p.waitForSelector('#richiedi:not([hidden])');
   await p.fill('#richiedi input[name=nome]', nome);
   await p.fill('#richiedi input[name=email]', email);
   await p.fill('#richiedi input[name=password]', password);
   if (messaggio) await p.fill('#richiedi textarea[name=richiesta]', messaggio);
+  if (azienda) await p.fill('#richiedi input[name=azienda]', azienda);
   await p.waitForTimeout(3300);                       // il modulo firmato vale dopo qualche secondo (contro i bot)
   await p.click('#richiedi button[type=submit]');
 }
@@ -55,7 +56,7 @@ async function accedi(p, email, password) {
   b.newContext = async (o) => {
     const c = await nuovoContesto(o);
     await c.addInitScript(() => {
-      try { if (localStorage.getItem('magic-hs.aiuto-visto') === null) localStorage.setItem('magic-hs.aiuto-visto', '["classifica","nomenclatura","bolla","profilo"]'); }
+      try { if (localStorage.getItem('magic-hs.aiuto-visto') === null) localStorage.setItem('magic-hs.aiuto-visto', '["accesso","classifica","nomenclatura","bolla","profilo"]'); }
       catch (e) { /* pagina senza archivio */ }
     });
     return c;
@@ -196,7 +197,7 @@ async function accedi(p, email, password) {
   await capo.click('#tab-gestione');
   await capo.waitForSelector('button[data-g="u-apri"]');
   ok((await capo.$$('button[data-g="u-apri"]')).length === 1 && await capo.isVisible('td >> text=capo@azienda.it'), 'in Utenti c\'è l\'amministratore');
-  ok((await capo.$$('.sotto button')).length === 7, 'Utenti, IA, Dati TARIC, Ricerca, Trasporto, Segnalazioni, Registro');
+  ok((await capo.$$('.sotto button')).length === 8, 'Utenti, Aziende, IA, Dati TARIC, Ricerca, Trasporto, Segnalazioni, Registro');
   ok(await capo.isHidden('#aiuto'), 'in Gestione niente tasto dell\'aiuto');
 
   // parole cercate senza risultati e sinonimo aggiunto dall'amministratore
@@ -231,7 +232,7 @@ async function accedi(p, email, password) {
   // un collega chiede l'account e aspetta
   const cl = await b.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light' });
   const luca = await cl.newPage(); attenzione(luca, 'luca');
-  await richiedi(luca, 'Luca Bianchi', 'luca@azienda.it', 'Spedizioni-2026!', 'Ufficio import');
+  await richiedi(luca, 'Luca Bianchi', 'luca@azienda.it', 'Spedizioni-2026!', 'Ufficio import', 'Spedizioni Rossi');
   await luca.waitForSelector('text=Richiesta inviata');
   await accedi(luca, 'luca@azienda.it', 'Spedizioni-2026!');
   await luca.waitForSelector('text=in attesa di approvazione');
@@ -544,12 +545,54 @@ async function accedi(p, email, password) {
   await pronta(nuova);
   ok(!nuova.url().includes('#'), 'nuova password ed entrato');
 
+  // aziende: Luca ha chiesto l'account per «Spedizioni Rossi»; regole per tutti, poi «Disconnetti tutti» lo fa uscire
+  await capo.click('button[data-v="aziende"]');
+  await capo.click('tr:has-text("Spedizioni Rossi") button[data-g="az-apri"]');
+  await capo.fill('form[data-g="az-regole"] input[name=quota]', '3');
+  await capo.click('form[data-g="az-regole"] button[type=submit]');
+  await capo.waitForSelector('text=Regole salvate per 1 persona (e per chi entra dopo).');
+  ok(await capo.isVisible('tr:has-text("Spedizioni Rossi") >> text=3 al mese per persona') && await capo.isVisible('.az-persone >> text=Luca Bianchi'),
+    'aziende: limite di 3 classificazioni al mese per ogni persona dell\'azienda');
+  await capo.click('button[data-g="az-disconnetti"]');
+  await capo.waitForSelector('text=Spedizioni Rossi: disconnesse 1 persona.');
+  await nuova.reload(); await nuova.waitForSelector('#accedi');
+  ok(true, 'aziende: «Disconnetti tutti» fa uscire le persone dell\'azienda');
+  await accedi(nuova, 'luca@azienda.it', 'Nuova-Password-2026'); await pronta(nuova);
+  // in Utenti: l'azienda e «Disconnetti» di una persona
+  await capo.click('button[data-v="utenti"]');
+  await capo.waitForSelector('tr:has-text("luca@azienda.it") button[data-g="u-apri"]');
+  if (await capo.isHidden('form[data-g="u-azienda"]')) await capo.click('tr:has-text("luca@azienda.it") button[data-g="u-apri"]');   // già aperto dal link
+  ok((await capo.inputValue('form[data-g="u-azienda"] input[name=azienda]')) === 'Spedizioni Rossi' && await capo.isVisible('tr:has-text("luca@azienda.it") td[data-l="IA"]:has-text("/ 3")'),
+    'utenti: l\'azienda della persona e il limite dato dall\'azienda');
+  await capo.click('button[data-g="u-esci"]');
+  await capo.waitForSelector('text=è stato disconnesso da tutti i dispositivi');
+  await nuova.reload(); await nuova.waitForSelector('#accedi');
+  ok(true, 'utenti: «Disconnetti» fa uscire la persona da tutti i dispositivi');
+  await accedi(nuova, 'luca@azienda.it', 'Nuova-Password-2026'); await pronta(nuova);
+
   // sospensione: il collega esce
   await capo.click('button[data-g="u-sospendi"]');
   await capo.waitForSelector('text=Account sospeso.');
   await nuova.reload();
   await nuova.waitForSelector('#accedi');
   ok(true, 'sospeso: torna alla pagina d\'accesso');
+
+  // Marino nella pagina d'accesso: la prima volta sul dispositivo si presenta da solo e presenta l'app; poi con il tasto «?»
+  const nuovoDispositivo = await (await nuovoContesto({ viewport: { width: 1280, height: 860 } })).newPage(); attenzione(nuovoDispositivo, 'accesso');
+  await nuovoDispositivo.goto(B + '/accedi'); await nuovoDispositivo.waitForSelector('.aiuto.invito .aiuto-fumetto');
+  ok((await nuovoDispositivo.textContent('#aiuto-testo')).startsWith('Sono il gabbiano di MAGIC HS') && await nuovoDispositivo.isVisible('#accedi input[name=email]'),
+    'accesso: Marino si presenta da solo, senza coprire l\'accesso');
+  await nuovoDispositivo.click('[data-aiuto="avanti"]');                      // «Sì, presentamela»
+  await nuovoDispositivo.waitForSelector('.aiuto:not(.invito)', { state: 'attached' });
+  ok((await nuovoDispositivo.textContent('#aiuto-titolo')) === 'MAGIC HS' && (await nuovoDispositivo.textContent('.aiuto-passo')) === '1 di 5', 'accesso: presenta l\'app in 5 passi');
+  for (let k = 0; k < 4; k++) await nuovoDispositivo.click('[data-aiuto="avanti"]');
+  ok((await nuovoDispositivo.textContent('#aiuto-titolo')) === 'Ci vediamo dentro' && await nuovoDispositivo.isHidden('[data-aiuto="segnala"]'), 'accesso: l\'ultimo passo rimanda al «?» delle sezioni');
+  await nuovoDispositivo.click('[data-aiuto="avanti"]'); await nuovoDispositivo.waitForSelector('.aiuto', { state: 'detached' });
+  await nuovoDispositivo.reload(); await nuovoDispositivo.waitForTimeout(2500);
+  ok(await nuovoDispositivo.isHidden('.aiuto'), 'accesso: la volta dopo non arriva da solo');
+  await nuovoDispositivo.click('#aiuto'); await nuovoDispositivo.waitForSelector('.aiuto .aiuto-fumetto');
+  ok((await nuovoDispositivo.textContent('#aiuto-testo')).startsWith('Ciao, sono Marino!'), 'accesso: con il tasto «?» si presenta di nuovo');
+  await nuovoDispositivo.keyboard.press('Escape');
 
   // telefono e tema scuro
   const t = await b.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', deviceScaleFactor: 2 });
