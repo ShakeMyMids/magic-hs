@@ -34,11 +34,12 @@ from . import __version__
 from . import sicurezza as S
 from .backup import Backup, ErroreBackup
 from .cambi import cambi
+from . import aziende as AZ
 from .carburante import Carburante, ErroreCarburante
 from .config import Config
 from .copia import CopiaEsterna
 from .dati import RE_VERSIONE, GestoreDati
-from .db import Database, iso
+from .db import Database, iso, tra
 from .ia import ErroreIA, ServizioIA, mese_corrente
 from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
 from .trasporto import MASSIMO_PDF, ErroreTariffe, Tariffe
@@ -85,8 +86,7 @@ class Errore(HTTPException):
 
 # ------------------------------------------------------------------ modelli delle richieste
 class Profilo(BaseModel):
-    nome: str = Field(min_length=2, max_length=100)
-    azienda: str = Field(default="", max_length=150)
+    nome: str = Field(min_length=2, max_length=100)        # l'azienda la cambia l'amministratore (fa da gruppo)
 
 
 class Preferenze(BaseModel):
@@ -144,6 +144,26 @@ class BollaModificata(BaseModel):
     dati: dict[str, Any]
 
 
+# segnalazione di un problema: il testo e dove si trovava chi scrive (sezione, codice aperto, schermo, browser)
+class ContestoSegnalazione(BaseModel):
+    indirizzo: str = Field(default="", max_length=300)
+    codice: str = Field(default="", max_length=20)
+    schermo: str = Field(default="", max_length=20)
+    browser: str = Field(default="", max_length=300)
+    versione: str = Field(default="", max_length=40)
+
+
+class Segnalazione(BaseModel):
+    testo: str = Field(min_length=5, max_length=2000)
+    sezione: str = Field(default="", max_length=40)
+    contesto: ContestoSegnalazione = Field(default_factory=ContestoSegnalazione)
+
+
+class RispostaSegnalazione(BaseModel):
+    stato: Literal["aperta", "chiusa"]
+    risposta: str = Field(default="", max_length=2000)
+
+
 # supplemento carburante di DHL Express della settimana scritto a mano (Express ed Economy Select)
 class CarburanteManuale(BaseModel):
     percentuale: float = Field(ge=0, le=100)
@@ -185,6 +205,23 @@ class ModificaUtente(BaseModel):
     quota_ia: Optional[int] = Field(default=None, ge=0, le=100000)     # None (inviato) = limite predefinito
 
 
+# aziende: regole comuni, azioni su tutte le persone, nuovo nome (o unione con un'altra azienda)
+class AziendaRegole(BaseModel):
+    azienda: str = Field(min_length=1, max_length=150)
+    quota_ia: Optional[int] = Field(default=None, ge=0, le=100000)     # None = limite predefinito
+    ia: bool = True
+
+
+class AziendaAzione(BaseModel):
+    azienda: str = Field(min_length=1, max_length=150)
+    azione: Literal["disconnetti", "sospendi", "riattiva"]
+
+
+class AziendaNome(BaseModel):
+    azienda: str = Field(min_length=1, max_length=150)
+    nome: str = Field(min_length=1, max_length=150)
+
+
 class Motivo(BaseModel):
     motivo: str = Field(default="", max_length=500)
 
@@ -222,9 +259,18 @@ RE_ISTANTE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 def istante_valido(s: Any) -> str:
-    """Un orario come lo scrive il sito (AAAA-MM-GGThh:mm:ssZ), altrimenti adesso: da un file importato arriva di tutto."""
-    s = str(s or "")
-    return s if RE_ISTANTE.match(s) else iso()
+    """Un orario come lo scrive il sito (AAAA-MM-GGThh:mm:ssZ). Da un file importato arriva di tutto: un orario ISO con il
+    fuso («+01:00») si riporta in UTC, così importare due volte lo stesso file non crea doppioni; il resto diventa adesso."""
+    s = str(s or "").strip()
+    if RE_ISTANTE.match(s):
+        return s
+    try:
+        d = dt.datetime.fromisoformat(s[:40])
+    except ValueError:
+        return iso()
+    if d.tzinfo is None or not 1900 < d.year < 2200:
+        return iso()
+    return iso(d.astimezone(dt.timezone.utc))
 
 
 # ------------------------------------------------------------------ applicazione
@@ -623,13 +669,17 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                     raise Errore(409, "Questo ruolo non si può cambiare da qui.", "ruolo")
                 c.execute("UPDATE utenti SET ruolo = ? WHERE id = ?", (body.ruolo, uid))
                 db.evento(c, "ruolo", uid, a["id"], body.ruolo)
+            if "azienda" in campi and body.azienda is not None and AZ.nome_pulito(body.azienda) != AZ.nome_pulito(u["azienda"]):
+                nuova = AZ.nome_pulito(body.azienda)
+                c.execute("UPDATE utenti SET azienda = ? WHERE id = ?", (nuova, uid))
+                db.evento(c, "azienda", uid, a["id"], f"{AZ.nome_pulito(u['azienda']) or '–'} → {nuova or '–'}")
+                if AZ.chiave(nuova) != AZ.chiave(u["azienda"]):       # entra in un'altra azienda: ne prende le regole
+                    AZ.applica(c, AZ.regole(c, AZ.chiave(nuova)), [utente_o_404(c, uid)])
             if "quota_ia" in campi:
                 c.execute("UPDATE utenti SET quota_ia = ? WHERE id = ?", (body.quota_ia, uid))
                 db.evento(c, "quota_ia", uid, a["id"], "predefinito" if body.quota_ia is None else str(body.quota_ia))
             if "nome" in campi and body.nome:
                 c.execute("UPDATE utenti SET nome = ? WHERE id = ?", (nome_pulito(body.nome), uid))
-            if "azienda" in campi and body.azienda is not None:
-                c.execute("UPDATE utenti SET azienda = ? WHERE id = ?", (body.azienda.strip(), uid))
             c.execute("UPDATE utenti SET aggiornato = ? WHERE id = ?", (iso(), uid))
         return json_ok()
 
@@ -646,6 +696,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                     raise Errore(409, "L'utente non ha una password: prepara un link per impostarla.", "senza_password")
                 c.execute("UPDATE utenti SET stato = 'attivo', motivo_stato = '', aggiornato = ? WHERE id = ?", (iso(), uid))
                 db.evento(c, "approvato" if azione == "approva" else "riattivato", uid, a["id"], u["email"])
+                if azione == "approva":                                  # entra nella sua azienda: ne prende le regole
+                    AZ.applica(c, AZ.regole(c, AZ.chiave(u["azienda"])), [u])
             elif azione in ("rifiuta", "sospendi"):
                 c.execute("UPDATE utenti SET stato = ?, motivo_stato = ?, aggiornato = ? WHERE id = ?",
                           ("rifiutato" if azione == "rifiuta" else "sospeso", motivo, iso(), uid))
@@ -669,6 +721,99 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             c.execute("DELETE FROM utenti WHERE id = ?", (uid,))
             db.evento(c, "utente_eliminato", None, a["id"], f"{u['email']} ({u['nome']})")
         return json_ok()
+
+    # ---------------------------------------------------------------- aziende: gruppi di persone con regole comuni (taric/aziende.py)
+    @app.get("/api/admin/aziende")
+    def admin_aziende(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        mese = mese_corrente()
+        with db.connessione() as c:
+            gruppi: dict[str, dict[str, Any]] = {}
+            for r in c.execute("SELECT * FROM aziende").fetchall():
+                gruppi[r["chiave"]] = {"chiave": r["chiave"], "nome": r["nome"], "persone": [],
+                                       "regole": {"quota_ia": r["quota_ia"], "ia": bool(r["ia"]), "aggiornate": r["aggiornata"]}}
+            senza, righe = 0, {}
+            for u in c.execute("SELECT * FROM utenti ORDER BY nome").fetchall():
+                k = AZ.chiave(u["azienda"])
+                if not k:
+                    senza += 1
+                    continue
+                g = gruppi.setdefault(k, {"chiave": k, "nome": "", "persone": [], "regole": None})
+                righe.setdefault(k, []).append(u)
+                g["persone"].append({"id": u["id"], "nome": u["nome"], "email": u["email"], "stato": u["stato"], "ruolo": u["ruolo"],
+                                     "quota_ia": u["quota_ia"], "limite": ia.limite(c, u), "classificazioni": ia.usate(c, u["id"], mese)})
+            for k, g in gruppi.items():
+                g["nome"] = g["nome"] or AZ.nome_di(righe.get(k, []))
+                g["classificazioni"] = sum(p["classificazioni"] for p in g["persone"])
+        return {"aziende": sorted(gruppi.values(), key=lambda g: g["nome"].casefold()), "senza_azienda": senza, "mese": mese}
+
+    def azienda_o_404(c: sqlite3.Connection, nome: str) -> tuple[str, list[sqlite3.Row], sqlite3.Row | None, str]:
+        k = AZ.chiave(nome)
+        persone, r = AZ.membri(c, k), AZ.regole(c, k)
+        if not persone and r is None:
+            raise Errore(404, "Azienda inesistente.", "non_trovato")
+        return k, persone, r, (r["nome"] if r else AZ.nome_di(persone))
+
+    @app.put("/api/admin/aziende/regole")
+    def admin_azienda_regole(body: AziendaRegole, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Limite al mese per persona (o IA spenta) per chi c'è e per chi entra dopo."""
+        with db.transazione() as c:
+            k, persone, _r, nome = azienda_o_404(c, body.azienda)
+            c.execute("INSERT INTO aziende(chiave, nome, quota_ia, ia, aggiornata, autore_id) VALUES (?, ?, ?, ?, ?, ?) "
+                      "ON CONFLICT(chiave) DO UPDATE SET quota_ia = excluded.quota_ia, ia = excluded.ia, aggiornata = excluded.aggiornata, "
+                      "autore_id = excluded.autore_id", (k, nome, body.quota_ia, int(body.ia), iso(), a["id"]))
+            n = AZ.applica(c, AZ.regole(c, k), persone)
+            regola = "IA spenta" if not body.ia else ("limite predefinito" if body.quota_ia is None else f"{body.quota_ia} al mese per persona")
+            db.evento(c, "azienda_regole", None, a["id"], f"{nome}: {regola} ({n} persone)")
+        return json_ok(persone=n)
+
+    @app.post("/api/admin/aziende/azione")
+    def admin_azienda_azione(body: AziendaAzione, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Disconnette, sospende o riattiva tutte le persone dell'azienda, tranne gli amministratori."""
+        with db.transazione() as c:
+            _k, persone, _r, nome = azienda_o_404(c, body.azienda)
+            n = 0
+            for u in persone:
+                if u["ruolo"] == "amministratore" or u["email"] in cfg.amministratori:
+                    continue
+                if body.azione == "disconnetti":
+                    n += c.execute("DELETE FROM sessioni WHERE utente_id = ?", (u["id"],)).rowcount > 0
+                elif body.azione == "sospendi" and u["stato"] == "attivo":
+                    c.execute("UPDATE utenti SET stato = 'sospeso', motivo_stato = ?, aggiornato = ? WHERE id = ?", (f"Sospesa l'azienda {nome}", iso(), u["id"]))
+                    S.chiudi_tutte(c, u["id"])
+                    n += 1
+                elif body.azione == "riattiva" and u["stato"] == "sospeso" and u["hash_password"] is not None:
+                    c.execute("UPDATE utenti SET stato = 'attivo', motivo_stato = '', aggiornato = ? WHERE id = ?", (iso(), u["id"]))
+                    n += 1
+            tipo = {"disconnetti": "azienda_disconnessa", "sospendi": "azienda_sospesa", "riattiva": "azienda_riattivata"}[body.azione]
+            db.evento(c, tipo, None, a["id"], f"{nome} ({n} persone)")
+        return json_ok(persone=n)
+
+    @app.put("/api/admin/aziende/nome")
+    def admin_azienda_nome(body: AziendaNome, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Nuovo nome per tutte le persone dell'azienda; se un'altra azienda ha già quel nome, le due si uniscono: valgono
+        le regole di quella che c'era (se ne ha), altrimenti quelle dell'azienda rinominata, per tutti."""
+        nuovo = AZ.nome_pulito(body.nome)
+        kn = AZ.chiave(nuovo)
+        if not kn:
+            raise Errore(422, "Scrivi il nuovo nome dell'azienda.", "nome")
+        with db.transazione() as c:
+            k, persone, r, vecchio = azienda_o_404(c, body.azienda)
+            gia = [u for u in AZ.membri(c, kn)] if kn != k else []
+            rn = AZ.regole(c, kn) if kn != k else None
+            for u in persone:
+                c.execute("UPDATE utenti SET azienda = ?, aggiornato = ? WHERE id = ?", (nuovo, iso(), u["id"]))
+            if kn == k:                                   # solo maiuscole o spazi
+                c.execute("UPDATE aziende SET nome = ? WHERE chiave = ?", (nuovo, k))
+            elif rn is not None:                          # le regole dell'azienda che c'era valgono anche per chi arriva
+                c.execute("DELETE FROM aziende WHERE chiave = ?", (k,))
+                c.execute("UPDATE aziende SET nome = ? WHERE chiave = ?", (nuovo, kn))
+                AZ.applica(c, rn, persone)
+            elif r is not None:                           # le regole passano al nuovo nome, anche per chi c'era già
+                c.execute("UPDATE aziende SET chiave = ?, nome = ? WHERE chiave = ?", (kn, nuovo, k))
+                AZ.applica(c, AZ.regole(c, kn), gia)
+            unite = kn != k and (bool(gia) or rn is not None)
+            db.evento(c, "azienda_rinominata", None, a["id"], f"{vecchio} → {nuovo}" + (" (unite)" if unite else ""))
+        return json_ok(nome=nuovo, unite=unite)
 
     # ---------------------------------------------------------------- intelligenza artificiale e regole del sito
     @app.get("/api/admin/ia")
@@ -753,7 +898,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                                "condividi": pref.get("condividi", True) is not False},
                 "ia": {"disponibile": ia.disponibile and lim != 0 and not tetto, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
                        "usate": ia.usate(c, u["id"]), "mese": mese_corrente(), "tetto": tetto},
-                "dati": {"versione": dati.attiva(), "aggiornamento": (dati.in_corso or {}).get("fase")}}
+                "dati": {"versione": dati.attiva(), "aggiornamento": (dati.in_corso or {}).get("fase")},
+                # risposte dell'amministratore alle proprie segnalazioni non ancora viste nel profilo
+                "risposte": c.execute("SELECT COUNT(*) FROM segnalazioni WHERE autore_id = ? AND letta = 0", (u["id"],)).fetchone()[0]}
 
     @app.get("/api/io")
     def io(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
@@ -763,7 +910,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.put("/api/io")
     def modifica_io(body: Profilo, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
         with db.transazione() as c:
-            c.execute("UPDATE utenti SET nome = ?, azienda = ?, aggiornato = ? WHERE id = ?", (nome_pulito(body.nome), body.azienda.strip(), iso(), u["id"]))
+            c.execute("UPDATE utenti SET nome = ?, aggiornato = ? WHERE id = ?", (nome_pulito(body.nome), iso(), u["id"]))
         return json_ok()
 
     @app.put("/api/io/preferenze")
@@ -777,6 +924,81 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             if body.condividi is not None:
                 pref["condividi"] = body.condividi
             c.execute("UPDATE utenti SET preferenze = ? WHERE id = ?", (json.dumps(pref), u["id"]))
+        return json_ok()
+
+    # ------------------------------------------------------------------ segnalazioni di problemi
+    SEGNALAZIONI_ORA = 10                    # al massimo in un'ora per persona
+
+    def riga_segnalazione(r: sqlite3.Row, admin: bool) -> dict[str, Any]:
+        v = {"id": r["id"], "creata": r["creata"], "testo": r["testo"], "sezione": r["sezione"], "stato": r["stato"],
+             "risposta": r["risposta"], "chiusa": r["chiusa"], "letta": bool(r["letta"])}
+        if admin:
+            try:
+                contesto = json.loads(r["contesto"] or "{}")
+            except ValueError:
+                contesto = {}
+            v.update(contesto=contesto, autore=r["autore"] or "", email=r["email"] or "", chiusa_da=r["chiusa_da_nome"] or "")
+        return v
+
+    def breve(testo: str) -> str:
+        t = " ".join(testo.split())
+        return t if len(t) <= 80 else t[:79] + "…"
+
+    @app.post("/api/segnalazioni")
+    def segnala(body: Segnalazione, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        testo = body.testo.strip()
+        if len(testo) < 5:
+            raise Errore(422, "Scrivi qualche parola in più sul problema.", "testo")
+        with db.transazione() as c:
+            if c.execute("SELECT COUNT(*) FROM segnalazioni WHERE autore_id = ? AND creata > ?",
+                         (u["id"], tra(hours=-1))).fetchone()[0] >= SEGNALAZIONI_ORA:
+                raise Errore(429, "Hai mandato molte segnalazioni nell'ultima ora: riprova più tardi.", "troppe")
+            sid = c.execute("INSERT INTO segnalazioni(creata, autore_id, testo, sezione, contesto) VALUES (?, ?, ?, ?, ?)",
+                            (iso(), u["id"], testo, body.sezione.strip(), json.dumps(body.contesto.model_dump(), ensure_ascii=False))).lastrowid
+            db.evento(c, "segnalazione", u["id"], u["id"], breve(testo))
+        return json_ok(id=sid)
+
+    @app.get("/api/segnalazioni")
+    def mie_segnalazioni(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        with db.connessione() as c:
+            righe = c.execute("SELECT * FROM segnalazioni WHERE autore_id = ? ORDER BY creata DESC, id DESC LIMIT 50", (u["id"],)).fetchall()
+        return {"voci": [riga_segnalazione(r, False) for r in righe]}
+
+    @app.post("/api/segnalazioni/lette")
+    def segnalazioni_lette(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        with db.transazione() as c:
+            c.execute("UPDATE segnalazioni SET letta = 1 WHERE autore_id = ? AND letta = 0", (u["id"],))
+        return json_ok()
+
+    @app.get("/api/admin/segnalazioni")
+    def admin_segnalazioni(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.connessione() as c:
+            righe = c.execute("SELECT s.*, u.nome AS autore, u.email AS email, d.nome AS chiusa_da_nome FROM segnalazioni s "
+                              "LEFT JOIN utenti u ON u.id = s.autore_id LEFT JOIN utenti d ON d.id = s.chiusa_da "
+                              "ORDER BY s.stato = 'chiusa', s.creata DESC, s.id DESC LIMIT 300").fetchall()
+        return {"voci": [riga_segnalazione(r, True) for r in righe]}
+
+    @app.put("/api/admin/segnalazioni/{sid}")
+    def admin_segnalazione(sid: int, body: RispostaSegnalazione, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        risposta = body.risposta.strip()
+        with db.transazione() as c:
+            r = c.execute("SELECT * FROM segnalazioni WHERE id = ?", (sid,)).fetchone()
+            if r is None:
+                raise Errore(404, "Segnalazione non trovata.", "non_trovato")
+            # l'autore la vede come nuova se cambia la risposta o la segnalazione viene risolta
+            nuova = risposta != r["risposta"] or (body.stato == "chiusa" and r["stato"] != "chiusa")
+            c.execute("UPDATE segnalazioni SET stato = ?, risposta = ?, chiusa = ?, chiusa_da = ?, letta = ? WHERE id = ?",
+                      (body.stato, risposta, iso() if body.stato == "chiusa" else None, a["id"] if body.stato == "chiusa" else None,
+                       0 if nuova and (risposta or body.stato == "chiusa") else r["letta"], sid))
+            if body.stato != r["stato"]:
+                db.evento(c, "segnalazione_risolta" if body.stato == "chiusa" else "segnalazione_riaperta", r["autore_id"], a["id"], breve(r["testo"]))
+        return json_ok()
+
+    @app.delete("/api/admin/segnalazioni/{sid}")
+    def admin_elimina_segnalazione(sid: int, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.transazione() as c:
+            if not c.execute("DELETE FROM segnalazioni WHERE id = ?", (sid,)).rowcount:
+                raise Errore(404, "Segnalazione non trovata.", "non_trovato")
         return json_ok()
 
     # ------------------------------------------------------------------ bolle simulate
@@ -1122,9 +1344,11 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def admin_riepilogo(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         with db.connessione() as c:
             in_attesa = c.execute("SELECT COUNT(*) FROM utenti WHERE stato = 'in_attesa'").fetchone()[0]
+            segnalazioni = c.execute("SELECT COUNT(*) FROM segnalazioni WHERE stato = 'aperta'").fetchone()[0]
             carb = db.impostazioni(c)["carburante"]
         s = fuori.stato()
         return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso, "in_attesa": in_attesa,
+                "segnalazioni": segnalazioni,
                 "copia_esterna": "spenta" if s["problema"] else ("errore" if s["attiva"] and s["esito"] == "errore" else ""),
                 "carburante_giorni": giorni_carburante(carb) if tariffe.in_uso() else None}
 

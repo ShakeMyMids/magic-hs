@@ -289,6 +289,8 @@ def test_esporta_e_importa(sito: Sito):
     r = luca.post("/api/io/importa", json=ESPORTATO).json()
     assert (r["storico"], r["preferiti"]) == (2, 1) and luca.get("/api/preferiti").json()["voci"][0]["nota"] == "cliente X"
     assert luca.post("/api/io/importa", json=ESPORTATO).json()["storico"] == 0          # niente doppioni
+    # gli orari con il fuso diventano UTC (anche importando lo stesso file in secondi diversi non ci sono doppioni)
+    assert [v["quando"] for v in luca.get("/api/storico").json()["voci"]] == ["2026-11-11T09:00:00Z", "2026-11-10T09:00:00Z"]
     assert [v["testo"] for v in luca.get("/api/storico").json()["voci"]] == ["scarpe", "trapano"]
     r = capo.post("/api/io/importa", json=luca.get("/api/io/esporta").json()).json()    # da un account all'altro
     assert (r["storico"], r["preferiti"]) == (2, 1)

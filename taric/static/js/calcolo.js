@@ -436,6 +436,15 @@
         else ba(AGGIUNTIVI[g.tipo].charAt(0).toUpperCase() + AGGIUNTIVI[g.tipo].slice(1) + ': ' + (d.manca ? MANCA[d.manca] + '.' : 'non calcolabile qui (' + d.no + ').'));
       });
 
+      /* dazi di difesa commerciale (antidumping, compensativi): nascono e cambiano anche a metà mese, ma i dati TARIC sono
+         quelli del primo del mese; per una bolla di un giorno dopo, va verificato sul TARIC dell'UE (la pagina mette il link) */
+      var giornoDati = parseInt(String(ctx.dataDati || '').replace(/-/g, ''), 10);
+      if (giornoDati > 19000101 && giorno > giornoDati && gruppiAggiuntivi(M.righe, giorno).some(function (g) { return g.famiglia === 'antidumping' || g.famiglia === 'compensativo' || g.tipo === 555; })) {
+        r.verificaTaric = 'Dazi antidumping o compensativi: i dati TARIC sono del ' + dataIt(giornoDati) + ' e si aggiornano una volta al mese, quindi un dazio ' +
+          'nuovo o cambiato dopo quella data qui non c\'è. Verificali sul TARIC dell\'UE al giorno della bolla.';
+        r.avvertenze.push(r.verificaTaric);
+      }
+
       /* correzioni a mano: sostituiscono il calcolo, ma se il TARIC dà un altro importo è un conflitto */
       var tar = r.tributi.filter(function (x) { return x.tipo === 'dazio'; })[0];
       if (!vuoto(a.dazioManuale)) {

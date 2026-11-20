@@ -6,7 +6,7 @@
   var T = window.TARIC, esc = T.esc;
   var el = document.getElementById('view-gestione');
   var vista = T.viste = T.viste || {};
-  var st = { sotto: 'utenti', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, modelli: [], utenti: null, iaS: null,
+  var st = { aziende: null, azienda: '', sotto: 'utenti', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, modelli: [], utenti: null, iaS: null,
              aperto: 0, link: null, ricerca: null, sinonimoPer: '', bozza: null, trasporto: null };
 
   var ESITI = { ok: 'riuscito', errore: 'errore', non_disponibile: 'non ancora disponibile', in_corso: 'in corso', interrotto: 'interrotto' };
@@ -20,7 +20,10 @@
     backup_scaricato: 'Copia del database scaricata', sessioni_chiuse: 'Uscita da tutti i dispositivi',
     copia_esterna: 'Copia del database mandata fuori', copia_esterna_errore: 'Copia esterna non riuscita',
     sinonimo: 'Sinonimo aggiunto', sinonimo_tolto: 'Sinonimo tolto', tariffe_trasporto: 'Tariffe di trasporto caricate',
-    tariffe_trasporto_attivate: 'Tariffe di trasporto cambiate', carburante: 'Supplemento carburante cambiato'
+    tariffe_trasporto_attivate: 'Tariffe di trasporto cambiate', carburante: 'Supplemento carburante cambiato',
+    segnalazione: 'Problema segnalato', segnalazione_risolta: 'Segnalazione risolta', segnalazione_riaperta: 'Segnalazione riaperta',
+    azienda: 'Azienda cambiata', azienda_regole: 'Regole dell\'azienda', azienda_disconnessa: 'Azienda disconnessa', azienda_sospesa: 'Azienda sospesa',
+    azienda_riattivata: 'Azienda riattivata', azienda_rinominata: 'Azienda rinominata'
   };
   function numero(n) { return Number(n || 0).toLocaleString('it-IT'); }
 
@@ -34,10 +37,12 @@
   function carica() {
     var chiamate = [T.api('GET', '/api/admin/riepilogo').then(function (r) { st.riep = r; segnaRichieste(r); })];
     if (st.sotto === 'utenti' || st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/utenti').then(function (r) { st.utenti = r; }));
+    if (st.sotto === 'aziende') chiamate.push(T.api('GET', '/api/admin/aziende').then(function (r) { st.aziende = r; }));
     if (st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/ia').then(function (r) { st.iaS = r; }));
     if (st.sotto === 'dati') chiamate.push(T.api('GET', '/api/admin/dati').then(function (r) { st.dati = r; }));
     if (st.sotto === 'ricerca') chiamate.push(T.api('GET', '/api/admin/ricerca').then(function (r) { st.ricerca = r; }));
     if (st.sotto === 'trasporto') chiamate.push(T.api('GET', '/api/admin/trasporto').then(function (r) { st.trasporto = r; }));
+    if (st.sotto === 'segnalazioni') chiamate.push(T.api('GET', '/api/admin/segnalazioni').then(function (r) { st.segnalazioni = r.voci; }));
     if (st.sotto === 'registro') chiamate.push(T.api('GET', '/api/admin/eventi?limite=300').then(function (r) { st.eventi = r.eventi; }));
     return Promise.all(chiamate).then(disegna, function (e) { el.innerHTML = '<p class="errore">' + esc(errore(e)) + '</p>'; });
   }
@@ -45,12 +50,12 @@
   /* ------------------------------------------------------------------ disegno */
   function disegna() {
     var r = st.riep, h = '';
-    var schede = [['utenti', 'Utenti', 'utenti'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['ricerca', 'Ricerca', 'cerca'], ['trasporto', 'Trasporto', 'nave'], ['registro', 'Registro', 'registro']];
+    var schede = [['utenti', 'Utenti', 'utenti'], ['aziende', 'Aziende', 'container'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['ricerca', 'Ricerca', 'cerca'], ['trasporto', 'Trasporto', 'nave'], ['segnalazioni', 'Segnalazioni', 'attenzione'], ['registro', 'Registro', 'registro']];
     h += '<div class="sotto" role="group" aria-label="Parti della gestione">' + schede.map(function (x) {
       return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
     if (r) h += avvisi(r);
-    h += { dati: dati, registro: registro, ia: ia, utenti: utenti, ricerca: ricerca, trasporto: trasporto }[st.sotto]();
+    h += { dati: dati, registro: registro, ia: ia, utenti: utenti, aziende: aziende, ricerca: ricerca, trasporto: trasporto, segnalazioni: segnalazioni }[st.sotto]();
     el.innerHTML = h;
     pianificaRinfresco();
   }
@@ -58,6 +63,8 @@
   function avvisi(r) {
     var a = [], h = '';
     if (r.in_attesa && st.sotto !== 'utenti') a.push(r.in_attesa === 1 ? 'C\'è una richiesta di account da approvare: vai su Utenti.' : 'Ci sono ' + r.in_attesa + ' richieste di account da approvare: vai su Utenti.');
+    if (r.segnalazioni && st.sotto !== 'segnalazioni') a.push(r.segnalazioni === 1 ? 'C\'è una segnalazione di un problema da leggere: vai su Segnalazioni.'
+      : 'Ci sono ' + r.segnalazioni + ' segnalazioni di problemi da leggere: vai su Segnalazioni.');
     if (!r.ia && st.sotto !== 'ia') a.push('La classificazione assistita è spenta: inserisci la chiave di Gemini nel servizio su Render (vedi Intelligenza artificiale).');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC: vai su Dati TARIC.');
     if (r.copia_esterna && st.sotto !== 'dati') a.push(r.copia_esterna === 'errore' ? 'L\'ultima copia del database fuori da Render non è riuscita: vedi Dati TARIC.' : 'La copia del database fuori da Render è spenta: manca qualcosa nelle variabili MAGIC_HS_COPIA_* (vedi Dati TARIC).');
@@ -165,6 +172,9 @@
           return r;
         }).join('') + '</tbody></table></div>';
     }
+    var note = {};
+    U.utenti.forEach(function (x) { var n = String(x.azienda || '').trim(); if (n) note[n.toLowerCase()] = note[n.toLowerCase()] || n; });
+    h += '<datalist id="aziende-note">' + Object.keys(note).sort().map(function (k) { return '<option value="' + esc(note[k]) + '">'; }).join('') + '</datalist>';
     return h + '<p class="nota">Chi si registra dalla pagina d\'accesso resta in attesa finché non lo approvi. Password dimenticata: prepara un link e mandalo alla persona.</p></div></div>';
   }
 
@@ -173,7 +183,11 @@
     h += '<form class="fila" data-g="u-limite" data-id="' + x.id + '"><label class="corto">Classificazioni con l\'IA al mese' +
       '<input class="campo" type="number" min="0" max="100000" name="quota" value="' + (x.quota_ia === null ? '' : esc(x.quota_ia)) + '" placeholder="predefinito"></label>' +
       '<button class="btn sm" type="submit">Salva</button><span class="nota">Ora: ' + esc(limiteDi(x)) + (x.quota_ia === null ? ' (predefinito)' : '') + '. Vuoto = predefinito, 0 = IA spenta.</span></form>';
+    h += '<form class="fila" data-g="u-azienda" data-id="' + x.id + '"><label class="corto">Azienda<input class="campo largo" name="azienda" maxlength="150" list="aziende-note" value="' +
+      esc(x.azienda) + '" placeholder="nessuna"></label><button class="btn sm" type="submit">Salva</button>' +
+      '<span class="nota">Chi cambia azienda ne prende le regole (vedi Aziende).</span></form>';
     h += '<div class="fila"><button class="btn sm" type="button" data-g="u-link" data-id="' + x.id + '">' + T.icona('chiave') + 'Link per la password</button>';
+    if (!me) h += '<button class="btn sm" type="button" data-g="u-esci" data-id="' + x.id + '">' + T.icona('esci') + 'Disconnetti</button>';
     if (!me && !x.fisso) {
       h += x.ruolo === 'amministratore' ? '<button class="btn sm" type="button" data-g="u-ruolo" data-id="' + x.id + '" data-v="utente">Togli amministratore</button>'
         : '<button class="btn sm" type="button" data-g="u-ruolo" data-id="' + x.id + '" data-v="amministratore">Rendi amministratore</button>';
@@ -228,12 +242,15 @@
     return h + '</div></div>';
   }
 
-  /* puntino sulla scheda Gestione quando ci sono richieste da approvare */
+  /* puntino sulla scheda Gestione quando ci sono richieste da approvare o segnalazioni da leggere */
   function segnaRichieste(r) {
     var tab = document.getElementById('tab-gestione');
     if (!tab) return;
-    tab.classList.toggle('novita', !!r.in_attesa);
-    if (r.in_attesa) tab.title = r.in_attesa === 1 ? 'Una richiesta di account da approvare' : r.in_attesa + ' richieste di account da approvare'; else tab.removeAttribute('title');
+    var t = [];
+    if (r.in_attesa) t.push(r.in_attesa === 1 ? 'una richiesta di account da approvare' : r.in_attesa + ' richieste di account da approvare');
+    if (r.segnalazioni) t.push(r.segnalazioni === 1 ? 'una segnalazione da leggere' : r.segnalazioni + ' segnalazioni da leggere');
+    tab.classList.toggle('novita', t.length > 0);
+    if (t.length) tab.title = t.join(', ').charAt(0).toUpperCase() + t.join(', ').slice(1); else tab.removeAttribute('title');
   }
   T.segnaRichieste = function () { T.api('GET', '/api/admin/riepilogo').then(segnaRichieste, function () { /* niente puntino */ }); };
 
@@ -260,6 +277,20 @@
     else if (g === 'u-ruolo') {
       T.api('PATCH', '/api/admin/utenti/' + id, { ruolo: v }).then(function () { msg('utenti', v === 'amministratore' ? 'Ora è amministratore.' : 'Non è più amministratore.', true); },
         function (e) { msg('utenti', errore(e)); }).then(carica);
+    } else if (g === 'u-esci') {
+      if (!window.confirm('Disconnettere ' + (x ? x.nome : '') + ' da tutti i dispositivi? Dovrà rientrare con la password.')) return true;
+      azioneUtente(id, 'esci-ovunque', null, (x ? x.nome : 'La persona') + ' è stato disconnesso da tutti i dispositivi.');
+    } else if (g === 'az-apri') {
+      st.azienda = st.azienda === v ? '' : v; disegna();
+    } else if (g === 'az-disconnetti' || g === 'az-sospendi' || g === 'az-riattiva') {
+      var az = (st.aziende && st.aziende.aziende || []).filter(function (a) { return a.chiave === v; })[0], nomeAz = az ? az.nome : v;
+      var cosa = { 'az-disconnetti': ['disconnetti', 'Disconnettere tutte le persone di ' + nomeAz + '? Dovranno rientrare con la password.'],
+        'az-sospendi': ['sospendi', 'Sospendere tutte le persone di ' + nomeAz + '? Non potranno accedere finché non le riattivi.'],
+        'az-riattiva': ['riattiva', 'Riattivare le persone sospese di ' + nomeAz + '?'] }[g];
+      if (!window.confirm(cosa[1] + ' Gli amministratori restano come sono.')) return true;
+      T.api('POST', '/api/admin/aziende/azione', { azienda: v, azione: cosa[0] }).then(function (r) {
+        msg('aziende', nomeAz + ': ' + ({ disconnetti: 'disconnesse', sospendi: 'sospese', riattiva: 'riattivate' }[cosa[0]]) + ' ' + personeTesto(r.persone) + '.', true);
+      }, function (e) { msg('aziende', errore(e)); }).then(carica);
     } else if (g === 'u-elimina') {
       if (!window.confirm('Eliminare l\'account di ' + (x ? x.nome : '') + ' con il suo storico e i preferiti? Non si può annullare.')) return true;
       T.api('DELETE', '/api/admin/utenti/' + id).then(function () { st.aperto = 0; msg('utenti', 'Account eliminato.', true); }, function (e) { msg('utenti', errore(e)); }).then(carica);
@@ -286,6 +317,10 @@
         msg('carburante-leggi', 'Letto: Express ' + String(c.percentuale).replace('.', ',') + ' %' + (c.economy !== null ? ', Economy Select ' + String(c.economy).replace('.', ',') + ' %' : '') + '.', true);
         if (T.spedizione) T.spedizione.dimentica();
       }, function (e) { msg('carburante-leggi', errore(e)); }).then(function () { st.carburanteInCorso = false; return carica(); });
+    } else if (g === 'segnalazione-elimina') {
+      if (!window.confirm('Eliminare questa segnalazione? Non si può annullare.')) return true;
+      T.api('DELETE', '/api/admin/segnalazioni/' + id).then(function () { msg('segnalazioni', 'Segnalazione eliminata.', true); },
+        function (e) { msg('segnalazioni', errore(e)); }).then(carica);
     } else if (g === 'trasporto-usa') {
       T.api('POST', '/api/admin/trasporto/' + id + '/attiva').then(function () { msg('trasporto-pdf', 'Tariffa cambiata.', true); if (T.spedizione) T.spedizione.dimentica(); },
         function (e) { msg('trasporto-pdf', errore(e)); }).then(carica);
@@ -296,7 +331,33 @@
     } else return false;
     return true;
   }
-  function modulo(g, f, d) {
+  function modulo(g, f, d, premuto) {
+    if (g === 'u-azienda') {
+      T.api('PATCH', '/api/admin/utenti/' + f.getAttribute('data-id'), { azienda: String(d.get('azienda') || '') })
+        .then(function () { msg('utenti', 'Azienda salvata.', true); }, function (e) { msg('utenti', errore(e)); }).then(carica);
+      return true;
+    }
+    if (g === 'az-regole') {
+      var qa = String(d.get('quota') || '').trim(), spenta = !!d.get('spenta'), chiave = f.getAttribute('data-v');
+      T.api('PUT', '/api/admin/aziende/regole', { azienda: chiave, quota_ia: qa === '' ? null : parseInt(qa, 10), ia: !spenta }).then(function (r) {
+        msg('aziende', 'Regole salvate per ' + personeTesto(r.persone) + ' (e per chi entra dopo).', true);
+      }, function (e) { msg('aziende', errore(e)); }).then(carica);
+      return true;
+    }
+    if (g === 'az-nome') {
+      T.api('PUT', '/api/admin/aziende/nome', { azienda: f.getAttribute('data-v'), nome: String(d.get('nome') || '') }).then(function (r) {
+        st.azienda = r.nome.toLowerCase().split(/\s+/).join(' ');
+        msg('aziende', r.unite ? 'Aziende unite in «' + r.nome + '».' : 'Nuovo nome: «' + r.nome + '».', true);
+      }, function (e) { msg('aziende', errore(e)); }).then(carica);
+      return true;
+    }
+    if (g === 'segnalazione') {
+      var stato = premuto && premuto.getAttribute('data-stato') === 'aperta' ? 'aperta' : 'chiusa', prima = f.getAttribute('data-stato');
+      T.api('PUT', '/api/admin/segnalazioni/' + f.getAttribute('data-id'), { stato: stato, risposta: String(d.get('risposta') || '') }).then(function () {
+        msg('segnalazioni', stato === prima ? 'Risposta salvata.' : stato === 'chiusa' ? 'Segnalazione risolta.' : 'Segnalazione riaperta.', true);
+      }, function (e) { msg('segnalazioni', errore(e)); }).then(carica);
+      return true;
+    }
     if (g === 'u-limite') {
       var q = String(d.get('quota') || '').trim();
       T.api('PATCH', '/api/admin/utenti/' + f.getAttribute('data-id'), { quota_ia: q === '' ? null : parseInt(q, 10) })
@@ -408,6 +469,87 @@
     return h;
   }
 
+  /* ---------- aziende: gruppi di persone con lo stesso campo azienda, regole comuni e azioni su tutti (taric/aziende.py) ---------- */
+  function personeTesto(n) { return n === 1 ? '1 persona' : n + ' persone'; }
+  function regoleTesto(r) {
+    if (!r) return 'nessuna regola';
+    return !r.ia ? 'IA spenta' : r.quota_ia === null ? 'limite predefinito' : r.quota_ia + ' al mese per persona';
+  }
+  function aziende() {
+    var A = st.aziende;
+    if (!A) return '<p class="vuoto">Carico…</p>';
+    var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('container') + 'Aziende<span class="dx">' + A.aziende.length + '</span></div>' + riga('aziende');
+    if (!A.aziende.length) h += '<p class="vuoto illustrato">' + (T.vignetta ? T.vignetta('container') : '') + 'Nessuna azienda: scrivila nella scheda di una persona, in Utenti.</p>';
+    else {
+      h += '<div class="scorri"><table class="tab"><thead><tr><th>Azienda</th><th class="n">Persone</th><th class="n">IA a ' + esc(meseIt(A.mese)) + '</th><th>Regole</th><th></th></tr></thead><tbody>' +
+        A.aziende.map(function (a) {
+          var aperta = st.azienda === a.chiave, sosp = a.persone.filter(function (p) { return p.stato === 'sospeso'; }).length;
+          var r = '<tr' + (aperta ? ' class="evid"' : '') + '><td><b>' + esc(a.nome) + '</b></td><td class="n" data-l="Persone">' + a.persone.length +
+            (sosp ? ' <span class="nota">(' + sosp + (sosp === 1 ? ' sospesa)' : ' sospese)') + '</span>' : '') + '</td><td class="n" data-l="IA">' + numero(a.classificazioni) + '</td>' +
+            '<td data-l="Regole">' + (a.regole ? '<span class="st ' + (a.regole.ia ? 'ok' : 'sospeso') + '">' + esc(regoleTesto(a.regole)) + '</span>' : '<span class="nota">nessuna</span>') + '</td>' +
+            '<td class="azioni"><button class="btn sm" type="button" data-g="az-apri" data-v="' + esc(a.chiave) + '" aria-expanded="' + aperta + '">' + (aperta ? 'Chiudi' : 'Gestisci') + '</button></td></tr>';
+          if (aperta) r += '<tr class="dettaglio"><td colspan="5">' + dettaglioAzienda(a) + '</td></tr>';
+          return r;
+        }).join('') + '</tbody></table></div>';
+    }
+    if (A.senza_azienda) h += '<p class="nota">' + personeTesto(A.senza_azienda) + ' senza azienda: scrivila nella loro scheda, in Utenti.</p>';
+    return h + '<p class="nota">Le persone con la stessa azienda (maiuscole e spazi a parte) formano un gruppo. Le regole valgono per chi c\'è e per chi entra dopo; ' +
+      'il limite di una persona si può poi cambiare in Utenti. Gli amministratori non hanno limiti e le azioni su tutti li lasciano come sono.</p></div></div>';
+  }
+  function dettaglioAzienda(a) {
+    var r = a.regole, v = esc(a.chiave), h = '<div class="pannello">';
+    h += '<form class="fila" data-g="az-regole" data-v="' + v + '"><label class="corto">Classificazioni con l\'IA al mese, per persona' +
+      '<input class="campo" type="number" min="0" max="100000" name="quota" value="' + (r && r.quota_ia !== null ? esc(r.quota_ia) : '') + '" placeholder="predefinito"></label>' +
+      '<label class="spunta"><input type="checkbox" name="spenta"' + (r && !r.ia ? ' checked' : '') + '> IA spenta per tutta l\'azienda</label>' +
+      '<button class="btn sm pri" type="submit">' + T.icona('spunta') + 'Applica a tutti</button></form>';
+    h += '<div class="fila"><button class="btn sm" type="button" data-g="az-disconnetti" data-v="' + v + '">' + T.icona('esci') + 'Disconnetti tutti</button>' +
+      '<button class="btn sm" type="button" data-g="az-sospendi" data-v="' + v + '">Sospendi tutti</button>' +
+      '<button class="btn sm" type="button" data-g="az-riattiva" data-v="' + v + '">Riattiva tutti</button></div>';
+    h += '<form class="fila" data-g="az-nome" data-v="' + v + '"><label class="corto">Nuovo nome<input class="campo largo" name="nome" maxlength="150" required value="' + esc(a.nome) + '"></label>' +
+      '<button class="btn sm" type="submit">Rinomina</button><span class="nota">Con il nome di un\'altra azienda, le due si uniscono.</span></form>';
+    if (a.persone.length) h += '<ul class="az-persone">' + a.persone.map(function (p) {
+      var s = STATI[p.stato] || [p.stato, ''];
+      return '<li><b>' + esc(p.nome) + '</b> <span class="nota">' + esc(p.email) + '</span> ' + (p.ruolo === 'amministratore' ? '<span class="st ok">amministratore</span> ' : '') +
+        (p.stato !== 'attivo' ? '<span class="st ' + s[1] + '">' + esc(s[0]) + '</span> ' : '') +
+        '<span class="nota">IA: ' + numero(p.classificazioni) + (p.limite === null ? '' : ' / ' + (p.limite === 0 ? 'spenta' : numero(p.limite))) + '</span></li>';
+    }).join('') + '</ul>';
+    else h += '<p class="nota">Nessuna persona per ora: le regole varranno per chi entra.</p>';
+    return h + '</div>';
+  }
+
+  /* ---------- segnalazioni di problemi dagli utenti (js/segnala.js): risposta, risolta o riaperta ---------- */
+  var SEZIONI = { classifica: 'Classifica', nomenclatura: 'Nomenclatura', bolla: 'Bolla', profilo: 'Profilo', gestione: 'Gestione' };
+  function browserBreve(ua) {
+    var b = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'browser';
+    var so = /iPhone|iPad/.test(ua) ? 'iPhone o iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : '';
+    return b + (so ? ' su ' + so : '');
+  }
+  function segnalazioni() {
+    var V = st.segnalazioni;
+    if (!V) return '<p class="vuoto">Carico…</p>';
+    var aperte = V.filter(function (x) { return x.stato === 'aperta'; }).length;
+    var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Segnalazioni<span class="dx">' + (aperte ? aperte + ' da leggere' : 'nessuna da leggere') + '</span></div>' + riga('segnalazioni');
+    if (!V.length) h += '<p class="vuoto illustrato">' + (T.vignetta ? T.vignetta('gru') : '') + 'Nessuna segnalazione.</p>';
+    else h += '<div class="elenco">' + V.map(rigaSegnalazione).join('') + '</div>';
+    return h + '</div></div>';
+  }
+  function rigaSegnalazione(v) {
+    var c = v.contesto || {}, aperta = v.stato === 'aperta';
+    var dove = [SEZIONI[v.sezione] || v.sezione, c.codice ? 'codice ' + c.codice : '', c.schermo ? 'schermo ' + c.schermo : ''].filter(Boolean).join(' · ');
+    return '<div class="voce segnalazione' + (aperta ? ' nuova' : '') + '"><div>' +
+      '<span class="m">' + esc(T.dataOra(v.creata)) + ' · ' + esc(v.autore || 'account eliminato') + (v.email ? ' (' + esc(v.email) + ')' : '') + '</span> ' +
+      (aperta ? '<span class="st in_attesa">da leggere</span>' : '<span class="st ok">risolta</span>') +
+      '<p class="t">' + esc(v.testo) + '</p>' +
+      '<p class="m">' + esc(dove) + (c.browser ? ' · <span title="' + esc(c.browser) + '">' + esc(browserBreve(c.browser)) + '</span>' : '') +
+      (v.chiusa ? ' · risolta il ' + esc(T.dataOra(v.chiusa)) + (v.chiusa_da ? ' da ' + esc(v.chiusa_da) : '') : '') + '</p>' +
+      '<form class="modulo" data-g="segnalazione" data-id="' + esc(v.id) + '" data-stato="' + esc(v.stato) + '">' +
+      '<label>Risposta (la vede chi l\'ha mandata, nel suo profilo)<textarea class="campo" name="risposta" rows="2" maxlength="2000">' + esc(v.risposta) + '</textarea></label>' +
+      '<div class="fila">' + (aperta ? '<button class="btn sm pri" type="submit" data-stato="chiusa">' + T.icona('spunta') + 'Risolta</button>' +
+        '<button class="btn sm" type="submit" data-stato="aperta">Salva la risposta</button>'
+        : '<button class="btn sm" type="submit" data-stato="chiusa">Salva la risposta</button><button class="btn sm" type="submit" data-stato="aperta">Riapri</button>') +
+      '<button class="btn sm" type="button" data-g="segnalazione-elimina" data-id="' + esc(v.id) + '">' + T.icona('cestino') + 'Elimina</button></div></form></div></div>';
+  }
+
   /* ---------- registro ---------- */
   function registro() {
     var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('registro') + 'Registro degli eventi<span class="dx">ultimi ' + st.eventi.length + '</span></div>';
@@ -433,7 +575,7 @@
     if (!g) return;
     ev.preventDefault();
     var d = new FormData(f);
-    if (modulo(g, f, d)) return;
+    if (modulo(g, f, d, ev.submitter)) return;
     if (g === 'aggiorna') {
       T.api('POST', '/api/admin/dati/aggiorna', { mese: String(d.get('mese') || '').trim() })
         .then(function (r) { msg('aggiorna', 'Aggiornamento di ' + nomeMese(r.mese) + ' avviato: segui l\'avanzamento qui sopra.', true); }, function (e) { msg('aggiorna', errore(e)); }).then(carica);

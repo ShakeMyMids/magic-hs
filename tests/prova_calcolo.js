@@ -174,6 +174,19 @@ prova('bolla: biciclette dalla Cina (antidumping B999) e scarpe dal Vietnam con 
   uguale([ctl.esito, ctl.gruppi[0].alternative], ['manca', ['Y152', 'Y986']]);
 });
 
+prova('antidumping e compensativi: avviso con la data dei dati del mese, solo per una bolla di un giorno dopo', () => {
+  const avviso = r => r.articoli.map(x => x.verificaTaric || '');
+  const r = K.calcolaImport(bolla([BICI_ART, SCARPE_ART]), Object.assign({ dataDati: '2026-11-01' }, ctx));
+  uguale(avviso(r), ['Dazi antidumping o compensativi: i dati TARIC sono del 01/11/2026 e si aggiornano una volta al mese, quindi un dazio ' +
+    'nuovo o cambiato dopo quella data qui non c\'è. Verificali sul TARIC dell\'UE al giorno della bolla.', '']);       // le scarpe non ne hanno
+  assert(r.articoli[0].avvertenze.indexOf(r.articoli[0].verificaTaric) >= 0 && !r.blocchi.length && r.totali);    // non ferma il totale
+  uguale(avviso(K.calcolaImport(bolla([BICI_ART], { data: '2026-11-01' }), Object.assign({ dataDati: '2026-11-01' }, ctx))), ['']);   // il giorno dei dati
+  uguale(avviso(K.calcolaImport(bolla([BICI_ART]), ctx)), ['']);                                                       // data dei dati non nota
+  const sospeso = { righe: [M(103, '1011', '14.000 %'), M(555, 'CN', '0.000 %', { legal: 'R2026/1' })], unitaSup: '' };
+  const r2 = K.calcolaImport(bolla([BICI_ART]), Object.assign({}, ctx, { dataDati: '2026-11-01', misure: () => sospeso }));
+  assert(r2.articoli[0].verificaTaric && r2.articoli[0].avvertenze.some(t => /riscossione sospesa/.test(t)));
+});
+
 prova('bolla: codice addizionale da scegliere e documento D008 del produttore', () => {
   let r = K.calcolaImport(bolla([Object.assign({}, BICI_ART, { addizionali: [] })]), ctx);
   assert(r.totali === null);
