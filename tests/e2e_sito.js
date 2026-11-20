@@ -1,6 +1,7 @@
 // Prova nel browser del sito (come su Render): l'amministratore si registra ed entra, ricerca per parola o codice in
 // prima pagina e interruttore dell'IA, un collega chiede l'account e aspetta l'approvazione, classificazioni con l'IA fino
-// al limite mensile, link per la password, sospensione, installazione come app, uscita, telefono, tablet e tema scuro. IA finta
+// al limite mensile, link per la password, sospensione, bolla simulata con il costo del trasporto (guida finta di DHL Express
+// fatta da tests/guida_finta.py con $PYTHON, predefinito python3), installazione come app, uscita, telefono, tablet e tema scuro. IA finta
 // (tests/finto_claude.py) come servizio unico del server.
 // Uso: python tests/finto_claude.py 9100 dati-AAAA-MM-01.zip &
 //      TARIC_DATI=P MAGIC_HS_AMMINISTRATORI=capo@azienda.it TARIC_IA_FORNITORE=openai TARIC_IA_URL=http://127.0.0.1:9100/v1 \
@@ -185,7 +186,7 @@ async function accedi(p, email, password) {
   await capo.click('#tab-gestione');
   await capo.waitForSelector('button[data-g="u-apri"]');
   ok((await capo.$$('button[data-g="u-apri"]')).length === 1 && await capo.isVisible('td >> text=capo@azienda.it'), 'in Utenti c\'è l\'amministratore');
-  ok((await capo.$$('.sotto button')).length === 5, 'Utenti, IA, Dati TARIC, Ricerca, Registro');
+  ok((await capo.$$('.sotto button')).length === 6, 'Utenti, IA, Dati TARIC, Ricerca, Trasporto, Registro');
 
   // parole cercate senza risultati e sinonimo aggiunto dall'amministratore
   await capo.click('button[data-v="ricerca"]');
@@ -346,6 +347,42 @@ async function accedi(p, email, password) {
   await capo.screenshot({ path: out + '/5b-bolla-stampa.png', fullPage: true });
   await capo.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   await capo.emulateMedia({ media: 'screen' });
+  // calcolatore del trasporto: guida finta di DHL Express (tests/guida_finta.py) caricata in Gestione › Trasporto, poi il
+  // costo dalla bolla aperta e «Usa nella bolla» (quota fino al confine UE nel valore in dogana, il resto fino a destinazione)
+  const guida = require('path').join(out, 'guida-dhl-finta.pdf');
+  require('child_process').execFileSync(process.env.PYTHON || 'python3', [require('path').join(__dirname, 'guida_finta.py'), guida]);
+  await capo.click('#tab-gestione'); await capo.click('button[data-v="trasporto"]');
+  await capo.setInputFiles('form[data-g="trasporto-pdf"] input[type=file]', guida);
+  await capo.click('form[data-g="trasporto-pdf"] button[type=submit]');
+  await capo.waitForSelector('form[data-g="trasporto-pdf"] >> text=Tariffe in uso:', { timeout: 60000 });
+  // carburante della settimana dalla pagina finta di DHL (tests/finto_claude.py), poi scritto a mano
+  await capo.click('button[data-g="carburante-leggi"]');
+  await capo.waitForSelector('text=Letto: Express 50 %, Economy Select 40 %.');
+  ok(await capo.isVisible('.box >> text=dalla pagina di DHL') && await capo.isVisible('text=Economy Select 40 %'), 'trasporto: supplemento carburante letto dalla pagina di DHL (Express ed Economy Select)');
+  await capo.click('summary >> text=Scrivi a mano');
+  await capo.fill('form[data-g="carburante"] input[name=percentuale]', '35,25');
+  await capo.click('form[data-g="carburante"] button[type=submit]'); await capo.waitForSelector('form[data-g="carburante"] >> text=Salvato.');
+  ok(await capo.isVisible('pre.registro >> text=Zonario: 234 paesi') && await capo.isVisible('text=35,25 %') && await capo.isVisible('text=scritto a mano'),
+    'trasporto: guida alle tariffe caricata e controllata, carburante scritto a mano');
+  await capo.click('#tab-bolla'); await capo.click('[data-b="trasporto-bolla"]');
+  await capo.waitForSelector('#sp-esito');
+  ok((await capo.textContent('select[data-s="paese"] option:checked')).startsWith('Cina') && (await capo.inputValue('[data-s="carburante"]')) === '35,25',
+    'trasporto: dalla bolla, con il paese d\'origine e il carburante di Gestione');
+  await capo.fill('[data-c="0"][data-s="quanti"]', '2'); await capo.fill('[data-c="0"][data-s="kg"]', '8');
+  await capo.fill('[data-c="0"][data-s="l"]', '60'); await capo.fill('[data-c="0"][data-s="p"]', '40'); await capo.fill('[data-c="0"][data-s="h"]', '40');
+  await capo.waitForSelector('#sp-esito >> text=Trasporto DHL Express Worldwide, zona 7, 39 kg');
+  ok(await capo.isVisible('#sp-esito >> text=Supplemento carburante 35,25 %') && await capo.isVisible('#sp-esito >> text=tassabile 39 kg'),
+    'trasporto: peso volumetrico (2 colli 60 x 40 x 40 = 38,4 kg), prezzo della zona e carburante');
+  ok((await capo.inputValue('[data-s="quota"]')) === '70' && await capo.isVisible('#sp-allegato >> text=Allegato 23-01: Cina, zona L, 70 %'),
+    'trasporto: quota fino al confine UE dall\'allegato 23-01 (Cina, zona L, 70 %)');
+  await capo.waitForSelector('#sp-bolla >> text=nel trasporto fino al confine UE');
+  const quote = (await capo.textContent('#sp-bolla')).match(/[\d.]+,\d\d/g);
+  await capo.click('[data-s="usa"]'); await capo.waitForSelector('#b-msg >> text=Trasporto DHL Express riportato');
+  ok((await capo.inputValue('[data-f="nolo.importo"]')) + ' €' === quote[0].replace(/\./g, '') + ' €' && (await capo.inputValue('[data-f="inoltro.importo"]')) === quote[1].replace(/\./g, ''),
+    'trasporto: «Usa nella bolla» mette la quota fino al confine UE e il resto fino a destinazione');
+  await capo.screenshot({ path: out + '/5c-bolla-trasporto.png' });
+  for (const f of ['nolo.importo', 'inoltro.importo', 'assicurazione.importo']) await capo.fill('[data-f="' + f + '"]', '');   // la bolla come prima
+  await capo.waitForFunction(() => /Totale da pagare\s*9\.825,00 €/.test(document.querySelector('#b-esito').innerText));
   // «Aggiungi alla bolla» dalla scheda del codice; la bolla salvata si riapre dall'elenco
   await capo.click('#tab-classifica');
   await capo.fill('#q', '6403999610'); await capo.press('#q', 'Enter'); await capo.waitForSelector('[data-act="in-bolla"]');

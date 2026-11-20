@@ -1104,6 +1104,22 @@ input[type="checkbox"].in-conflitto{outline:2px solid var(--timbro);outline-offs
 }
 @media (pointer:coarse){.b-mancanti .link{min-height:40px}.spunta.doc input{width:22px;height:22px;margin-top:0}.spunta.doc{min-height:40px;align-items:center}.articolo .lab .link{display:inline-flex;align-items:center;min-height:42px;padding:0 6px}}
 
+/* calcolatore del trasporto (js/spedizione.js): una riga per ogni gruppo di colli uguali */
+.sp-colli{display:flex;flex-direction:column}
+.sp-collo{display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px 12px;padding:12px 0;border-top:1px solid var(--linea)}
+.sp-collo:first-child{border-top:0;padding-top:2px}
+.sp-numero{display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:24px}
+.sp-numero b{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--accento-tenue);color:var(--accento-forte);font-size:13px}
+.sp-misure{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.sp-misure label{display:flex;flex-direction:column;justify-content:flex-end;gap:5px;font-size:13px;font-weight:600;color:var(--secondario);min-width:0}
+.sp-misure .campo{flex:none;width:100%}
+.sp-collo .sp-scelte{grid-column:2}
+.sp-scelte{display:flex;flex-wrap:wrap;gap:4px 18px}
+.sp-voci{max-width:560px}
+/* telefono: numero e peso su una riga, le tre misure sotto */
+@media (max-width:640px){.sp-misure{grid-template-columns:repeat(6,minmax(0,1fr))}.sp-misure label{grid-column:span 2}
+  .sp-misure label:nth-child(-n+2){grid-column:span 3}.sp-collo{grid-template-columns:26px minmax(0,1fr);gap:8px}}
+
 @media print{
   :root:root:root{--fondo:#fff;--carta:#fff;--carta-2:#f2f4f7;--inchiostro:#111;--secondario:#444;--linea:#d3d9df;--linea-forte:#b8c0c9;
     --accento:#1b5584;--accento-forte:#144468;--accento-tenue:#e4ecf4;--timbro:#a4440c;--timbro-tenue:#fbe7d8;--ambra:#7a5410;--ambra-tenue:#f6ecd6;

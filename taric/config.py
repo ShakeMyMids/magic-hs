@@ -59,6 +59,8 @@ class Config:
     copia_chiave: str = ""
     copia_segreto: str = field(default="", repr=False)
     bce_url: str = "https://data-api.ecb.europa.eu/service/data/EXR"     # cambi della BCE per la bolla (MAGIC_HS_BCE_URL)
+    # pagina dei supplementi di DHL Express con il carburante della settimana (MAGIC_HS_CARBURANTE_URL; vuota = solo a mano)
+    carburante_url: str = "https://mydhl.express.dhl/it/it/ship/surcharges.html"
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -127,5 +129,6 @@ def carica(sovrascrivi: dict[str, str] | None = None) -> Config:
         copia_chiave=v.get("MAGIC_HS_COPIA_CHIAVE", "").strip(),
         copia_segreto=v.get("MAGIC_HS_COPIA_SEGRETO", "").strip(),
         bce_url=(v.get("MAGIC_HS_BCE_URL") or Config.bce_url).strip().rstrip("/"),
+        carburante_url=(v["MAGIC_HS_CARBURANTE_URL"] if "MAGIC_HS_CARBURANTE_URL" in v else Config.carburante_url).strip(),
         extra=v,
     )

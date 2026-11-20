@@ -7,7 +7,7 @@
   var el = document.getElementById('view-gestione');
   var vista = T.viste = T.viste || {};
   var st = { sotto: 'utenti', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, modelli: [], utenti: null, iaS: null,
-             aperto: 0, link: null, ricerca: null, sinonimoPer: '', bozza: null };
+             aperto: 0, link: null, ricerca: null, sinonimoPer: '', bozza: null, trasporto: null };
 
   var ESITI = { ok: 'riuscito', errore: 'errore', non_disponibile: 'non ancora disponibile', in_corso: 'in corso', interrotto: 'interrotto' };
   var EVENTI = {
@@ -19,7 +19,8 @@
     ruolo: 'Ruolo cambiato', quota_ia: 'Limite personale cambiato', impostazioni_sito: 'Limiti e registrazioni cambiati',
     backup_scaricato: 'Copia del database scaricata', sessioni_chiuse: 'Uscita da tutti i dispositivi',
     copia_esterna: 'Copia del database mandata fuori', copia_esterna_errore: 'Copia esterna non riuscita',
-    sinonimo: 'Sinonimo aggiunto', sinonimo_tolto: 'Sinonimo tolto'
+    sinonimo: 'Sinonimo aggiunto', sinonimo_tolto: 'Sinonimo tolto', tariffe_trasporto: 'Tariffe di trasporto caricate',
+    tariffe_trasporto_attivate: 'Tariffe di trasporto cambiate', carburante: 'Supplemento carburante cambiato'
   };
   function numero(n) { return Number(n || 0).toLocaleString('it-IT'); }
 
@@ -36,6 +37,7 @@
     if (st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/ia').then(function (r) { st.iaS = r; }));
     if (st.sotto === 'dati') chiamate.push(T.api('GET', '/api/admin/dati').then(function (r) { st.dati = r; }));
     if (st.sotto === 'ricerca') chiamate.push(T.api('GET', '/api/admin/ricerca').then(function (r) { st.ricerca = r; }));
+    if (st.sotto === 'trasporto') chiamate.push(T.api('GET', '/api/admin/trasporto').then(function (r) { st.trasporto = r; }));
     if (st.sotto === 'registro') chiamate.push(T.api('GET', '/api/admin/eventi?limite=300').then(function (r) { st.eventi = r.eventi; }));
     return Promise.all(chiamate).then(disegna, function (e) { el.innerHTML = '<p class="errore">' + esc(errore(e)) + '</p>'; });
   }
@@ -43,12 +45,12 @@
   /* ------------------------------------------------------------------ disegno */
   function disegna() {
     var r = st.riep, h = '';
-    var schede = [['utenti', 'Utenti', 'utenti'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['ricerca', 'Ricerca', 'cerca'], ['registro', 'Registro', 'registro']];
+    var schede = [['utenti', 'Utenti', 'utenti'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['ricerca', 'Ricerca', 'cerca'], ['trasporto', 'Trasporto', 'nave'], ['registro', 'Registro', 'registro']];
     h += '<div class="sotto" role="group" aria-label="Parti della gestione">' + schede.map(function (x) {
       return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
     if (r) h += avvisi(r);
-    h += { dati: dati, registro: registro, ia: ia, utenti: utenti, ricerca: ricerca }[st.sotto]();
+    h += { dati: dati, registro: registro, ia: ia, utenti: utenti, ricerca: ricerca, trasporto: trasporto }[st.sotto]();
     el.innerHTML = h;
     pianificaRinfresco();
   }
@@ -59,6 +61,8 @@
     if (!r.ia && st.sotto !== 'ia') a.push('La classificazione assistita è spenta: inserisci la chiave di Gemini nel servizio su Render (vedi Intelligenza artificiale).');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC: vai su Dati TARIC.');
     if (r.copia_esterna && st.sotto !== 'dati') a.push(r.copia_esterna === 'errore' ? 'L\'ultima copia del database fuori da Render non è riuscita: vedi Dati TARIC.' : 'La copia del database fuori da Render è spenta: manca qualcosa nelle variabili MAGIC_HS_COPIA_* (vedi Dati TARIC).');
+    if (r.carburante_giorni > 7 && st.sotto !== 'trasporto') a.push(r.carburante_giorni === 999 ? 'Manca il supplemento carburante di DHL Express per il calcolatore del trasporto (vedi Trasporto).'
+      : 'Il supplemento carburante del calcolatore del trasporto è di ' + r.carburante_giorni + ' giorni fa: DHL lo cambia ogni settimana (vedi Trasporto).');
     if (a.length) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Da sistemare</div>' + a.map(function (t) { return '<p class="avviso">' + esc(t) + '</p>'; }).join('') + '</div></div>';
     return h;
   }
@@ -275,6 +279,16 @@
     } else if (g === 's-togli') {
       T.api('DELETE', '/api/admin/sinonimi/' + encodeURIComponent(v)).then(function () { msg('ricerca', 'Sinonimo tolto.', true); if (app()) app().caricaSinonimi(); return carica(); },
         function (e) { msg('ricerca', errore(e)); disegna(); });
+    } else if (g === 'carburante-leggi') {
+      st.carburanteInCorso = true; msg('carburante-leggi', 'Leggo la pagina di DHL…', true); disegna();
+      T.api('POST', '/api/admin/trasporto/carburante/aggiorna').then(function (r) {
+        var c = r.carburante;
+        msg('carburante-leggi', 'Letto: Express ' + String(c.percentuale).replace('.', ',') + ' %' + (c.economy !== null ? ', Economy Select ' + String(c.economy).replace('.', ',') + ' %' : '') + '.', true);
+        if (T.spedizione) T.spedizione.dimentica();
+      }, function (e) { msg('carburante-leggi', errore(e)); }).then(function () { st.carburanteInCorso = false; return carica(); });
+    } else if (g === 'trasporto-usa') {
+      T.api('POST', '/api/admin/trasporto/' + id + '/attiva').then(function () { msg('trasporto-pdf', 'Tariffa cambiata.', true); if (T.spedizione) T.spedizione.dimentica(); },
+        function (e) { msg('trasporto-pdf', errore(e)); }).then(carica);
     } else if (g === 's-modelli') {
       b.disabled = true;
       T.api('POST', '/api/admin/ia/modelli').then(function (r) { st.modelli = r.modelli || []; if (!st.modelli.length) msg('ia', 'Il servizio non ha indicato modelli.', true); },
@@ -295,6 +309,19 @@
         st.sinonimoPer = ''; st.bozza = null; msg('ricerca', 'Sinonimo salvato: «' + r.parola + '» trova anche ' + r.termini.map(function (x) { return '«' + x + '»'; }).join(', ') + '.', true);
         if (app()) app().caricaSinonimi();
       }, function (e) { msg('ricerca', errore(e)); }).then(carica);
+    } else if (g === 'trasporto-pdf') {
+      st.trasportoInCorso = true; msg('trasporto-pdf', 'Leggo e controllo il PDF…', true); disegna();
+      T.api('POST', '/api/admin/trasporto', d).then(function (r) {
+        msg('trasporto-pdf', 'Tariffe in uso: ' + r.titolo + (r.avvisi.length ? ' (con ' + r.avvisi.length + (r.avvisi.length === 1 ? ' avviso)' : ' avvisi)') : '') + '.', true);
+        if (T.spedizione) T.spedizione.dimentica();
+      }, function (e) { msg('trasporto-pdf', errore(e)); }).then(function () { st.trasportoInCorso = false; return carica(); });
+    } else if (g === 'carburante') {
+      var perc = parseFloat(String(d.get('percentuale') || '').replace(',', '.')), eco = String(d.get('economy') || '').trim();
+      var ecoN = eco === '' ? null : parseFloat(eco.replace(',', '.'));
+      if (!(perc >= 0 && perc <= 100) || (ecoN !== null && !(ecoN >= 0 && ecoN <= 100))) { msg('carburante', 'Scrivi percentuali tra 0 e 100.'); disegna(); return true; }
+      T.api('PUT', '/api/admin/trasporto/carburante', { percentuale: perc, economy: ecoN, dal: String(d.get('dal') || '') }).then(function () {
+        msg('carburante', 'Salvato.', true); if (T.spedizione) T.spedizione.dimentica();
+      }, function (e) { msg('carburante', errore(e)); }).then(carica);
     } else if (g === 's-limiti') {
       var qp = String(d.get('quota_predefinita') || '').trim(), tm = String(d.get('tetto_mese') || '').trim();
       var dom = String(d.get('domini_automatici') || '').split(/[\s,;]+/).map(function (x) { return x.trim(); }).filter(Boolean);
@@ -336,6 +363,48 @@
       }).join('') + '</div>' : '<p class="vuoto">Ancora nessuno.</p>') +
       '<div class="lab" style="margin-top:6px">Nuovo sinonimo</div>' + formSinonimo('') +
       '<p class="nota">Valgono per tutti, insieme a quelli già pronti.</p></div></div>';
+    return h;
+  }
+
+  /* ---------- trasporto: guida alle tariffe di DHL Express e supplemento carburante ---------- */
+  function dataIt(s) { return s ? String(s).slice(0, 10).split('-').reverse().join('/') : ''; }
+  function trasporto() {
+    var R = st.trasporto;
+    if (!R) return '<p class="vuoto">Carico…</p>';
+    var V = R.versioni, att = V.filter(function (v) { return v.attiva; })[0], c = R.carburante;
+    var h = '<div class="foglio"><div class="box s7"><div class="lab">' + T.icona('nave') + 'Tariffe DHL Express</div>';
+    if (att) h += '<p class="cosa">' + esc(att.titolo) + '</p><p class="nota">Valide dal ' + esc(dataIt(att.validita) || '(data non indicata)') +
+      ' · caricate il ' + esc(T.dataOra(att.caricata)) + (att.autore ? ' da ' + esc(att.autore) : '') + '</p>' +
+      (att.avvisi.length ? att.avvisi.map(function (x) { return '<p class="avviso">' + esc(x) + '</p>'; }).join('') : '') +
+      '<pre class="registro">' + esc(att.riepilogo) + '</pre>';
+    else h += '<p class="nota">Nessuna tariffa: carica la «Guida ai servizi e alle tariffe» di DHL Express in PDF.</p>';
+    h += '<form class="modulo" data-g="trasporto-pdf"><label>Guida alle tariffe in PDF<input class="campo" type="file" name="file" accept=".pdf,application/pdf" required></label>' +
+      '<div class="fila"><button class="btn pri" type="submit"' + (st.trasportoInCorso ? ' disabled' : '') + '>' + T.icona('carica') + (st.trasportoInCorso ? 'Leggo il PDF…' : 'Carica e controlla') + '</button></div>' +
+      riga('trasporto-pdf') + '</form><p class="nota">Il PDF si legge e si controlla (zone, prezzi, scatti): se qualcosa non torna resta la tariffa di prima. Quando DHL pubblica la guida nuova, caricala qui.</p></div>';
+    var vecchio = R.carburante_giorni > 7, auto = R.carburante_auto || {}, pc = function (v) { return esc(String(v).replace('.', ',')) + '\u00a0%'; };
+    h += '<div class="box s5"><div class="lab">' + T.icona('percento') + 'Supplemento carburante</div>';
+    if (c) h += '<p class="cosa">' + pc(c.percentuale) + '</p><p class="nota">Express (Worldwide e servizi a orario)' +
+      (c.economy !== null && c.economy !== undefined ? ' · Economy Select ' + pc(c.economy) : '') + '</p><p class="nota">' +
+      (c.fonte === 'dhl' ? 'Settimana dal ' + esc(dataIt(c.dal)) + ' al ' + esc(dataIt(c.al)) + ', dalla pagina di DHL (letta il ' + esc(T.dataOra(c.aggiornato)) + ').'
+        : 'Dal ' + esc(dataIt(c.dal)) + ', scritto a mano' + (c.autore ? ' da ' + esc(c.autore) : '') + '.') + '</p>' +
+      (vecchio ? '<p class="avviso">Della settimana del ' + esc(dataIt(c.dal)) + ': DHL lo cambia ogni settimana.</p>' : '');
+    else h += '<p class="avviso">Non ancora indicato: il calcolatore lo chiede a chi lo usa.</p>';
+    if (!auto.attivo) h += '<p class="nota">Lettura automatica spenta (MAGIC_HS_CARBURANTE_URL vuota): scrivilo a mano.</p>';
+    else {
+      if (auto.esito === 'errore') h += '<p class="avviso">Lettura del ' + esc(T.dataOra(auto.tentato)) + ' non riuscita: ' + esc(auto.messaggio || '') + '. Resta il valore di prima; riprovo tra 6 ore.</p>';
+      h += '<p class="nota">Si aggiorna da solo ogni giorno dalla pagina dei supplementi di DHL Express Italia.</p>' +
+        '<div class="fila"><button class="btn" type="button" data-g="carburante-leggi"' + (st.carburanteInCorso ? ' disabled' : '') + '>' + T.icona('aggiorna') + 'Leggi adesso</button></div>';
+    }
+    h += riga('carburante-leggi') + '<details class="piu"' + (auto.attivo && auto.esito !== 'errore' && !st.msg.carburante ? '' : ' open') + '><summary>Scrivi a mano</summary>' +
+      '<form class="modulo" data-g="carburante"><div class="due"><label>Express (%)<input class="campo" name="percentuale" inputmode="decimal" autocomplete="off" required placeholder="per esempio 35,25"></label>' +
+      '<label>Economy Select (%)<input class="campo" name="economy" inputmode="decimal" autocomplete="off" placeholder="facoltativo"></label></div>' +
+      '<label>Valido dal<input class="campo" type="date" name="dal"></label><div class="fila"><button class="btn" type="submit">Salva</button></div>' + riga('carburante') +
+      '</form>' + (auto.attivo ? '<p class="nota">Il valore scritto a mano vale fino alla domenica della sua settimana, poi torna quello della pagina di DHL.</p>' : '') + '</details></div></div>';
+    if (V.length > 1) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Tariffe caricate</div><div class="scorri"><table class="tab"><thead><tr><th>Guida</th><th>Valida dal</th><th>Caricata</th><th></th></tr></thead><tbody>' +
+      V.map(function (v) {
+        return '<tr' + (v.attiva ? ' class="evid"' : '') + '><td>' + esc(v.titolo) + (v.attiva ? ' <span class="st ok">in uso</span>' : '') + '</td><td data-l="Valida dal">' + esc(dataIt(v.validita)) +
+          '</td><td data-l="Caricata">' + esc(T.dataOra(v.caricata)) + '</td><td class="azioni">' + (v.attiva ? '' : '<button class="btn sm" type="button" data-g="trasporto-usa" data-id="' + esc(v.id) + '">Usa questa</button>') + '</td></tr>';
+      }).join('') + '</tbody></table></div></div></div>';
     return h;
   }
 

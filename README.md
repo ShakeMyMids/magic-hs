@@ -11,6 +11,7 @@ Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'ammini
 - **Scheda del codice**: descrizione, percorso nella nomenclatura e misure, a oggi o alla **data delle misure** scelta nella scheda; il **calcolo degli importi** dà una stima di dazio e IVA dal valore in dogana, dalla massa e dalle quantità (le misure che dipendono da condizioni o da prezzi d'entrata restano «non calcolabili»). **Stampa o PDF** prepara un foglio pulito, con data e versione dei dati, da allegare alla pratica.
 - **Nomenclatura**: l'albero delle sezioni, dei capitoli e delle voci, da sfogliare.
 - **Bolla** simulata, d'importazione o d'esportazione, con più articoli (anche con «Aggiungi alla bolla» dalla scheda del codice): valore in dogana, dazio, antidumping e compensativi, IVA, documenti della casella 44 e riepilogo; si salva nel profilo e si stampa come foglio «simulazione». Le regole sono più sotto, in *Bolla simulata*.
+- **Costo di spedizione** (nella sezione Bolla): costo indicativo di una spedizione con DHL Express, in importazione o in esportazione, dal paese, dal servizio e dai colli (peso e misure), anche senza una bolla. Dalla bolla d'importazione riporta trasporto e assicurazione nei campi giusti. Le regole sono più sotto, in *Costo di spedizione*.
 - **Telefono e tablet**: le sezioni passano nella barra in basso, i pulsanti sono grandi per il dito e la pagina si adatta anche in orizzontale.
 - **Installa** (in alto, e nel Profilo): crea il collegamento sul desktop del computer o l'icona sulla schermata Home del telefono, e MAGIC HS si apre come un'app nella sua finestra. Con Chrome, Edge e i telefoni Android il tasto apre la finestra d'installazione del browser; su iPhone e iPad, Safari per Mac e Firefox mostra i passi da fare.
 - **Misure per paese**: dazi (anche preferenziali, antidumping e contingenti), condizioni, certificati e documenti del riquadro 44 e unità supplementari. Valgono per importazione ed esportazione.
@@ -25,6 +26,7 @@ Il sito gira su **Render**. Entra solo chi ha un account **approvato dall'ammini
   - **Intelligenza artificiale**: stato e prova del servizio, limite mensile per persona, tetto mensile per tutti, registrazioni aperte o chiuse, domini delle email approvate subito, uso del mese per persona;
   - **Dati TARIC**: versioni, aggiornamento immediato, caricamento manuale, ritorno alla versione precedente, copia del database (anche fuori da Render, vedi sotto);
   - **Ricerca**: le parole cercate senza risultati (quante volte, quando), da trasformare in **sinonimi** che valgono subito per tutti; un sinonimo si accetta solo se i termini esistono nella nomenclatura;
+  - **Trasporto**: guida alle tariffe di DHL Express in PDF (si legge e si controlla), versioni caricate, supplemento carburante della settimana (letto da solo dalla pagina di DHL, o scritto a mano);
   - **Registro** degli eventi.
 
 ## Curiosità nel porto
@@ -105,6 +107,18 @@ Il servizio è unico per tutti e lo paga l'amministratore: **Google Gemini** a p
 - quando il servizio è sovraccarico o limita le richieste al minuto, MAGIC HS riprova da solo fino a due volte, aspettando quanto indica il servizio (al massimo 20 secondi).
 
 *Gestione → Intelligenza artificiale* mostra classificazioni, richieste e token del mese (con la parte letta dalla cache) per tutti e per persona. La spesa esatta è nella fatturazione di Google Cloud.
+
+## Costo di spedizione (DHL Express)
+
+Un costo **indicativo**, con i prezzi pubblici di listino della «Guida ai servizi e alle tariffe» di DHL Express: niente sconti contrattuali.
+
+- **Tariffe**: l'amministratore carica il PDF della guida in *Gestione → Trasporto*. Il server lo legge in un processo a parte (`taric/leggi_tariffe.py`) e lo controlla: zonario completo con l'Italia in zona 0, prezzi di tutte le zone che crescono con il peso, scatti coerenti con le righe della tabella. Se qualcosa non torna il PDF si rifiuta e resta la tariffa di prima; le parti accessorie che non si leggono (Economy Select, limiti, supplementi, spunte dei servizi per paese) diventano avvisi. Quando DHL pubblica la guida nuova basta caricarla; le versioni precedenti si possono rimettere. Il PDF non resta sul server: restano i dati letti, nel database.
+- **Dalla guida**: zona di ogni paese e servizi disponibili (DHL Express Worldwide, 12:00, 10:30, 9:00, Economy Select); prezzi delle merci in importazione e in esportazione, con gli scatti oltre le righe della tabella (nella guida 2026 la tabella d'esportazione oltre i 30 kg dice «per ogni 0,5 kg», ma i prezzi sono per kg: il passo vero si ricava dai prezzi); costo dei servizi a orario; limiti di peso e misure; supplementi a prezzo fisso.
+- **Peso**: per ogni collo il maggiore tra peso reale e volumetrico (lunghezza × larghezza × altezza in cm / 5000), arrotondato al mezzo kg (Economy Select: al kg); la spedizione paga la somma, con gli arrotondamenti della tabella.
+- **Supplementi**: dai colli si ricavano collo extra misura (peso tassabile oltre 70 kg; lato oltre 100 cm o secondo lato oltre 80 cm), collo non trasportabile su nastro (da 25 a 70 kg, o imballo non in cartone) e pallet non sovrapponibile; si scelgono consegna al sabato, aree remote, batterie al litio e assicurazione (1 % del valore, almeno 11 €).
+- **Carburante**: DHL lo cambia ogni settimana. Il server lo legge da solo ogni giorno dalla [pagina dei supplementi di DHL Express Italia](https://mydhl.express.dhl/it/it/ship/surcharges.html): il valore della settimana in corso per i servizi internazionali (Worldwide e servizi a orario) e quello di Economy Select, che ha il suo. In *Gestione → Trasporto* si vede la settimana e quando è stato letto, con «Leggi adesso»; se la pagina non risponde o cambia forma resta l'ultimo valore, Gestione mostra l'errore e si riprova dopo 6 ore. Si può anche scrivere a mano: vale fino alla domenica della sua settimana. Con `MAGIC_HS_CARBURANTE_URL` vuota la lettura automatica è spenta. Dopo 7 giorni senza aggiornamenti compare tra le cose *Da sistemare*; nel calcolatore si può cambiare. Si applica al trasporto, ai servizi a orario e ai supplementi legati al trasporto, non all'assicurazione e alle merci pericolose.
+- **Nella bolla d'importazione** «Calcola trasporto e assicurazione con DHL Express» apre il calcolatore con il paese e i colli della bolla. «Usa nella bolla» mette nel trasporto fino al confine UE (valore in dogana) la quota indicata: per il trasporto aereo la percentuale dell'allegato 23-01 del Reg. (UE) 2015/2447 per il paese di partenza, già proposta dalla tabella dell'allegato (per Stati Uniti, Canada e Russia dipende dall'aeroporto di partenza, che si sceglie; per i paesi che non sono nella tabella, come il Regno Unito, si scrive). Il resto va tra le spese fino a destinazione (base IVA), l'assicurazione nel suo campo.
+- **Non comprende**: dazi, IVA e oneri di sdoganamento, Demand Surcharge e situazioni di emergenza, supplementi per paesi a rischio, merci pericolose (salvo le batterie al litio), sconti contrattuali; le spedizioni nazionali.
 
 ## Misure a una data passata
 
@@ -188,6 +202,8 @@ pip install -r requirements-dev.txt
 python -m pytest -q tests                       # sito, IA, dati, backup, ricerca, archivio, copia esterna, bolle
 node tests/prova_calcolo.js                     # calcoli della bolla e degli importi
 node tests/prova_calendario.js                  # stagioni e feste (Pasqua, Carnevale, auguri, contrasto dei colori)
+node tests/prova_trasporto.js                   # costo di spedizione (pesi, scatti, supplementi, carburante)
+TARIC_PDF_DHL=guida-dhl-2026.pdf python -m pytest -q tests/test_trasporto.py   # con la guida vera di DHL Express
 TARIC_ZIP_PROVA=eu-taric-2026-11.zip python -m pytest -q tests/test_dati_reali.py   # con un'estrazione vera (circa un minuto)
 ```
 
@@ -195,7 +211,7 @@ Il sito si avvia anche in locale: `TARIC_DATI=prova/dati MAGIC_HS_AMMINISTRATORI
 
 Prova nel browser (Playwright), la stessa che GitHub esegue a ogni modifica:
 1. prendi i dati di un mese dalla pagina `dati` (oppure preparali con `python strumenti/dati_mese.py AAAA-MM dati-AAAA-MM-01.zip`);
-2. `tests/sito_di_prova.sh dati-AAAA-MM-01.zip prova-sito` avvia i finti servizio IA, GitHub, BCE e archivio S3 (`tests/finto_claude.py`) e il sito sulla porta 8810, e aspetta i dati;
+2. `tests/sito_di_prova.sh dati-AAAA-MM-01.zip prova-sito` avvia i finti servizio IA, GitHub, BCE, archivio S3 e pagina del carburante di DHL (`tests/finto_claude.py`) e il sito sulla porta 8810, e aspetta i dati;
 3. lancia `node tests/e2e_sito.js http://localhost:8810 shots-sito`.
 
 Le istruzioni per proseguire il lavoro con Claude Code sono in `CLAUDE.md`.

@@ -8,6 +8,8 @@
 - Cambi della BCE per la bolla simulata: /bce/D.<VALUTA>.EUR.SP00.A?startPeriod=...&endPeriod=...&format=csvdata, in CSV
   con le colonne TIME_PERIOD e OBS_VALUE, un cambio fisso per ogni giorno feriale (USD 1.0867, CNY 7.7341, GBP 0.8712);
   le altre valute rispondono 404 come la BCE (MAGIC_HS_BCE_URL=http://127.0.0.1:9100/bce).
+- Pagina dei supplementi di DHL Express con il carburante della settimana: /dhl/surcharges.html
+  (MAGIC_HS_CARBURANTE_URL=http://127.0.0.1:9100/dhl/surcharges.html), 50 % per i servizi internazionali e 40 % per Economy Select.
 - Archivio S3 per la copia esterna del database: PUT e GET sotto /s3/ (MAGIC_HS_COPIA_URL=http://127.0.0.1:9100/s3/magic-hs),
   accetta solo la chiave «chiave-s3-finta» e il contenuto con l'impronta dichiarata; GET /s3/ elenca gli oggetti.
 Uso: python tests/finto_claude.py 9100 [dati-AAAA-MM-01.zip ...], poi il sito con TARIC_IA_FORNITORE=openai,
@@ -42,6 +44,32 @@ def come_mese(b: bytes, versione: str) -> bytes:
     return esce.getvalue()
 S3: dict[str, bytes] = {}              # percorso -> contenuto (copia esterna del database)
 CAMBI = {"USD": "1.0867", "CNY": "7.7341", "GBP": "0.8712"}
+
+
+MESI_IT = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
+
+
+def pagina_carburante(oggi: datetime.date, express: float = 50.0, economy: float = 40.0) -> str:
+    """La pagina dei supplementi di DHL Express come la pubblica DHL (/dhl/surcharges.html, MAGIC_HS_CARBURANTE_URL): una
+    tabella per gruppo di servizi, una riga per settimana, dalla prossima alle precedenti; questa settimana vale express
+    (servizi internazionali) ed economy (Day Definite Intra-Europe), le altre 0,25 in meno."""
+    lunedi = oggi - datetime.timedelta(days=oggi.weekday())
+
+    def sett(d: datetime.date) -> str:
+        f = d + datetime.timedelta(days=6)
+        if d.year != f.year:
+            return f"{MESI_IT[d.month - 1]} {d.day}, {d.year}-{MESI_IT[f.month - 1]} {f.day}, {f.year}"
+        return f"{MESI_IT[d.month - 1]} {d.day}-" + (f"{MESI_IT[f.month - 1]} " if f.month != d.month else "") + f"{f.day}, {f.year}"
+
+    def tabella(titolo: str, valore: float) -> str:
+        righe = "".join(f"<tr><td><div class=\"v2-p\">{sett(lunedi + datetime.timedelta(days=7 * k))}</div></td>"
+                        f"<td><div class=\"v2-p\">{valore - (0 if k == 0 else 0.25):.2f}%</div></td></tr>" for k in (1, 0, -1, -2, -3))
+        return (f"<div class=\"v2-p\"><strong>{titolo}</strong></div><table><tbody><tr><th><strong>Data di entrata in vigore</strong></th>"
+                f"<th><strong>Supplementi</strong></th></tr>{righe}</tbody></table><div>Di Più Sui {titolo} Supplemento Carburante</div>")
+    return ("<!DOCTYPE html><html lang=\"it-IT\"><head><title>Servizi opzionali</title><script>var x = \"Novembre 1-7, 2026\";</script>"
+            "</head><body><h2>Supplemento Carburante</h2><p>DHL implementerà aggiornamenti settimanali del supplemento carburante</p>"
+            + tabella("Servizi Internazionali Time Definite", express) + tabella("Servizi Nazionali Time Definite", 30.0)
+            + tabella("Servizi Day Definite Intra-Europe", economy) + "</body></html>")
 
 
 def cambi_bce(percorso: str) -> tuple[int, str]:
@@ -95,6 +123,13 @@ class Gestore(BaseHTTPRequestHandler):
             b = DATI[self.path[13:]]
             self.send_response(200)
             self.send_header("content-type", "application/octet-stream")
+            self.send_header("content-length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+        elif self.path == "/dhl/surcharges.html":
+            b = pagina_carburante(datetime.date.today()).encode()
+            self.send_response(200)
+            self.send_header("content-type", "text/html; charset=utf-8")
             self.send_header("content-length", str(len(b)))
             self.end_headers()
             self.wfile.write(b)

@@ -181,6 +181,19 @@ SCHEMA = [
         PRIMARY KEY (valuta, mese)
     );
     """,
+    # versione 6: tariffe del calcolatore del trasporto (guida di DHL Express caricata in PDF), una sola in uso
+    """
+    CREATE TABLE tariffe_trasporto (
+        id INTEGER PRIMARY KEY,
+        caricata TEXT NOT NULL,
+        autore_id INTEGER REFERENCES utenti(id) ON DELETE SET NULL,
+        titolo TEXT NOT NULL,
+        validita TEXT NOT NULL DEFAULT '',
+        dati TEXT NOT NULL,
+        riepilogo TEXT NOT NULL DEFAULT '',
+        attiva INTEGER NOT NULL DEFAULT 0
+    );
+    """,
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
@@ -192,6 +205,11 @@ IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
     # domini delle email approvate subito alla registrazione, con l'IA spenta (utenti.quota_ia = 0) finche'
     # l'amministratore non la concede
     "domini_automatici": ["dhl.com"],
+    # supplemento carburante di DHL Express per il calcolatore del trasporto (DHL lo cambia ogni settimana):
+    # {"percentuale": Express, "economy": Economy Select o None, "dal", "al", "aggiornato", "autore", "fonte": "dhl"|"mano"}
+    "carburante": None,
+    # lettura automatica dalla pagina di DHL (taric/carburante.py): esito, tentato, riuscito, messaggio
+    "carburante_auto": None,
 }
 
 
