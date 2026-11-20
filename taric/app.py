@@ -259,9 +259,18 @@ RE_ISTANTE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 def istante_valido(s: Any) -> str:
-    """Un orario come lo scrive il sito (AAAA-MM-GGThh:mm:ssZ), altrimenti adesso: da un file importato arriva di tutto."""
-    s = str(s or "")
-    return s if RE_ISTANTE.match(s) else iso()
+    """Un orario come lo scrive il sito (AAAA-MM-GGThh:mm:ssZ). Da un file importato arriva di tutto: un orario ISO con il
+    fuso («+01:00») si riporta in UTC, così importare due volte lo stesso file non crea doppioni; il resto diventa adesso."""
+    s = str(s or "").strip()
+    if RE_ISTANTE.match(s):
+        return s
+    try:
+        d = dt.datetime.fromisoformat(s[:40])
+    except ValueError:
+        return iso()
+    if d.tzinfo is None or not 1900 < d.year < 2200:
+        return iso()
+    return iso(d.astimezone(dt.timezone.utc))
 
 
 # ------------------------------------------------------------------ applicazione

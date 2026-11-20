@@ -562,6 +562,7 @@ async function accedi(p, email, password) {
   await capo.click('button[data-v="utenti"]');
   await capo.waitForSelector('tr:has-text("luca@azienda.it") button[data-g="u-apri"]');
   if (await capo.isHidden('form[data-g="u-azienda"]')) await capo.click('tr:has-text("luca@azienda.it") button[data-g="u-apri"]');   // già aperto dal link
+  await capo.waitForSelector('tr:has-text("luca@azienda.it") td[data-l="IA"]:has-text("/ 3")');            // la tabella arriva ricaricata
   ok((await capo.inputValue('form[data-g="u-azienda"] input[name=azienda]')) === 'Spedizioni Rossi' && await capo.isVisible('tr:has-text("luca@azienda.it") td[data-l="IA"]:has-text("/ 3")'),
     'utenti: l\'azienda della persona e il limite dato dall\'azienda');
   await capo.click('button[data-g="u-esci"]');
