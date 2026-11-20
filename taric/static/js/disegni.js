@@ -541,47 +541,62 @@
   T.accessorio = function () { return ACCESSORI[OGGI.tema] || ''; };
 
   /* ---------------------------------------------------------------- Simone, l'autore di MAGIC HS
-     Il busto (T.autore) firma le pagine e le risposte alle segnalazioni; con le braccia alzate esulta nel gioco. La testa è
-     disegnata in un quadrato di 120 x 140 e si riusa piccola per la figura sulla banchina, che saluta quando la si tocca
-     (js/porto.js). Capelli mossi, occhiali tondi, barba, orecchino; colori nelle variabili --av-* di app.css. */
+     Stile da cartone animato: contorno nero sottile e uniforme, colori piatti, testa grande, occhi grandi con le palpebre
+     un po' abbassate, naso a ricciolo, bocca a una linea. Capelli mossi sopra e rasati sfumati ai lati, occhiali tondi
+     sottili, barba corta, orecchino, felpa con il cappuccio. Il busto (T.autore) firma le pagine e le risposte alle
+     segnalazioni; a braccia alzate esulta nel gioco. La testa (120 x 140) si riusa piccola per la figura sulla banchina, che
+     saluta quando la si tocca (js/porto.js), e nella cabina del gioco. Colori nelle variabili --av-* di app.css. */
   T.AUTORE = 'Simone';
   function testaAutore() {
-    return '<ellipse class="av-pelle av-t" cx="31" cy="64" rx="6" ry="9"/><ellipse class="av-pelle av-t" cx="89" cy="64" rx="6" ry="9"/>' +
-      '<circle class="av-orecchino" cx="89.5" cy="72" r="2.3"/>' +
-      '<path class="av-pelle av-t" d="M32 52C32 30 46 21 60 21C76 21 88 30 88 52L88 68C88 87 76 98 60 98C44 98 32 87 32 68Z"/>' +
-      '<path class="av-barba" d="M32 60C32 80 40 95 60 99C80 95 88 80 88 60C86 71 83 77 78 80C72 84 66 83 60 83C54 83 48 84 42 80C37 77 34 71 32 60Z"/>' +
-      '<path class="av-barba" d="M47 77C52 72.5 57 73.5 60 76C63 73.5 68 72.5 73 77C68 78.5 64 79 60 78C56 79 52 78.5 47 77Z"/>' +
-      '<path class="av-bocca" d="M52 83.5Q60 88.5 68 83.5"/>' +
-      '<path class="av-linea" d="M59 60C58 66 56.5 69 59.5 70.5C61.5 71 63.5 70 63.5 68"/>' +
-      '<path class="av-ciglia" d="M41 49Q47 46 53 48.5M67 48.5Q73 46 79 49"/>' +
-      '<path class="av-linea" d="M44 58.5Q48 55.5 52 58.5M68 58.5Q72 55.5 76 58.5"/>' +
-      '<circle class="av-lente" cx="48" cy="58" r="10"/><circle class="av-lente" cx="72" cy="58" r="10"/>' +
-      '<path class="av-filo" d="M58 57Q60 55 62 57M38 56L32 55M82 56L88 55"/>' +
-      '<path class="av-capelli av-t" d="M30.5 57C27 40 34 25 50 20.5C67 16.5 86 21 90.5 37C91.5 45 90.5 51 88.5 57C87.5 47 84.5 40.5 78.5 37C71 33 64 35.5 56 34C48 33 40 36.5 36 43C33.5 47 31.5 52 30.5 57Z"/>' +
-      '<path class="av-capelli" d="M34 33C34 26 40 22 44 24C45 18 52 16 55 20C58 15 65 15 67 19.5C71 16 78 18 79 23C84 22 88 27 87 32C80 30 72 31 64 30C56 29.5 46 30 34 33Z"/>' +
-      '<path class="av-ricci" d="M44 26Q47 29 50 27M56 22Q59 26 62 23M68 22Q71 26 74 24"/>';
+    var occhio = function (x) {
+      return '<ellipse class="av-occhio av-t" cx="' + x + '" cy="56" rx="7.6" ry="8.4"/><circle class="av-nero" cx="' + (x + (x < 60 ? 1.2 : -1.2)) + '" cy="58" r="1.55"/>' +
+        '<path class="av-pelle av-t" d="M' + (x - 7.2) + ' 53.4A7.6 8.4 0 0 1 ' + (x + 7.2) + ' 53.4Q' + x + ' 51.4 ' + (x - 7.2) + ' 53.4Z"/>';
+    };
+    return '<path class="av-pelle av-t" d="M30.2 54C27 54 26.5 63 31.6 64.6"/><path class="av-pelle av-t" d="M89.8 54C93 54 93.5 63 88.4 64.6"/>' +
+      '<circle class="av-nero" cx="90.2" cy="66.8" r="1.6"/>' +
+      '<path class="av-pelle av-t" d="M31 48C31 26 44 14.5 60 14.5C76 14.5 89 26 89 48V62C89 86 76 99.5 60 99.5C44 99.5 31 86 31 62Z"/>' +
+      // lati rasati: scuri in alto, chiari verso le orecchie
+      '<path class="av-sfuma2" d="M31.2 44C31.6 36 34 30 37.5 26.5L40 52.5C37 53 34 54 31.2 55ZM88.8 44C88.4 36 86 30 82.5 26.5L80 52.5C83 53 86 54 88.8 55Z"/>' +
+      '<path class="av-sfuma1" d="M31.5 40C32.2 33.5 34.6 28.8 37.5 26.5L39.2 42C36.4 41.6 33.8 41 31.5 40ZM88.5 40C87.8 33.5 85.4 28.8 82.5 26.5L80.8 42C83.6 41.6 86.2 41 88.5 40Z"/>' +
+      '<path class="av-linea" d="M31 48C31 26 44 14.5 60 14.5C76 14.5 89 26 89 48"/>' +
+      // barba corta lungo la mascella e sul mento, baffi sottili
+      '<path class="av-barba av-t" d="M31.6 62C32.6 85 45 99 60 99.5C75 99 87.4 85 88.4 62C86.8 70 83 75.6 77.6 78.6C74 80.6 71.6 83.4 69.6 86.4C66.8 88 63.4 88.2 60 88.2' +
+      'C56.6 88.2 53.2 88 50.4 86.4C48.4 83.4 46 80.6 42.4 78.6C37 75.6 33.2 70 31.6 62Z"/>' +
+      '<path class="av-barba av-t" d="M50.6 77.4C53.8 74.8 57.2 74.8 60 76.2C62.8 74.8 66.2 74.8 69.4 77.4C66.2 77.2 63 77.6 60 78.2C57 77.6 53.8 77.2 50.6 77.4Z"/>' +
+      '<path class="av-linea" d="M54.6 82.2Q60.2 85 65.6 81.8"/><path class="av-linea" d="M61 62.5C57.8 64.2 58.2 68.4 62.2 68"/>' +
+      occhio(49.5) + occhio(70.5) +
+      '<circle class="av-fine" cx="49.5" cy="56" r="9.9"/><circle class="av-fine" cx="70.5" cy="56" r="9.9"/>' +
+      '<path class="av-fine" d="M59.4 55.2Q60 54.4 60.6 55.2M39.6 54.8L31.6 53.6M80.4 54.8L88.4 53.6"/>' +
+      // capelli mossi solo sopra
+      '<path class="av-capelli av-t" d="M36.6 31C37 21.5 43.6 15.6 48.6 17.8C51.6 11.2 59.6 10.2 62.2 14.8C66.2 10.4 74.4 12 75.4 17.6C80.6 16.6 84.6 22.6 83.4 31' +
+      'C81.6 33.6 79 34.2 76.8 32.4C73.6 34.6 69.4 34.4 66.8 32.4C63.6 34.8 58.8 34.6 56.2 32.4C53 34.6 48.6 34.4 46 32.2C43.2 34.2 39 34 36.6 31Z"/>' +
+      '<path class="av-fine av-ricci" d="M45 22.6Q48.8 25.8 53 23.6M61.6 18.8Q65 22.8 69.6 20.8M74.6 25.6Q77.4 28.4 80.8 27.6"/>';
   }
   T.autoreTesta = testaAutore;
   T.autore = function (opz) {
     opz = opz || {};
-    var maniche = 'M27 116Q16 104 14 90M93 116Q104 104 106 90', avambracci = 'M14 90Q11 77 15 66M106 90Q109 77 105 66';
-    var braccia = opz.esulta ? '<g class="av-braccia"><path class="av-bordo-b" d="' + avambracci + '"/><path class="av-braccio" d="' + avambracci + '"/>' +
-      '<path class="av-bordo-m" d="' + maniche + '"/><path class="av-manica" d="' + maniche + '"/>' +
-      '<circle class="av-pelle av-t" cx="15" cy="61" r="6.5"/><circle class="av-pelle av-t" cx="105" cy="61" r="6.5"/></g>' : '';
-    return '<svg class="avatar' + (opz.esulta ? ' esulta' : '') + (opz.classe ? ' ' + opz.classe : '') + '" viewBox="0 0 120 140" aria-hidden="true" focusable="false">' + braccia +
-      '<path class="av-maglia av-t" d="M12 140C14 114 34 102 60 102C86 102 106 114 108 140Z"/><path class="av-collo-maglia" d="M47 103Q60 112 73 103"/>' +
-      '<path class="av-pelle-ombra av-t" d="M50 88L70 88L70 103C64 107 56 107 50 103Z"/>' + testaAutore() + '</svg>';
+    var braccia = 'M30 122Q20 106 21 90Q21 78 24 70M90 122Q100 106 99 90Q99 78 96 70';
+    var su = opz.esulta ? '<path class="av-bordo-m" d="' + braccia + '"/><path class="av-manica" d="' + braccia + '"/>' +
+      '<circle class="av-pelle av-t" cx="24.5" cy="64" r="6"/><circle class="av-pelle av-t" cx="95.5" cy="64" r="6"/>' : '';
+    return '<svg class="avatar' + (opz.esulta ? ' esulta' : '') + (opz.classe ? ' ' + opz.classe : '') + '" viewBox="0 0 120 140" aria-hidden="true" focusable="false">' + su +
+      '<path class="av-felpa av-t" d="M12 140C13 118 30 106.5 60 106.5C90 106.5 107 118 108 140Z"/>' +
+      '<path class="av-linea" d="M30 140C31 130 32 124 34 120M90 140C89 130 88 124 86 120"/>' +
+      '<path class="av-felpa2 av-t" d="M38 109.6C38 100.6 47.4 96 60 96C72.6 96 82 100.6 82 109.6C82 116 72.4 119.6 60 119.6C47.6 119.6 38 116 38 109.6Z"/>' +
+      '<path class="av-pelle av-t" d="M54 95V109C57 111.4 63 111.4 66 109V95Z"/>' +
+      '<path class="av-felpa av-t" d="M44 111C49 116.4 54.6 118 60 118C65.4 118 71 116.4 76 111C73 120.4 67 124.4 60 124.4C53 124.4 47 120.4 44 111Z"/>' +
+      '<path class="av-laccio" d="M55.4 121V133M64.6 121V133"/><path class="av-linea" d="M53.8 132.6H57M63 132.6H66.2"/>' +
+      testaAutore() + '</svg>';
   };
-  /* Simone sulla banchina, tra le gambe della gru: gilet ad alta visibilità e cartellina per controllare i container */
+  /* Simone sulla banchina, tra le gambe della gru: felpa, gilet ad alta visibilità e cartellina per i container */
   function simone(x) {
     return '<g class="t-simone">' + presa(x - 11, 108, 24, 33) + '<g class="s-simone" transform="translate(' + x + ' 140)">' +
       '<rect class="av-pantaloni" x="-3.6" y="-9.6" width="3" height="8.6" rx="1"/><rect class="av-pantaloni" x="0.6" y="-9.6" width="3" height="8.6" rx="1"/>' +
       '<ellipse class="av-scarpa" cx="-2.3" cy="-0.8" rx="2.4" ry="1.1"/><ellipse class="av-scarpa" cx="2.3" cy="-0.8" rx="2.4" ry="1.1"/>' +
       '<path class="av-braccio-s" d="M-4.6 -17L-6.6 -11.5"/>' +
       '<rect class="av-cartellina" x="-9.6" y="-14.6" width="4.6" height="5.8" rx=".6"/><rect class="av-foglio" x="-9" y="-13.6" width="3.4" height="4.4"/>' +
-      '<path class="av-maglia av-t-s" d="M-4.8 -18.2Q0 -19.6 4.8 -18.2L5.2 -9H-5.2Z"/>' +
-      '<path class="av-gilet" d="M-4.8 -18.2L-1.5 -17.6V-9H-5.2ZM4.8 -18.2L1.5 -17.6V-9H5.2Z"/><path class="av-catarifrangente" d="M-5 -12.6H-1.5M1.5 -12.6H5"/>' +
-      '<g class="s-saluto"><path class="av-braccio-s" d="M4.6 -17L6.4 -11.6"/><circle class="av-pelle" cx="6.6" cy="-11" r="1.15"/></g>' +
+      '<path class="av-felpa av-t-s" d="M-5.2 -18.4Q0 -19.8 5.2 -18.4L5.6 -8.6H-5.6Z"/>' +
+      '<path class="av-gilet" d="M-5.2 -18.4L-1.5 -17.8V-9H-5.6ZM5.2 -18.4L1.5 -17.8V-9H5.6Z"/><path class="av-catarifrangente" d="M-5.4 -12.6H-1.5M1.5 -12.6H5.4"/>' +
+      '<g class="s-saluto"><path class="av-braccio-s" d="M4.8 -17L6.6 -11.6"/><circle class="av-pelle" cx="6.8" cy="-10.9" r="1.15"/></g>' +
       '<g class="av-piccola" transform="translate(-4.8 -26.1) scale(.08)">' + testaAutore() + '</g>' +
       '<g class="s-ciao"><rect class="av-nuvoletta" x="-1" y="-41" width="22" height="10" rx="3"/><path class="av-nuvoletta" d="M2 -31.5L1 -27L6 -31.5Z"/>' +
       '<text class="av-ciao" x="10" y="-33.6" text-anchor="middle">Ciao!</text></g></g></g>';

@@ -23,12 +23,12 @@
     return h + '<rect class="d-porta" x="' + (LC - 3) + '" width="3" height="' + HC + '"/><rect class="d-lucido" width="' + LC + '" height="1.5"/></g>';
   }
   function centroPosto(i) { return X0 + i * LP + LP / 2; }
-  /* la cabina del gruista accanto al carrello: dentro c'è Simone, l'autore (js/disegni.js) */
+  /* la cabina del gruista appesa sotto il carrello, al centro (non esce mai dal disegno): dentro c'è Simone (js/disegni.js) */
   function cabina() {
     if (!T.autoreTesta) return '';
-    return '<g class="g-cabina" data-g="cabina"><rect class="d-t" x="16" y="' + (BRACCIO - 4) + '" width="26" height="25" rx="3"/>' +
-      '<rect class="g-vetro" x="19" y="' + (BRACCIO - 1) + '" width="20" height="18" rx="2"/>' +
-      '<g class="g-simone"><g class="av-piccola" transform="translate(19.2 ' + (BRACCIO - 2.6) + ') scale(.165)">' + T.autoreTesta() + '</g></g></g>';
+    return '<g class="g-cabina" data-g="cabina"><rect class="d-t" x="-12" y="' + (BRACCIO + 5) + '" width="24" height="20" rx="3"/>' +
+      '<rect class="g-vetro" x="-9.5" y="' + (BRACCIO + 7.5) + '" width="19" height="15" rx="2"/>' +
+      '<g class="g-simone"><g class="av-media" transform="translate(-8.4 ' + (BRACCIO + 6.6) + ') scale(.14)">' + T.autoreTesta() + '</g></g></g>';
   }
 
   T.gioco = function () {
@@ -44,8 +44,8 @@
         '<g class="d-gru"><path d="M10 ' + BRACCIO + 'H590M24 ' + BRACCIO + 'V' + (BRACCIO - 14) + 'M576 ' + BRACCIO + 'V' + (BRACCIO - 14) + '"/></g>' +
         '<g data-g="nave"></g>' +
         '<g data-g="bersaglio" class="g-bersaglio"></g>' +
-        '<g data-g="carrello"><rect class="d-t" x="-16" y="' + (BRACCIO - 6) + '" width="32" height="12" rx="3"/>' + cabina() +
-          '<path class="g-cavo" data-g="cavo" d="M0 ' + (BRACCIO + 6) + 'V' + APPESO + '"/><g data-g="appeso"></g></g>' +
+        '<g data-g="carrello"><rect class="d-t" x="-16" y="' + (BRACCIO - 6) + '" width="32" height="12" rx="3"/>' +
+          '<path class="g-cavo" data-g="cavo" d="M0 ' + (BRACCIO + 6) + 'V' + APPESO + '"/>' + cabina() + '<g data-g="appeso"></g></g>' +
         '<g data-g="cade"></g><g data-g="spruzzi"></g>' +
         '<rect class="d-mare" y="270" width="' + L + '" height="50"/>' +
         '<path class="d-onda" d="M22 284h22M110 296h34M210 288h18M300 300h30M392 286h22M480 296h34M560 284h20"/>' +

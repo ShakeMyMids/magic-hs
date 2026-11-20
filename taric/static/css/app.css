@@ -40,9 +40,9 @@
   --g-cappello:#ffffff; --g-banda:#1b5584; --g-visiera:#17222e; --g-stemma:#e9a72e; --g-colletto:#1b5584; --g-nodo:#e9772e;
   --aiuto-velo:rgba(10,24,38,.42);
   /* Simone, l'autore (js/disegni.js: T.autore e la figura sulla banchina) */
-  --av-pelle:#efc6a6; --av-pelle-ombra:#e0ad8a; --av-capelli:#3a2a20; --av-barba:#4a3527; --av-tratto:#1d2b3a; --av-lente:rgba(170,205,235,.12);
-  --av-maglia:#a9b0b8; --av-maglia-ombra:#959ca5; --av-labbra:#c97b6b; --av-orecchino:#17222e; --av-pantaloni:#24324a; --av-scarpa:#f4f6f8;
-  --av-cartellina:#a0703e; --av-foglio:#f5f7fa;
+  --av-pelle:#eddcb4; --av-tratto:#141414; --av-capelli:#3f2b1f; --av-barba:#94735a; --av-occhio:#fdfdf8;
+  --av-sfuma-1:#6e5b4b; --av-sfuma-2:#b7a385; --av-felpa:#3a689a; --av-felpa-ombra:#2b5079; --av-laccio:#f3f1ea;
+  --av-pantaloni:#24324a; --av-scarpa:#f4f6f8; --av-cartellina:#a0703e; --av-foglio:#f5f7fa;
   /* stagioni e feste (js/calendario.js) */
   --d-sole:#f4b63f; --d-neve:#ffffff; --d-fiore:#f3a6bf; --d-mimosa:#f5c623; --d-foglia:#4f9a55; --d-foglia-nuova:#7dbb5c;
   --d-autunno-1:#dd9a35; --d-autunno-2:#c75a2c; --d-tronco:#8b6a4e; --d-cuore:#e0506a; --d-verde:#1f9a4f; --d-rosso:#d7373b; --d-zucca:#ef8b2c;
@@ -1049,25 +1049,21 @@ html.con-finestra{overflow:hidden}
    Il busto (.avatar) nella firma, nelle risposte alle segnalazioni e nel gioco; la figura sulla banchina (.t-simone) saluta
    quando la si tocca (js/porto.js). La testa della figura è la stessa del busto rimpicciolita: tratti più spessi. */
 .avatar{display:block;width:100%;height:auto;overflow:visible}
-.av-t{stroke:var(--av-tratto);stroke-width:1.7;stroke-linejoin:round}
-.av-pelle{fill:var(--av-pelle)} .av-pelle-ombra{fill:var(--av-pelle-ombra)} .av-capelli{fill:var(--av-capelli)} .av-barba{fill:var(--av-barba)}
-.av-maglia{fill:var(--av-maglia)} .av-orecchino{fill:var(--av-orecchino)}
-.av-collo-maglia{fill:none;stroke:var(--av-maglia-ombra);stroke-width:2.2;stroke-linecap:round}
-.av-lente{fill:var(--av-lente);stroke:var(--av-tratto);stroke-width:1.9}
-.av-filo,.av-linea,.av-ciglia,.av-ricci,.av-bocca{fill:none;stroke-linecap:round}
-.av-filo{stroke:var(--av-tratto);stroke-width:1.9} .av-linea{stroke:var(--av-tratto);stroke-width:1.6}
-.av-ciglia{stroke:var(--av-capelli);stroke-width:2.6} .av-ricci{stroke:var(--av-capelli);stroke-width:1.4} .av-bocca{stroke:var(--av-labbra);stroke-width:2.4}
-.av-bordo-m,.av-manica,.av-bordo-b,.av-braccio{fill:none;stroke-linecap:round}
-.av-bordo-m{stroke:var(--av-tratto);stroke-width:16.4} .av-manica{stroke:var(--av-maglia);stroke-width:13}
-.av-bordo-b{stroke:var(--av-tratto);stroke-width:12.4} .av-braccio{stroke:var(--av-pelle);stroke-width:9}
+.av-t{stroke:var(--av-tratto);stroke-width:1.25;stroke-linejoin:round;stroke-linecap:round}
+.av-pelle{fill:var(--av-pelle)} .av-capelli{fill:var(--av-capelli)} .av-barba{fill:var(--av-barba)} .av-occhio{fill:var(--av-occhio)} .av-nero{fill:var(--av-tratto)}
+.av-sfuma1{fill:var(--av-sfuma-1)} .av-sfuma2{fill:var(--av-sfuma-2)} .av-felpa{fill:var(--av-felpa)} .av-felpa2{fill:var(--av-felpa-ombra)}
+.av-linea,.av-fine,.av-laccio{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.av-linea{stroke:var(--av-tratto);stroke-width:1.25} .av-fine{stroke:var(--av-tratto);stroke-width:1} .av-laccio{stroke:var(--av-laccio);stroke-width:1.6}
+.av-bordo-m,.av-manica{fill:none;stroke-linecap:round}
+.av-bordo-m{stroke:var(--av-tratto);stroke-width:14.5} .av-manica{stroke:var(--av-felpa);stroke-width:12}
 /* la figura sulla banchina */
 .t-simone{cursor:var(--mano,pointer)}
-.av-piccola .av-t{stroke-width:5} .av-piccola .av-lente,.av-piccola .av-filo{stroke-width:6} .av-piccola .av-linea{stroke-width:5}
-.av-piccola .av-ciglia,.av-piccola .av-bocca{stroke-width:7} .av-piccola .av-ricci{display:none}
+.av-piccola .av-t,.av-piccola .av-linea{stroke-width:5} .av-piccola .av-fine{stroke-width:5} .av-piccola .av-ricci{display:none}
+.av-media .av-t,.av-media .av-linea{stroke-width:2.6} .av-media .av-fine{stroke-width:2.2} .av-media .av-ricci{display:none}
 .av-t-s{stroke:var(--av-tratto);stroke-width:.5;stroke-linejoin:round}
 .av-pantaloni{fill:var(--av-pantaloni);stroke:var(--av-tratto);stroke-width:.4}
 .av-scarpa{fill:var(--av-scarpa);stroke:var(--av-tratto);stroke-width:.4}
-.av-braccio-s{fill:none;stroke:var(--av-pelle);stroke-width:1.9;stroke-linecap:round}
+.av-braccio-s{fill:none;stroke:var(--av-felpa);stroke-width:2;stroke-linecap:round}
 .av-cartellina{fill:var(--av-cartellina);stroke:var(--av-tratto);stroke-width:.4} .av-foglio{fill:var(--av-foglio)}
 .av-gilet{fill:var(--d-cont-1)} .av-catarifrangente{fill:none;stroke:var(--av-foglio);stroke-width:.9}
 .av-nuvoletta{fill:var(--carta);stroke:var(--linea-forte);stroke-width:.4}
