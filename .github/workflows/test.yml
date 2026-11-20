@@ -20,6 +20,8 @@ jobs:
         run: node tests/prova_calcolo.js
       - name: Stagioni e feste della scena (js/calendario.js)
         run: node tests/prova_calendario.js
+      - name: Costo del trasporto (js/trasporto.js)
+        run: node tests/prova_trasporto.js
 
   # prova nel browser (tests/e2e_sito.js): il sito con un finto servizio IA e i dati veri dell'ultimo mese pubblicato
   browser:
@@ -42,6 +44,8 @@ jobs:
       - name: Sito di prova
         run: tests/sito_di_prova.sh "$(ls "$RUNNER_TEMP"/dati/dati-*.zip | sort | tail -1)" "$RUNNER_TEMP/sito"
       - name: Prova nel browser
+        env:
+          PYTHON: python
         run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node tests/e2e_sito.js http://localhost:8810 "$RUNNER_TEMP/schermate"
       - name: Registro del sito (se qualcosa non va)
         if: failure()

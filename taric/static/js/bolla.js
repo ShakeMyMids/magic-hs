@@ -7,7 +7,7 @@
   var T = window.TARIC, esc = T.esc, K = window.TARIC_CALCOLO;
   var el = document.getElementById('view-bolla');
   var vista = T.viste = T.viste || {};
-  var st = { elenco: null, b: null, cambi: {}, msg: '', msgOk: false, salvata: true, timer: 0, ultimo: null };
+  var st = { elenco: null, b: null, cambi: {}, msg: '', msgOk: false, salvata: true, timer: 0, ultimo: null, calcolatore: null };
   var VALUTE = ['EUR', 'USD', 'CNY', 'GBP', 'CHF', 'JPY', 'TRY', 'INR', 'KRW', 'HKD', 'CAD', 'AUD', 'SGD', 'THB', 'MYR', 'IDR', 'PHP',
     'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'NOK', 'DKK', 'ISK', 'ILS', 'MXN', 'BRL', 'ZAR', 'NZD'];
   var IVA = [[22, '22 %'], [10, '10 %'], [5, '5 %'], [4, '4 %'], [0, 'esente o non imponibile']];
@@ -93,6 +93,7 @@
     /* «Aggiungi alla bolla» dalla scheda del codice */
     aggiungi: function (codice, paese, flusso) {
       var tipo = flusso === 'export' ? 'export' : 'import';
+      st.calcolatore = null;
       if (st.b && st.b.tipo !== tipo && !st.salvata &&
           !window.confirm('La bolla aperta ha modifiche non salvate: aprire una nuova ' + (tipo === 'export' ? 'esportazione' : 'importazione') + ' lo stesso?')) return false;
       if (!st.b || st.b.tipo !== tipo) { st.b = nuovaBolla(tipo); st.salvata = true; }
@@ -109,7 +110,7 @@
 
   /* ------------------------------------------------------------------ elenco e salvataggio */
   function caricaElenco() {
-    return T.api('GET', '/api/bolle').then(function (r) { st.elenco = r.voci; if (!st.b) disegna(); }, function () { st.elenco = []; });
+    return T.api('GET', '/api/bolle').then(function (r) { st.elenco = r.voci; if (!st.b && !st.calcolatore) disegna(); }, function () { st.elenco = []; });
   }
   function apri(id) {
     T.api('GET', '/api/bolle/' + id).then(function (r) {
@@ -198,6 +199,7 @@
 
   /* ------------------------------------------------------------------ disegno */
   function disegna() {
+    if (st.calcolatore) { calcolatore(); return; }
     if (!st.b) { el.innerHTML = elenco(); return; }
     var h = '<div class="bolla-barra fila"><button class="btn sm" type="button" data-b="chiudi">' + T.icona('indietro') + 'Le bolle</button>' +
       '<h2 class="bolla-titolo">' + (imp() ? 'Bolla d\'importazione' : 'Bolla d\'esportazione') + '<span class="st ambra">simulazione</span></h2>' +
@@ -225,6 +227,9 @@
       'Quello che non si può calcolare con certezza resta in evidenza, senza stime.</p>' + rigaMsg() +
       '<div class="fila"><button class="btn pri" type="button" data-b="nuova" data-tipo="import">' + T.icona('piu') + 'Nuova importazione</button>' +
       '<button class="btn" type="button" data-b="nuova" data-tipo="export">' + T.icona('piu') + 'Nuova esportazione</button></div></div></div>';
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('nave') + 'Costo di spedizione</div>' +
+      '<p class="nota">Costo indicativo di una spedizione con DHL Express, da peso e misure dei colli, anche senza una bolla.</p>' +
+      '<div class="fila"><button class="btn" type="button" data-b="trasporto">' + T.icona('nave') + 'Calcola il trasporto</button></div></div></div>';
     var L = st.elenco;
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Le tue bolle<span class="dx">' + (L ? L.length : '') + '</span></div>';
     if (!L) h += '<p class="vuoto">Carico…</p>';
@@ -314,6 +319,7 @@
         '<label>Spese dal confine UE a destinazione (base IVA)<span class="con-valuta"><input class="campo" data-f="inoltro.importo" inputmode="decimal" autocomplete="off" value="' + esc(d.inoltro.importo) + '" placeholder="0,00">' + sceltaValuta('inoltro.valuta', d.inoltro) + '</span></label>' +
         '<label>Spese dal confine UE al confine italiano (solo valore statistico)' + de('statSpese') + '<span class="con-valuta"><input class="campo" data-f="statSpese.importo" inputmode="decimal" autocomplete="off" value="' + esc(d.statSpese.importo) + '" placeholder="0,00">' + sceltaValuta('statSpese.valuta', d.statSpese) + '</span></label>' +
         '<label>Metodo di valutazione' + de('metodo') + scelta('metodo', C.metodi, d.metodo) + '</label></div>' +
+        '<div class="fila"><button class="btn sm" type="button" data-b="trasporto-bolla">' + T.icona('nave') + 'Calcola trasporto e assicurazione con DHL Express</button></div>' +
         '<p class="et">Indicatori di valutazione' + de('indicatori') + '</p><div class="b-doc">' +
         spunta('collegati', 'Acquirente e venditore sono collegati') + spunta('restrizioni', 'Restrizioni per la cessione o l\'utilizzazione delle merci') +
         spunta('condizioni', 'Vendita o prezzo subordinati a condizioni o prestazioni') + spunta('proventi', 'Una parte dei proventi di rivendita ritorna al venditore') + '</div>' +
@@ -671,13 +677,36 @@
     return h;
   }
   window.addEventListener('beforeprint', function () {
-    if (el.hidden || !st.b) return;
+    if (el.hidden || !st.b || st.calcolatore) return;
     calcola();
     var s = el.querySelector('#bolla-stampa');
     if (s) s.innerHTML = documentoStampa();
     document.body.classList.add('stampa-bolla');
   });
   window.addEventListener('afterprint', function () { document.body.classList.remove('stampa-bolla'); });
+
+  /* ------------------------------------------------------------------ calcolatore del trasporto (js/spedizione.js) */
+  function calcolatore() {
+    el.innerHTML = '<div id="b-spedizione"></div>';
+    var daBolla = st.calcolatore.bolla && st.b && imp(), o = { chiudi: function () { st.calcolatore = null; disegna(); window.scrollTo(0, 0); } };
+    if (daBolla) {
+      var arts = dati().articoli, kg = 0, colli = 0;
+      arts.forEach(function (a) { var l = K.numeroIt(a.lordo), c = K.numeroIt(a.colliNumero); if (l > 0) kg += l; if (c > 0) colli += c; });
+      o.bolla = { paese: dati().paese || (arts[0] && arts[0].origine) || '', kg: kg, colli: colli };
+      o.usa = function (q) {
+        var it = function (v) { return v ? Number(v).toFixed(2).replace('.', ',') : ''; };      // gli importi già al centesimo
+        dati().nolo = { importo: it(q.confine), valuta: 'EUR' };
+        dati().inoltro = { importo: it(q.destinazione), valuta: 'EUR' };
+        dati().assicurazione = { importo: it(q.assicurazione), valuta: 'EUR' };
+        st.salvata = false; st.calcolatore = null;
+        st.msg = 'Trasporto DHL Express riportato: ' + app().euro(q.confine) + ' fino al confine UE (' + String(q.quota).replace('.', ',') + ' %), ' + app().euro(q.destinazione) +
+          ' fino a destinazione' + (q.assicurazione ? ', ' + app().euro(q.assicurazione) + ' di assicurazione' : '') + '.';
+        st.msgOk = true;
+        disegna(); window.scrollTo(0, 0);
+      };
+    }
+    if (T.spedizione) T.spedizione.apri(el.firstChild, o);
+  }
 
   /* ------------------------------------------------------------------ eventi */
   function imposta(path, valore) {
@@ -781,6 +810,8 @@
       });
     }
     else if (azione === 'riprova-cambio') { delete st.cambi[chiaveCambio()]; caricaCambio(); }
+    else if (azione === 'trasporto') { st.calcolatore = { bolla: false }; disegna(); window.scrollTo(0, 0); }
+    else if (azione === 'trasporto-bolla') { st.calcolatore = { bolla: true }; disegna(); window.scrollTo(0, 0); }
     else if (azione === 'togli-cod') {
       var ar = dati().articoli[+b.getAttribute('data-a')], cod = b.getAttribute('data-c');
       ar.addizionali = (ar.addizionali || []).filter(function (x) { return x !== cod; });

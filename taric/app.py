@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.gzip import GZipMiddleware
 
 from . import __version__
@@ -39,6 +40,7 @@ from .dati import RE_VERSIONE, GestoreDati
 from .db import Database, iso
 from .ia import ErroreIA, ServizioIA, mese_corrente
 from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
+from .trasporto import MASSIMO_PDF, ErroreTariffe, Tariffe
 from .valute import CambiDoganali, ErroreCambio
 
 log = logging.getLogger("taric")
@@ -141,6 +143,12 @@ class BollaModificata(BaseModel):
     dati: dict[str, Any]
 
 
+# supplemento carburante di DHL Express della settimana, per il calcolatore del trasporto
+class Carburante(BaseModel):
+    percentuale: float = Field(ge=0, le=100)
+    dal: str = Field(default="", max_length=10)
+
+
 # account, accesso e gestione degli utenti
 class Iscrizione(BaseModel):
     nome: str = Field(min_length=2, max_length=100)
@@ -234,6 +242,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     copie = Backup(cfg.dati, cfg.backup_copie)
     fuori = CopiaEsterna(cfg, db, client_copia)
     cambi_doganali = CambiDoganali(db, cfg.bce_url, client_bce)
+    tariffe = Tariffe(db, cfg.dati / "tariffe")
     if fuori.problema():
         log.warning("copia esterna del database spenta: %s", fuori.problema())
     for resto in (cfg.dati / "backup-scaricati").glob("*.zip"):          # copie scaricate rimaste da un invio interrotto
@@ -836,6 +845,14 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         except ErroreCambio as e:
             raise Errore(e.stato, e.messaggio, e.codice) from None
 
+    # ------------------------------------------------------------------ calcolatore del trasporto (taric/trasporto.py)
+    @app.get("/api/trasporto")
+    def trasporto(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """La tariffa in uso (zonario, prezzi, supplementi; i calcoli li fa js/trasporto.js) e il supplemento carburante."""
+        with db.connessione() as c:
+            carburante = db.impostazioni(c)["carburante"]
+        return {"tariffa": tariffe.in_uso(), "carburante": carburante}
+
     # ------------------------------------------------------------------ storico
     @app.get("/api/storico")
     def storico(limite: int = 50, prima: int = 0, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
@@ -1100,9 +1117,69 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def admin_riepilogo(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         with db.connessione() as c:
             in_attesa = c.execute("SELECT COUNT(*) FROM utenti WHERE stato = 'in_attesa'").fetchone()[0]
+            carburante = db.impostazioni(c)["carburante"]
         s = fuori.stato()
         return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso, "in_attesa": in_attesa,
-                "copia_esterna": "spenta" if s["problema"] else ("errore" if s["attiva"] and s["esito"] == "errore" else "")}
+                "copia_esterna": "spenta" if s["problema"] else ("errore" if s["attiva"] and s["esito"] == "errore" else ""),
+                "carburante_giorni": giorni_carburante(carburante) if tariffe.in_uso() else None}
+
+    def giorni_carburante(carburante: dict[str, Any] | None) -> int:
+        """Giorni dall'ultimo aggiornamento del supplemento carburante (DHL lo cambia ogni settimana); 999 se manca."""
+        try:
+            return max(0, (dati._ora_locale().date() - dt.date.fromisoformat(str((carburante or {}).get("dal", ""))[:10])).days)
+        except ValueError:
+            return 999
+
+    # ------------------------------------------------------------------ gestione: tariffe del trasporto
+    @app.get("/api/admin/trasporto")
+    def admin_trasporto(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.connessione() as c:
+            carburante = db.impostazioni(c)["carburante"]
+        return {"versioni": tariffe.versioni(), "carburante": carburante, "carburante_giorni": giorni_carburante(carburante)}
+
+    @app.post("/api/admin/trasporto")
+    async def admin_trasporto_carica(file: UploadFile = File(...), a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Guida ai servizi e alle tariffe di DHL Express in PDF: se supera i controlli diventa la tariffa in uso."""
+        dest = tariffe.cartella / f"caricato-{secrets.token_hex(6)}.pdf"
+        try:
+            totale = 0
+            with open(dest, "wb") as f:
+                while blocco := await file.read(1 << 20):
+                    totale += len(blocco)
+                    if totale > MASSIMO_PDF:
+                        raise Errore(413, "PDF troppo grande (massimo 50 MB).", "troppo_grande")
+                    f.write(blocco)
+            with open(dest, "rb") as f:
+                if f.read(5) != b"%PDF-":
+                    raise Errore(422, "Il file non è un PDF.", "pdf_non_valido")
+            try:
+                esito = await run_in_threadpool(tariffe.carica, dest, a["id"])
+            except ErroreTariffe as e:
+                raise Errore(409 if e.codice == "in_corso" else 422, e.messaggio, e.codice) from None
+        finally:
+            dest.unlink(missing_ok=True)
+        return json_ok(**esito)
+
+    @app.post("/api/admin/trasporto/{vid}/attiva")
+    def admin_trasporto_attiva(vid: int, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        try:
+            tariffe.imposta_attiva(vid, a["id"])
+        except ErroreTariffe as e:
+            raise Errore(404, e.messaggio, e.codice) from None
+        return json_ok()
+
+    @app.put("/api/admin/trasporto/carburante")
+    def admin_carburante(body: Carburante, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        dal = body.dal.strip() or dati._ora_locale().date().isoformat()
+        try:
+            dt.date.fromisoformat(dal)
+        except ValueError:
+            raise Errore(422, "Data non valida (formato AAAA-MM-GG).", "data") from None
+        valore = {"percentuale": round(body.percentuale, 2), "dal": dal, "aggiornato": iso(), "autore": a["nome"]}
+        with db.transazione() as c:
+            db.salva_impostazioni(c, {"carburante": valore})
+            db.evento(c, "carburante", autore_id=a["id"], dettagli=f"{valore['percentuale']:g} % dal {dal}")
+        return json_ok(carburante=valore, carburante_giorni=giorni_carburante(valore))
 
     @app.get("/api/admin/eventi")
     def admin_eventi(limite: int = 200, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
