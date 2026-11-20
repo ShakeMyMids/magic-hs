@@ -93,7 +93,6 @@
     document.body.appendChild(div);
     setTimeout(function () { if (div.parentNode) div.parentNode.removeChild(div); }, 15000);
   }
-  T.porto.pioggia = pioggia;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pioggia); else pioggia();
 
   // per chi apre gli strumenti per sviluppatori

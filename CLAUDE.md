@@ -43,9 +43,9 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   fondo); la risposta segue `SCHEMI[...]` (strumento obbligato per Claude, `json_schema` per OpenAI, `responseSchema` per
   Gemini) con ritorno al modo semplice se il servizio la rifiuta; sovraccarico e 429 si riprovano in `_post`. L'uso del
   mese conta le classificazioni: le richieste con la stessa `operazione` (la genera `app.js` a ogni Classifica o
-  Riclassifica) contano una volta; le traduzioni (`tipo`) no. Ogni fornitore ha il suo metodo che restituisce una
-  `Risposta` (con `token_cache`); gli errori diventano codici comuni (`_errore_http`) con messaggi italiani in
-  `app.MESSAGGI_IA`.
+  Riclassifica) contano una volta; le traduzioni (`tipo`) no, ma rispettano limite e tetto. Ogni fornitore ha il suo
+  metodo che restituisce una `Risposta` (con `token_cache`); gli errori diventano codici comuni (`_errore_http`, una
+  risposta interrotta per lunghezza è `risposta_troncata`) con messaggi italiani in `app.MESSAGGI_IA`.
 - `taric/dati.py`: versioni dei dati TARIC, aggiornamento, pianificatore; mesi passati (`versione_per`, `pubblicati`,
   `archiviata`, `contenuto`): scaricati dalla pagina «dati» quando servono (`/api/dati/storico?data=`), tenuti come zip in
   `dati/taric/archivio` e serviti da lì; `/?dati=AAAA-MM-01` apre l'app con quei dati (`data-attivi` dice quelli in uso,
@@ -60,15 +60,17 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   Non indebolire i controlli per far passare un mese: se cambia il formato dei file, adegua lo script (le intestazioni
   equivalenti già viste nelle estrazioni passate sono in `VARIANTI`).
 - `taric/backup.py`: backup del database (.zip con solo `taric.db`, API di backup di SQLite), uno al giorno dal
-  pianificatore, e ripristino (`python -m taric ripristina FILE` dalla Shell di Render: a sito acceso, riconosciuto da
+  pianificatore (quello scaricato da Gestione si scrive in `backup-scaricati`, fuori dall'elenco, e si cancella dopo
+  l'invio), e ripristino (`python -m taric ripristina FILE` dalla Shell di Render: a sito acceso, riconosciuto da
   `dati/server.pid`, il backup va in `ripristino-in-attesa.db` e si rimette al riavvio; `taric/__main__.py`:
   controlla integrità e schema, salva prima il database attuale).
 - `taric/nomenclatura_it.json`: testo ufficiale italiano della nomenclatura (estrazione del 1° luglio 2026).
 - `taric/__main__.py`: `server` (porta da `$PORT`, intestazioni del proxy HTTPS), `backup`, `ripristina` (cartella dei
   dati da `$TARIC_DATI`, che il `Dockerfile` imposta in `/var/data/magic-hs/dati`).
-- `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/`), `accedi.html`, `reimposta.html` e
+- `taric/static/`: `index.html` (l'app; `{{DATI}}` diventa `/data/<versione>/` e `{{V}}` l'impronta dei file di quella
+  versione, `dati.impronta()`, in `data-v` e nei `?v=` di `fileDati()` di `app.js`), `accedi.html`, `reimposta.html` e
   `js/accesso.js` (accesso, richiesta di account, nuova password), `attesa.html` con `js/attesa.js` (dati non ancora
-  pronti), `js/comune.js` (chiamate API, tema, logo, finestre `T.finestra`), `js/installa.js` (tasto Installa: finestra
+  pronti), `js/comune.js` (chiamate API, tema, logo, finestre `T.finestra`, mesi in parole `T.meseIt`, testi accorciati `T.taglia`), `js/installa.js` (tasto Installa: finestra
   d'installazione del browser con `beforeinstallprompt`, altrimenti i passi per iPhone/iPad, Safari, Firefox; registra
   `sw.js`, servito come `/sw.js`, che non conserva niente e senza rete mostra solo un avviso), `js/disegni.js` (scena con nave, gru, treno, camion e aereo, inserita
   negli elementi `data-scena`: due composizioni, larga e compatta, scelte in `app.css` con una container query sulla
@@ -96,7 +98,7 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   `T.calendario(data)` con stagione per mesi interi, feste italiane con Pasqua calcolata, `tema` (la festa più importante,
   altrimenti la stagione) e `auguri`; `T.oggi` e le classi su `<html>`: stagione, feste, `con-tema`, `tema-<nome>`; spento da
   `localStorage` `magic-hs.stagioni`, anteprima di un giorno da `sessionStorage` `magic-hs.prova-giorno`, tutti e due dal
-  profilo). In `app.css` ogni `tema-*` ha l'accento chiaro e scuro (`--tema-chiaro`, `--tema-scuro`, controllati per il contrasto
+  profilo; mette su `<html>` anche il tema chiaro o scuro scelto, `localStorage` `magic-hs.tema`, prima del primo disegno). In `app.css` ogni `tema-*` ha l'accento chiaro e scuro (`--tema-chiaro`, `--tema-scuro`, controllati per il contrasto
   da `node tests/prova_calendario.js`) e un secondo colore `--tema-2`; le forme (motivo dello sfondo, simbolo delle schede,
   neve, pioggia) sono maschere SVG generate da `strumenti/forme_stagioni.py` tra «forme: inizio» e «forme: fine»
   (`tests/test_forme.py`). `disegni.js` disegna nella scena solo le decorazioni di oggi e dà `T.ornamento` (auguri, vignette),
@@ -133,6 +135,7 @@ node tests/prova_calcolo.js
 node tests/prova_calendario.js
 ```
 
+`tests/test_correzioni.py` raccoglie le prove dei difetti trovati nella revisione completa del programma (una per difetto).
 `tests/test_sinonimi.py` controlla che ogni termine di `js/sinonimi.js` esista nel testo italiano della nomenclatura:
 per un nuovo sinonimo scegli parole o espressioni del testo ufficiale. I test usano `conftest.Sito` (il sito con l'amministratore `CAPO`, `registra`/`accedi`/`capo`/`collega`/`riavvia`; `ia=False`
 ed `extra` per altri servizi IA, `versioni` per i dati già installati) con i finti servizio IA e GitHub (`FintoClaude`,

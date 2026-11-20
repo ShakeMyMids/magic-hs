@@ -55,7 +55,7 @@ jobs:
         if: env.MESI != ''
         run: |
           set +e
-          python strumenti/dati_storici.py $MESI --uscita dist
+          python -I strumenti/dati_storici.py $MESI --uscita dist
           echo "ESITO=$?" >> "$GITHUB_ENV"
       - name: Pubblica nella pagina «dati»
         if: github.event_name == 'workflow_dispatch' && env.MESI != ''

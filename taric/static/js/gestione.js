@@ -44,7 +44,7 @@
   function disegna() {
     var r = st.riep, h = '';
     var schede = [['utenti', 'Utenti', 'utenti'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['ricerca', 'Ricerca', 'cerca'], ['registro', 'Registro', 'registro']];
-    h += '<div class="sotto" role="tablist">' + schede.map(function (x) {
+    h += '<div class="sotto" role="group" aria-label="Parti della gestione">' + schede.map(function (x) {
       return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
     if (r) h += avvisi(r);
@@ -73,9 +73,9 @@
       ' codici dichiarabili, ' + esc(att.misure_import || '?') + ' misure all\'importazione e ' + esc(att.misure_export || '?') + ' all\'esportazione; ' + esc(att.righe_en || 0) + ' righe ancora in inglese.</p>' +
       (att.avvisi && att.avvisi.length ? '<p class="avviso">' + esc(att.avvisi.join(' · ')) + '</p>' : '');
     else h += '<p class="avviso">Nessun dato installato.</p>';
-    if (d.in_corso) h += '<p class="esito-ok">Aggiornamento di ' + esc(d.in_corso.mese) + ' in corso: ' + esc(d.in_corso.fase) + '…</p>';
+    if (d.in_corso) h += '<p class="esito-ok">Aggiornamento di ' + esc(nomeMese(d.in_corso.mese)) + ' in corso: ' + esc(d.in_corso.fase) + '…</p>';
     h += '<p class="nota">A ogni inizio mese arrivano da soli, pronti da GitHub; se non ci sono ancora li prepara il server.</p>';
-    h += (d.prossimo ? '<p class="nota">Prossimo tentativo per ' + esc(d.prossimo) + ' entro dieci minuti.</p>' : '') + '</div>';
+    h += (d.prossimo ? '<p class="nota">Prossimo tentativo per ' + esc(nomeMese(d.prossimo)) + ' entro dieci minuti.</p>' : '') + '</div>';
     h += '<div class="box s4"><div class="lab">' + T.icona('aggiorna') + 'Aggiorna adesso</div><form class="modulo" data-g="aggiorna"><label>Mese (vuoto = corrente)<input class="campo" name="mese" placeholder="AAAA-MM" pattern="\\d{4}-\\d{2}"></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (d.in_corso ? ' disabled' : '') + '>Scarica e installa</button></div>' + riga('aggiorna') + '</form></div></div>';
 
@@ -90,7 +90,7 @@
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Ultimi aggiornamenti</div><div class="scorri"><table class="tab"><thead><tr><th>Quando</th><th>Mese</th><th>Origine</th><th>Esito</th><th>Messaggio</th><th></th></tr></thead><tbody>' +
       d.ultimi.map(function (a) {
-        return '<tr><td>' + esc(T.dataOra(a.iniziato)) + '</td><td data-l="Mese">' + esc(a.mese) + '</td><td data-l="Origine">' + esc(a.origine.replace(/_/g, ' ')) + '</td><td data-l="Esito"><span class="st ' + a.esito + '">' + (ESITI[a.esito] || a.esito) + '</span></td><td>' + esc(a.messaggio) + '</td>' +
+        return '<tr><td>' + esc(T.dataOra(a.iniziato)) + '</td><td data-l="Mese">' + esc(nomeMese(a.mese)) + '</td><td data-l="Origine">' + esc(a.origine.replace(/_/g, ' ')) + '</td><td data-l="Esito"><span class="st ' + esc(a.esito) + '">' + esc(ESITI[a.esito] || a.esito) + '</span></td><td>' + esc(a.messaggio) + '</td>' +
           '<td>' + (a.esito === 'errore' || a.esito === 'ok' ? '<button class="btn sm" type="button" data-g="registro-agg" data-id="' + a.id + '">Registro</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' + (d.ultimi.length ? '' : '<p class="vuoto">Nessun aggiornamento ancora.</p>') +
       registroAperto() + '</div></div>';
@@ -123,7 +123,7 @@
   }
 
   var meseIt = T.meseIt;
-
+  function nomeMese(m) { return meseIt(m) || m || ''; }          // «2026-11» -> «novembre 2026»
 
   /* ---------- utenti ---------- */
   var STATI = { in_attesa: ['da approvare', 'sospeso'], attivo: ['attivo', 'ok'], sospeso: ['sospeso', 'errore'], rifiutato: ['rifiutato', 'errore'] };
@@ -153,7 +153,7 @@
       h += '<div class="scorri"><table class="tab"><thead><tr><th>Persona</th><th>Stato</th><th class="n">IA a ' + esc(meseIt(U.mese)) + '</th><th>Ultimo accesso</th><th></th></tr></thead><tbody>' +
         altri.map(function (x) {
           var s = STATI[x.stato] || [x.stato, ''], aperto = st.aperto === x.id;
-          var r = '<tr' + (aperto ? ' class="evid"' : '') + '><td>' + persona(x) + '</td><td data-l="Stato"><span class="st ' + s[1] + '">' + s[0] + '</span></td>' +
+          var r = '<tr' + (aperto ? ' class="evid"' : '') + '><td>' + persona(x) + '</td><td data-l="Stato"><span class="st ' + s[1] + '">' + esc(s[0]) + '</span></td>' +
             '<td class="n" data-l="IA">' + (x.limite === 0 && !x.uso.classificazioni ? '<span class="nota">spenta</span>' : numero(x.uso.classificazioni) + (x.limite !== null ? ' / ' + numero(x.limite) : '')) + '</td>' +
             '<td data-l="Ultimo accesso">' + esc(x.ultimo_accesso ? T.dataOra(x.ultimo_accesso) : 'mai') + '</td>' +
             '<td class="azioni"><button class="btn sm" type="button" data-g="u-apri" data-id="' + x.id + '" aria-expanded="' + aperto + '">' + (aperto ? 'Chiudi' : 'Modifica') + '</button></td></tr>';
@@ -212,7 +212,9 @@
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('grafico') + 'Uso a ' + esc(meseIt(u.mese)) + '</div>' +
       '<p class="cosa">' + numero(u.classificazioni) + (u.classificazioni === 1 ? ' classificazione' : ' classificazioni') + (A.tetto_mese !== null ? ' su ' + numero(A.tetto_mese) : '') + '</p>' +
       '<p class="nota">' + numero(u.richieste) + ' richieste, ' + numero(u.token_in) + ' token in ingresso' + (u.token_in ? ' (' + cache + '% dalla cache, che costano molto meno)' : '') +
-      ' e ' + numero(u.token_out) + ' in uscita. La spesa esatta è nella <a href="https://console.cloud.google.com/billing" target="_blank" rel="noopener">fatturazione di Google Cloud</a>, dove conviene impostare un budget con avvisi.</p>';
+      ' e ' + numero(u.token_out) + ' in uscita. La spesa esatta è nella ' + (A.fornitore === 'gemini' || !A.fornitore
+        ? '<a href="https://console.cloud.google.com/billing" target="_blank" rel="noopener">fatturazione di Google Cloud</a>' : 'fatturazione del servizio IA') +
+      ', dove conviene impostare un budget con avvisi.</p>';
     var chi = U ? U.utenti.filter(function (x) { return x.uso.richieste; }).sort(function (a, b) { return b.uso.classificazioni - a.uso.classificazioni; }) : [];
     if (chi.length) h += '<div class="scorri"><table class="tab"><thead><tr><th>Persona</th><th class="n">Classificazioni</th><th class="n">Limite</th><th class="n">Richieste</th><th class="n">Token</th></tr></thead><tbody>' +
       chi.map(function (x) {
@@ -365,10 +367,10 @@
     if (modulo(g, f, d)) return;
     if (g === 'aggiorna') {
       T.api('POST', '/api/admin/dati/aggiorna', { mese: String(d.get('mese') || '').trim() })
-        .then(function (r) { msg('aggiorna', 'Aggiornamento di ' + r.mese + ' avviato: segui l\'avanzamento qui sopra.', true); }, function (e) { msg('aggiorna', errore(e)); }).then(carica);
+        .then(function (r) { msg('aggiorna', 'Aggiornamento di ' + nomeMese(r.mese) + ' avviato: segui l\'avanzamento qui sopra.', true); }, function (e) { msg('aggiorna', errore(e)); }).then(carica);
     } else if (g === 'carica') {
       msg('carica', 'Caricamento in corso…', true); disegna();
-      T.api('POST', '/api/admin/dati/carica', d).then(function (r) { msg('carica', 'Archivio caricato: installazione di ' + r.mese + ' avviata.', true); },
+      T.api('POST', '/api/admin/dati/carica', d).then(function (r) { msg('carica', 'Archivio caricato: installazione di ' + nomeMese(r.mese) + ' avviata.', true); },
         function (e) { msg('carica', errore(e)); }).then(carica);
     }
   });
@@ -384,9 +386,11 @@
       T.api('POST', '/api/admin/dati/attiva', { versione: v }).then(function () { T.avviso('Versione cambiata: ricarico la pagina.'); setTimeout(function () { location.reload(); }, 900); },
         function (e) { T.avviso(errore(e), 'male'); });
     } else if (g === 'riepilogo') {
-      T.api('GET', '/api/admin/dati/riepilogo/' + v).then(function (r) { st.registro = { titolo: 'Riepilogo della versione ' + v.split('-').reverse().join('/'), testo: r.testo || '' }; disegna(); });
+      T.api('GET', '/api/admin/dati/riepilogo/' + v).then(function (r) { st.registro = { titolo: 'Riepilogo della versione ' + v.split('-').reverse().join('/'), testo: r.testo || '' }; disegna(); },
+        function (e) { T.avviso(errore(e), 'male'); });
     } else if (g === 'registro-agg') {
-      T.api('GET', '/api/admin/dati/registro/' + id).then(function (r) { st.registro = { titolo: 'Registro dell\'aggiornamento', testo: r.testo || '(vuoto)' }; disegna(); });
+      T.api('GET', '/api/admin/dati/registro/' + id).then(function (r) { st.registro = { titolo: 'Registro dell\'aggiornamento', testo: r.testo || '(vuoto)' }; disegna(); },
+        function (e) { T.avviso(errore(e), 'male'); });
     } else if (g === 'chiudi-registro') { st.registro = null; disegna(); }
     else if (g === 'copia-esterna') {
       st.copiaInCorso = true; msg('copia'); disegna();

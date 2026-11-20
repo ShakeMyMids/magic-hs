@@ -7,14 +7,14 @@ var V_DATI = document.documentElement.getAttribute('data-v') || '';
 function fileDati(nome) { return BASE_DATI + nome + (V_DATI ? '?v=' + encodeURIComponent(V_DATI) : ''); }
 
 /* ================================================================
-   Data: official TARIC nomenclature (rows in tree order)
-   row = code(10) + flag(g|n|L) + hierPos/2 + level(hex) + description
+   Dati: nomenclatura ufficiale del TARIC (righe nell'ordine dell'albero)
+   riga = codice(10) + tipo(g|n|L) + posizione gerarchica/2 + livello (esadecimale) + descrizione
    ================================================================ */
 var D = window.TARIC_DATA || { meta: { data_riferimento: '', righe: 0, dichiarabili: 0 }, righe: '', unita: {} };
 var LINES = D.righe ? D.righe.split('\n') : [];
 var N = LINES.length;
 var CODE = new Array(N), FLAG = new Array(N), DESC = new Array(N);
-var INGL = new Uint8Array(N);   // 1 = row still in English (created or changed after the Italian extraction)
+var INGL = new Uint8Array(N);   // 1 = riga ancora in inglese (creata o cambiata dopo l'estrazione italiana)
 var HP = new Uint8Array(N), LVL = new Uint8Array(N);
 var PARENT = new Int32Array(N), END = new Int32Array(N);
 var byCode = new Map();
@@ -51,7 +51,7 @@ function showCode(i) { if (FLAG[i] === 'g') return ''; return FLAG[i] === 'L' ? 
 function isLeaf(i) { return FLAG[i] === 'L'; }
 function headingIdx(h) { var i = byCode.get(h + '000000'); return (i !== undefined && HP[i] === 4) ? i : -1; }
 
-/* ---------- section titles (editorial, for navigation only: the extraction has no section rows) ---------- */
+/* ---------- titoli delle sezioni (redazionali, solo per orientarsi: l'estrazione non ha righe di sezione) ---------- */
 var SEZIONI = [
   ['I', 'Animali vivi e prodotti del regno animale', 1, 5],
   ['II', 'Prodotti del regno vegetale', 6, 14],
@@ -87,7 +87,7 @@ var UNITA_IT = {
   'ct/l': 'portata in tonnellate', 'TJ': 'terajoule (potere calorifico superiore)', '1 000 kWh': 'migliaia di kWh',
   't CO2 eq.': 'tonnellate di CO₂ equivalente'
 };
-/* chapter titles are upper case in the official text: shown in sentence case */
+/* nel testo ufficiale i titoli dei capitoli sono in maiuscolo: si mostrano con la sola iniziale maiuscola */
 function titolo(s) { return (s && s === s.toUpperCase()) ? s.charAt(0) + s.slice(1).toLowerCase() : s; }
 function descOf(i) { return LVL[i] === 0 ? titolo(DESC[i]) : DESC[i]; }
 function tagEN(i) { return INGL[i] ? '<span class="en" title="Riga creata o modificata dopo il ' + IT_DATA + ': il testo ufficiale italiano non è ancora disponibile">EN</span>' : ''; }
@@ -95,7 +95,7 @@ function tagEN(i) { return INGL[i] ? '<span class="en" title="Riga creata o modi
 var FREQUENTI = ['CN', 'US', 'GB', 'CH', 'TR', 'JP', 'KR', 'IN', 'VN', 'TW'];
 
 /* ================================================================
-   State
+   Stato
    ================================================================ */
 var state = {
   view: 'classifica',
@@ -105,17 +105,17 @@ var state = {
   forzaIA: false,
   risChiusi: false,    // risultati della ricerca ridotti a un link dopo aver scelto un codice
   risTutti: false,
-  ai: 'wait',          // wait | ok | no
+  ai: 'wait',          // stato dell'IA: wait | ok | no
   aiMotivo: '',
   utente: null,        // risposta di /api/io
   preferiti: {},       // codice -> { nota }
   q: '', answers: [], heads: [],
-  result: null,        // normalized AI result
-  sel: null,           // { code, idx }
+  result: null,        // risultato dell'IA, normalizzato
+  sel: null,           // codice scelto: { code, idx }
   picks: {}, extra: '',
   busy: null, error: '', warn: '',
   country: '', flow: 'import',
-  trad: {},            // row index -> italian text
+  trad: {},            // indice della riga -> testo tradotto in italiano
   tradBusy: false,
   qmsg: '', open: {}, secOpen: {}, flash: -1,
   anima: false,
@@ -125,7 +125,7 @@ var state = {
 var ctl = null, tick = null, sampleFn = null;
 
 /* ================================================================
-   Helpers
+   Funzioni di servizio
    ================================================================ */
 function $(s) { return document.querySelector(s); }
 var esc = T.esc;
@@ -143,7 +143,7 @@ function confLabel(n) { return n >= 80 ? 'alta' : n >= 55 ? 'media' : 'bassa'; }
 function oggi() { var d = new Date(); return '' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
 
 /* ================================================================
-   AI: prompts and calls
+   IA: richieste e chiamate
    ================================================================ */
 function infoBlock() {
   if (!state.answers.length) return '';
@@ -285,7 +285,9 @@ function impostaIA() {
   sw.hidden = !(ia && ia.configurata);
   sw.classList.toggle('con-divieto', state.iaBloccata);
   $('#modo-ia').disabled = state.iaBloccata;
-  $('#divieto-ia').hidden = !state.iaBloccata;
+  var divieto = $('#divieto-ia');                     // il testo è uno solo: T.IA_NON_AUTORIZZATA di comune.js
+  if (!divieto.firstChild) divieto.innerHTML = T.icona('divieto') + esc(T.IA_NON_AUTORIZZATA);
+  divieto.hidden = !state.iaBloccata;
   if ((!(ia && ia.configurata) || state.iaBloccata) && state.modo === 'ia') state.modo = 'parole';
   applicaModo();
 }
@@ -395,7 +397,7 @@ function classifica(soloScelta) {
   var qEl = $('#q'); state.q = qEl.value.trim().replace(/\s+/g, ' ');
   if (!state.q) { state.error = 'Scrivi che cosa devi classificare.'; renderMsg(); qEl.focus(); return; }
   qEl.blur();
-  // a typed code opens that code directly, without the AI
+  // un codice scritto apre direttamente quel codice, senza l'IA
   if (/^[\d\s.]+$/.test(state.q) && digits(state.q).length >= 2) {
     var r = resolve(state.q);
     state.result = null; state.answers = []; state.heads = []; state.picks = {}; state.trad = {};
@@ -480,9 +482,10 @@ function traduci() {
 }
 
 /* ================================================================
-   Measures: official TARIC extraction (duties, conditions, documents)
-   chapter file = { s: [strings], l: [legal bases], m: {code: rows}, x: {code: rows} }
-   row = [type, area, dutyIdx, start, end, addCode, orderNo, legalIdx, exclusions, footnotes, condIdx, redInd?]
+   Misure: estrazione ufficiale del TARIC (dazi, condizioni, documenti)
+   file del capitolo = { s: [testi], l: [basi giuridiche], m: {codice: righe}, x: {codice: righe} }
+   riga = [tipo, area, indice del dazio, inizio, fine, codice addizionale, contingente, indice della base giuridica,
+          esclusi, note, indice delle condizioni, indicatore di riduzione?]
    ================================================================ */
 var RIF = window.TARIC_RIF || { data: '', aree: {}, gruppi: {}, cert: {}, add: {}, tipi: {} };
 var MIS = window.TARIC_M = window.TARIC_M || {};
@@ -563,7 +566,7 @@ function urlTaric(code, area, g) {
 }
 function dataIt(n) { var s = String(n); return s.slice(6, 8) + '/' + s.slice(4, 6) + '/' + s.slice(0, 4); }
 
-/* measure types: Italian labels written for this page (the extraction names them in English only) */
+/* tipi di misura: nomi italiani scritti per questa pagina (l'estrazione li ha solo in inglese) */
 var TIPI_IT = {
   103: 'Dazio paesi terzi', 105: 'Dazio non preferenziale per uso finale', 106: 'Dazio dell\'unione doganale',
   107: 'Dazio doganale sulle spedizioni di modico valore', 109: 'Unità supplementare', 110: 'Unità supplementare all\'importazione',
@@ -647,7 +650,7 @@ var QUAL = {
 };
 /* calcoli comuni con la bolla: js/calcolo.js */
 var K = window.TARIC_CALCOLO, PAROLE = K.PAROLE;
-/* supplementary units: TARIC measurement code -> customs abbreviation used in box 41 */
+/* unità supplementari: codice dell'unità nel TARIC -> sigla doganale della casella 41 */
 var UNITA_SUP = {
   NAR: 'p/st', NPR: 'pa', MIL: '1 000 p/st', CEN: '100 p/st', LTR: 'l', LPA: 'l alc. 100 %', MTR: 'm', MTK: 'm2', MTQ: 'm3', 'MTQ C': '1 000 m³',
   GRM: 'g', 'KGM E': 'kg/net eda', KSD: 'kg 90 % sdt', KNI: 'kg N', KPP: 'kg P2O5', KPO: 'kg K2O', KPH: 'kg KOH', KSH: 'kg NaOH',
@@ -662,7 +665,7 @@ function unita(u, q) {
   if (q) s += ' ' + (QUAL[q] || q);
   return s;
 }
-/* "12.800 % + 176.800 EUR DTN" -> "12,8 % + 176,80 EUR/100 kg" ; unknown tokens are passed through untouched */
+/* "12.800 % + 176.800 EUR DTN" -> "12,8 % + 176,80 EUR/100 kg"; le parti sconosciute restano come sono */
 function fmtDazio(str) {
   var t = String(str || '').replace(/\+/g, ' + ').trim().split(/\s+/), out = [], i = 0;
   if (t.length === 1 && t[0] === '') return '';
@@ -696,7 +699,7 @@ function fmtSoglia(s, tipo) {
   var t = m[2] ? nIt(v, 2, 3) + ' EUR' + (m[3] ? '/' + unita(m[3], m[4]) : '') : nIt(v, 0, 3) + (m[3] ? ' ' + unita(m[3], m[4]) : '');
   return (/^[EI]/.test(tipo) ? 'fino a ' : 'da ') + t;
 }
-/* one-line reading of the duty of a measure */
+/* il dazio di una misura, in una riga */
 function sintesi(m) {
   var d = m.duty;
   if (!/^Cond:/.test(d)) return fmtDazio(d);
@@ -716,7 +719,7 @@ function sintesi(m) {
   return 'variabile';
 }
 function zero(d) { return !d || /^NIHIL$/.test(d.trim()) || /^0(\.0+)? (%|EUR)/.test(d.trim()); }
-/* true when the duty is due whatever is declared (not only in a special case such as a given document code) */
+/* vero se il dazio è dovuto qualunque cosa si dichiari (non solo in un caso particolare, per esempio con un certo documento) */
 function sempreDovuto(m) {
   if (!/^Cond:/.test(m.duty)) return !zero(m.duty);
   var senza = null, tutti = true;
@@ -730,7 +733,8 @@ function percentuali(m) {
 }
 function certDi(m) { var o = []; parseCond(condDi(m)).forEach(function (p) { if (p.cert && o.indexOf(p.cert) < 0) o.push(p.cert); }); return o; }
 
-/* measures that apply to nomenclature row i (the row and its ancestors) for one country and one flow, today */
+/* misure della riga i della nomenclatura (la riga e i livelli superiori) per un paese e un flusso, nel giorno indicato
+   o in quello della scheda */
 function misure(i, flow, paese, giorno) {
   var C = MIS[CODE[i].slice(0, 2)];
   if (!C) return null;
@@ -851,7 +855,7 @@ function boxCalcolo(D) {
     '</div><div id="calc-esito"></div></div>';
 }
 
-/* ---------- rendering of measures ---------- */
+/* ---------- disegno delle misure ---------- */
 function nomeArea(o) { return o === '1011' ? 'tutti i paesi (erga omnes)' : (RIF.aree[o] || o); }
 function fmtContingente(o) { o = String(o); return o.length === 6 ? o.slice(0, 2) + '.' + o.slice(2) : o; }
 function fmtLegale(l) {
@@ -1011,7 +1015,7 @@ function boxMisure(sel) {
   else {
     var res = misure(i, state.flow, c), cat = {}, gid = 0;
     res.righe.forEach(function (m) { var k = catDi(m.t); (cat[k] = cat[k] || []).push(m); });
-    /* summary */
+    /* riepilogo */
     if (!exp) {
       var base = (cat.base || []).filter(function (m) { return m.t === 103 && !m.fut; });
       var pref = (cat.rid || []).filter(function (m) { return [142, 145, 141, 106].indexOf(m.t) >= 0 && !m.fut && m.rel > 0; });
@@ -1067,7 +1071,7 @@ function boxMisure(sel) {
 }
 
 /* ================================================================
-   Rendering
+   Disegno delle pagine
    ================================================================ */
 function renderStato() {
   var el = $('#stato'), b = state.busy;
@@ -1159,7 +1163,7 @@ function renderEsito() {
   if (state.anima) { state.animaT0 = Date.now(); state.anima = false; }
   var trascorso = state.animaT0 ? Date.now() - state.animaT0 : Infinity;
 
-  /* --- box 33 --- */
+  /* --- casella 33 --- */
   h += '<div class="foglio' + (trascorso < 1800 ? ' anima" style="--t:-' + trascorso + 'ms' : '') + '">';
   h += '<div class="box s8 principale"><div class="lab"><b>33</b> Codice delle merci' +
     (r && r.merce ? '<span class="dx">' + esc(r.merce) + '</span>' : '') + '</div>';
@@ -1179,7 +1183,7 @@ function renderEsito() {
   if (i >= 0 && fineCod) h += '<p class="avviso">' + (fineCod < giornoMisure() ? 'Questo codice ha cessato di valere il ' : 'Questo codice cessa di valere il ') + dataIt(fineCod) + '.</p>';
   h += '</div>';
 
-  /* --- box 41 --- */
+  /* --- casella 41 --- */
   var capSt = i >= 0 ? chiediCapitolo(sel.code.slice(0, 2)) : 'nessuno';
   var uc = (capSt === 'ok' && i >= 0) ? unitaSupplementare(i) : undefined;
   h += '<div class="box s4"><div class="lab"><b>41</b> Unità supplementari</div>';
@@ -1192,7 +1196,7 @@ function renderEsito() {
   h += i < 0 ? '<p class="nota">Non trovato.</p>' : isLeaf(i) ? '<p class="nota">Dichiarabile.</p>' : '<p class="nota">Voce intermedia con ' + kids(i).length + ' sottovoci.</p>';
   h += '</div>';
 
-  /* --- path --- */
+  /* --- percorso --- */
   if (i >= 0) {
     var p = pathOf(i);
     var inEN = p.filter(function (j) { return INGL[j]; });
@@ -1209,7 +1213,7 @@ function renderEsito() {
     h += '</div>';
   }
 
-  /* --- alternatives and questions --- */
+  /* --- alternative e domande --- */
   if (r) {
     var tutte = [r.best].concat(r.alts);
     h += '<div class="box s7"><div class="lab">' + T.icona('regole') + 'Voci a confronto</div><div class="lista">' + tutte.map(function (a, k) {
@@ -1241,9 +1245,9 @@ function renderEsito() {
   aggiornaCalcolo();
 }
 
-/* ---------- nomenclature browser ---------- */
+/* ---------- albero della nomenclatura ---------- */
 var LOW = null;
-/* search form of a text: lower case, no accents, words separated by single spaces, a space at both ends */
+/* forma di un testo per la ricerca: minuscole, senza accenti, parole separate da uno spazio, uno spazio ai due estremi */
 function piano(s) { return ' ' + s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim() + ' '; }
 /* parole che non servono a cercare: «scarpe di pelle» cerca «scarpe» e «pelle» */
 var VUOTE = {};
@@ -1403,7 +1407,7 @@ function apriNellAlbero(i) {
   vista('nomenclatura');
 }
 
-/* ---------- views ---------- */
+/* ---------- viste ---------- */
 var VISTE = ['classifica', 'nomenclatura', 'bolla', 'profilo', 'gestione'];
 function vista(v) {
   if (VISTE.indexOf(v) < 0 || (v === 'gestione' && !(state.utente && state.utente.ruolo === 'amministratore'))) v = 'classifica';
@@ -1422,7 +1426,7 @@ function vista(v) {
 function renderAll() { renderStato(); renderMsg(); renderFornite(); renderRisultati(); renderEsito(); if (state.view === 'nomenclatura') renderNom(); }
 
 /* ================================================================
-   Events
+   Eventi
    ================================================================ */
 document.addEventListener('click', function (ev) {
   var t = ev.target.closest('[data-act]'); if (!t) return;
@@ -1535,7 +1539,7 @@ document.addEventListener('keydown', function (ev) {
 window.addEventListener('hashchange', function () { var v = location.hash.replace('#', '') || 'classifica'; if (v !== state.view) vista(v); });
 
 /* ================================================================
-   Boot
+   Avvio
    ================================================================ */
 /* un risultato salvato nello storico o nell'archivio aziendale (anche di un collega, o di una versione precedente):
    ricostruito campo per campo nella forma e con i limiti di normResult; senza un codice proposto valido si apre come
@@ -1570,7 +1574,7 @@ function ripristina(d) {
 }
 function start() {
   var txt = 'Dati TARIC al ' + DATA_IT + (STORICO ? ' · archivio' : '');
-  // the extraction of each month is expected within the first days: after the 9th, older data is flagged
+  // l'estrazione di ogni mese arriva nei primi giorni: dopo il 9 si segnalano i dati di un mese precedente
   var ora = new Date(), att = ora.getDate() < 10 ? new Date(ora.getFullYear(), ora.getMonth() - 1, 1) : ora;
   var atteso = att.getFullYear() + '-' + ('0' + (att.getMonth() + 1)).slice(-2);
   if (!STORICO && DATA_ISO && DATA_ISO.slice(0, 7) < atteso) { txt += ' · manca l\'aggiornamento di questo mese'; $('#dato').classList.add('tardi'); }

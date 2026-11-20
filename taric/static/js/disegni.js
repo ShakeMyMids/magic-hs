@@ -146,7 +146,6 @@
     return h + '</g>';
   }
 
-
   /* ---------------------------------------------------------------- mare, nave portacontainer, banchina e gru */
   /* nave: plancia e fumaiolo a poppa (sinistra), otto file di container sui boccaporti, prua slanciata a destra.
      Lo scafo scende sotto la linea dell'acqua: lo copre il mare davanti (marePrima). */
@@ -514,7 +513,6 @@
     inverno: '<path class="f-ghiacciolo" d="M0 0H60V2.6Q55 4 50 2.6Q45 4.4 40 2.6Q35 4 30 2.6Q25 4.4 20 2.6Q15 4 10 2.6Q5 4.4 0 2.6Z"/>' +
       [[5, 9], [13, 5], [22, 13], [31, 6.5], [40, 11], [48, 4.5], [55, 8]].map(function (g) { return '<path class="f-ghiacciolo" d="M' + (g[0] - 2.2) + ' 2.6L' + g[0] + ' ' + (2.6 + g[1]) + 'L' + (g[0] + 2.2) + ' 2.6Z"/>'; }).join('')
   };
-  FESTONI.befana = FESTONI.natale; FESTONI.ferragosto = FESTONI.estate;
   T.festone = function (tema) {
     var m = FESTONI[tema];
     if (!m) return '';
@@ -540,7 +538,6 @@
     autunno: '<path class="s-foglia-o a-bordo" transform="rotate(32 29 2)" d="M29 -4.6C33 -2 34 2.6 29 8.6C24 2.6 25 -2 29 -4.6Z"/><path class="o-venatura" transform="rotate(32 29 2)" d="M29 -2V9"/>',
     inverno: '<path class="s-neve-l" d="M.6 7Q.4 .2 8 .2H24Q31.6 .2 31.4 7Q29 4.6 26.2 6.4Q23.4 3.6 20 5.8Q16.6 3.4 13 5.6Q9.6 3.4 6.6 5.8Q3.4 4.2 .6 7Z"/>'
   };
-  ACCESSORI.befana = ACCESSORI.natale; ACCESSORI.ferragosto = ACCESSORI.estate;
   T.accessorio = function () { return ACCESSORI[OGGI.tema] || ''; };
 
   function svg(tipo, classe, larghezza, interno) {

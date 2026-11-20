@@ -10,13 +10,12 @@ MAPPA = {
     "stella": "star", "libro": "book-open", "spunta": "check", "chiudi": "x", "giu": "chevron-down",
     "storico": "history", "scarica": "download", "carica": "upload", "aggiorna": "refresh-cw",
     "attenzione": "triangle-alert", "documento": "file-text", "percento": "percent", "globo": "globe",
-    "pacco": "package", "importa": "arrow-down-to-line", "esporta": "arrow-up-from-line", "cestino": "trash-2",
+    "pacco": "package", "cestino": "trash-2",
     "chiave": "key-round", "utenti": "users", "database": "database", "registro": "scroll-text", "attesa": "loader-circle",
     "ferma": "circle-stop", "domanda": "circle-help", "timbro": "badge-check", "link": "link", "grafico": "chart-column",
-    "regole": "list-checks", "lucchetto": "lock", "filtro": "funnel", "nota": "notebook-pen", "calendario": "calendar",
+    "regole": "list-checks", "lucchetto": "lock", "calendario": "calendar",
     "scintille": "sparkles", "indietro": "arrow-left", "piu": "plus", "matita": "pencil", "nuovo-utente": "user-plus",
-    "fatto": "circle-check-big", "nave": "ship",
-    "computer": "monitor", "aereo": "plane", "camion": "truck", "container": "container",
+    "nave": "ship", "container": "container",
     "installa": "monitor-smartphone", "condividi": "share", "divieto": "ban",
 }
 out = {}

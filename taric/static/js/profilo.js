@@ -52,7 +52,6 @@
       riga('password') + '</form></div>';
     h += '</div>';
 
-
     var paesi = app().paesi();
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('gestione') + 'Preferenze</div><div class="modulo"><div class="due">' +
       '<label>Paese d\'origine predefinito<select class="campo" data-p="pref" name="paese"><option value="">Nessuno: tutti i paesi terzi</option>' +
@@ -95,13 +94,14 @@
     el.innerHTML = h;
   }
 
-  /* ------------------------------------------------------------------ uso dell'IA */
   /* anteprima di stagioni e feste (js/calendario.js): un giorno dell'anno, finché resta aperta la scheda del browser */
   function selettoreProva() {
     var o = T.oggi || {}, prove = T.prove ? T.prove(new Date().getFullYear()) : [];
     return '<label>Anteprima di stagioni e feste<select class="campo" data-p="prova"' + (o.spento ? ' disabled' : '') + '><option value="">Oggi</option>' +
       prove.map(function (x) { return '<option value="' + esc(x[2]) + '"' + (x[2] === o.prova ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>';
   }
+
+  /* ------------------------------------------------------------------ uso dell'IA */
   function usoIA(io) {
     var ia = io.ia, h = '<div class="foglio"><div class="box piano"><div class="lab">' + T.icona('scintille') + 'Classificazione assistita</div>';
     if (!ia.configurata) h += '<p class="nota">Non è attiva: la attiva l\'amministratore di MAGIC HS.</p>';
@@ -268,7 +268,7 @@
       var ultimo = st.storico.length ? st.storico[st.storico.length - 1].id : 0;
       T.api('GET', '/api/storico?limite=50&prima=' + ultimo).then(function (r) {
         st.storico = st.storico.concat(r.voci); st.finito = st.storico.length >= r.totale || !r.voci.length; disegna();
-      });
+      }, function (e) { T.avviso(e.errore, 'male'); });
     } else if (azione === 'esporta') {
       esporta();
     } else if (azione === 'esci-ovunque') {

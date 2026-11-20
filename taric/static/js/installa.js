@@ -79,6 +79,4 @@
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () { /* senza: si usa nel browser */ }); });
   }
-  T.mostraInstalla = mostra;
-  T.dispositivo = dispositivo;
 })();
