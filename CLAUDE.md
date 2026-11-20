@@ -21,10 +21,11 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   risultati (`/api/ricerche-vuote`, anonime), bolle simulate (`/api/bolle`, personali) e cambio doganale del mese
   (`/api/cambio`), tariffa del trasporto (`/api/trasporto`), IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
   `ia`, `impostazioni`, `backup`, `copia-esterna`, dati TARIC (con lo stato della copia esterna), `ricerca` e `sinonimi`,
-  `trasporto` (PDF delle tariffe, versioni, `trasporto/carburante`), registro. `/api/salute` per Render. Middleware: compressione gzip e cache lunga per i file con `?v=`. Gli errori si restituiscono come
+  `trasporto` (PDF delle tariffe, versioni, `trasporto/carburante` a mano, `trasporto/carburante/aggiorna`), registro. `/api/salute` per Render. Middleware: compressione gzip e cache lunga per i file con `?v=`. Gli errori si restituiscono come
   `{"errore": "<messaggio italiano>", "codice": "<codice>"}`.
 - `taric/config.py`: configurazione dalle variabili d'ambiente (`TARIC_*`, `GEMINI_API_KEY`, `MAGIC_HS_*`,
-  `RENDER_EXTERNAL_URL` per `config.indirizzo`, `MAGIC_HS_COPIA_*` per la copia esterna, `MAGIC_HS_BCE_URL` per i cambi).
+  `RENDER_EXTERNAL_URL` per `config.indirizzo`, `MAGIC_HS_COPIA_*` per la copia esterna, `MAGIC_HS_BCE_URL` per i cambi,
+  `MAGIC_HS_CARBURANTE_URL` per il carburante di DHL, vuota = solo a mano).
 - `taric/valute.py`: cambio doganale del mese per la bolla (penultimo mercoledì del mese precedente, art. 146 Reg. UE
   2015/2447), dalla BCE in CSV (`TIME_PERIOD`, `OBS_VALUE`), tenuto nella tabella `cambi_doganali`.
 - `taric/ricerca.py`: le regole della ricerca di `app.js` (`piano`, `radice`) lato server, per controllare che i termini
@@ -39,7 +40,11 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   2/3 diventa GB e XI), spunte dei servizi (immagini, dalla loro posizione), tabelle delle merci con gli scatti e il passo
   vero ricavato dai prezzi, orari, limiti, supplementi. Non indebolire i controlli: le parti essenziali bloccano, quelle
   accessorie diventano `avvisi`. Versioni nella tabella `tariffe_trasporto` (una `attiva`), carburante della settimana in
-  `impostazioni` `carburante`. `prezzo()` di `leggi_tariffe.py` e quello di `js/trasporto.js` devono fare lo stesso conto
+  `impostazioni` `carburante` (`percentuale` per Worldwide e servizi a orario, `economy` per Economy Select, `dal`/`al`,
+  `fonte` `dhl` o `mano`; a mano vale fino alla domenica). `taric/carburante.py` lo legge dalla pagina pubblica dei
+  supplementi di DHL Express Italia (tabelle «Servizi Internazionali Time Definite» e «Servizi Day Definite Intra-Europe»,
+  righe «Novembre 16-22, 2026 | 50.00%»): il pianificatore lo chiama una volta al giorno se c'è una tariffa (`da_fare`,
+  dopo un errore aspetta 6 ore), esito in `impostazioni` `carburante_auto`. `prezzo()` di `leggi_tariffe.py` e quello di `js/trasporto.js` devono fare lo stesso conto
   (lo prova `tests/test_trasporto.py`).
 - `taric/db.py`: schema SQLite. Le migrazioni vanno aggiunte in coda alla lista `SCHEMA`; `PRAGMA user_version`
   dice quali sono già applicate. Le tabelle delle versioni precedenti restano.
@@ -95,10 +100,13 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   con il motivo, mai una stima; i `conflitti` tra i campi (con il `campo` da evidenziare) non bloccano il totale; codici della
   casella 36 con `codicePreferenza` e della 47 con `codiceTributo`; `datiMancanti` elenca i dati obbligatori vuoti del tracciato H1
   EUCDM 6.2 o della colonna B1, senza bloccare; si prova con `node tests/prova_calcolo.js`), `js/codici-dogana.js` (liste di codici delle
-  tabelle ADM: imballaggi, natura della transazione, modi di trasporto, aggiunte e detrazioni, metodi, rappresentanza),
+  tabelle ADM: imballaggi, natura della transazione, modi di trasporto, aggiunte e detrazioni, metodi, rappresentanza; `aereo`:
+  allegato 23-01 del Reg. UE 2015/2447, zone A-Q con la percentuale e zone per paese, più di una per US, CA e RU secondo
+  l'aeroporto),
   `js/trasporto.js` (costo di spedizione senza pagina, `window.TARIC_TRASPORTO` e modulo di node: pesi, prezzo con gli scatti,
   supplementi dai colli, carburante, `quotaBolla`; si prova con `node tests/prova_trasporto.js`), `js/spedizione.js` (calcolatore
-  nella sezione Bolla, `T.spedizione.apri`: da solo o dalla bolla d'importazione con «Usa nella bolla»), `js/bolla.js`
+  nella sezione Bolla, `T.spedizione.apri`: da solo o dalla bolla d'importazione con «Usa nella bolla» e la quota
+  proposta dall'allegato 23-01; il carburante del servizio scelto finché non si scrive a mano), `js/bolla.js`
   (sezione Bolla: elenco, intestazione, articoli, tributi, documenti della casella 44, riferimenti DE e casella di ogni campo in
   `RIF_IMP`/`RIF_EXP`, foglio `#bolla-stampa` con `body.stampa-bolla`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
@@ -153,7 +161,7 @@ con `TARIC_PDF_DHL=<guida vera>` prova anche il PDF di DHL, che non va nel repos
 `tests/test_sinonimi.py` controlla che ogni termine di `js/sinonimi.js` esista nel testo italiano della nomenclatura:
 per un nuovo sinonimo scegli parole o espressioni del testo ufficiale. I test usano `conftest.Sito` (il sito con l'amministratore `CAPO`, `registra`/`accedi`/`capo`/`collega`/`riavvia`; `ia=False`
 ed `extra` per altri servizi IA, `versioni` per i dati già installati) con i finti servizio IA e GitHub (`FintoClaude`,
-`FintoGitHub` con dati pronti e fonte, `FintoS3` per la copia esterna, che ricalcola la firma, `FintoBCE` per i cambi);
+`FintoGitHub` con dati pronti e fonte, `FintoS3` per la copia esterna, che ricalcola la firma, `FintoBCE` per i cambi, `FintoDHL` per la pagina del carburante);
 `sito_claude` è il sito
 con Claude. `tests/test_copia.py` controlla la firma con l'esempio della documentazione AWS e con firme calcolate da
 botocore. Prova nel browser (Playwright, finto servizio

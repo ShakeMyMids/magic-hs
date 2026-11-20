@@ -355,9 +355,15 @@ async function accedi(p, email, password) {
   await capo.setInputFiles('form[data-g="trasporto-pdf"] input[type=file]', guida);
   await capo.click('form[data-g="trasporto-pdf"] button[type=submit]');
   await capo.waitForSelector('form[data-g="trasporto-pdf"] >> text=Tariffe in uso:', { timeout: 60000 });
+  // carburante della settimana dalla pagina finta di DHL (tests/finto_claude.py), poi scritto a mano
+  await capo.click('button[data-g="carburante-leggi"]');
+  await capo.waitForSelector('text=Letto: Express 50 %, Economy Select 40 %.');
+  ok(await capo.isVisible('.box >> text=dalla pagina di DHL') && await capo.isVisible('text=Economy Select 40 %'), 'trasporto: supplemento carburante letto dalla pagina di DHL (Express ed Economy Select)');
+  await capo.click('summary >> text=Scrivi a mano');
   await capo.fill('form[data-g="carburante"] input[name=percentuale]', '35,25');
   await capo.click('form[data-g="carburante"] button[type=submit]'); await capo.waitForSelector('form[data-g="carburante"] >> text=Salvato.');
-  ok(await capo.isVisible('pre.registro >> text=Zonario: 234 paesi') && await capo.isVisible('text=35,25 %'), 'trasporto: guida alle tariffe caricata e controllata, carburante della settimana');
+  ok(await capo.isVisible('pre.registro >> text=Zonario: 234 paesi') && await capo.isVisible('text=35,25 %') && await capo.isVisible('text=scritto a mano'),
+    'trasporto: guida alle tariffe caricata e controllata, carburante scritto a mano');
   await capo.click('#tab-bolla'); await capo.click('[data-b="trasporto-bolla"]');
   await capo.waitForSelector('#sp-esito');
   ok((await capo.textContent('select[data-s="paese"] option:checked')).startsWith('Cina') && (await capo.inputValue('[data-s="carburante"]')) === '35,25',
@@ -367,7 +373,8 @@ async function accedi(p, email, password) {
   await capo.waitForSelector('#sp-esito >> text=Trasporto DHL Express Worldwide, zona 7, 39 kg');
   ok(await capo.isVisible('#sp-esito >> text=Supplemento carburante 35,25 %') && await capo.isVisible('#sp-esito >> text=tassabile 39 kg'),
     'trasporto: peso volumetrico (2 colli 60 x 40 x 40 = 38,4 kg), prezzo della zona e carburante');
-  await capo.fill('[data-s="quota"]', '74');
+  ok((await capo.inputValue('[data-s="quota"]')) === '70' && await capo.isVisible('#sp-allegato >> text=Allegato 23-01: Cina, zona L, 70 %'),
+    'trasporto: quota fino al confine UE dall\'allegato 23-01 (Cina, zona L, 70 %)');
   await capo.waitForSelector('#sp-bolla >> text=nel trasporto fino al confine UE');
   const quote = (await capo.textContent('#sp-bolla')).match(/[\d.]+,\d\d/g);
   await capo.click('[data-s="usa"]'); await capo.waitForSelector('#b-msg >> text=Trasporto DHL Express riportato');

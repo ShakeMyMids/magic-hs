@@ -1,16 +1,19 @@
 """Strumenti comuni dei test: finti servizi esterni (IA e GitHub) e il sito MAGIC HS come su Render."""
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import io
 import json
 import zipfile
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from finto_claude import pagina_carburante
 from taric import sicurezza as S
 from taric.app import crea_app
 from taric.config import carica
@@ -192,9 +195,26 @@ def ambiente(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, pyt
               "TARIC_IA_MODELLO", "TARIC_IA_MODELLO_RAPIDO", "TARIC_MODELLO", "TARIC_MODELLO_RAPIDO", "TARIC_DATI",
               "TARIC_DATI_URL", "TARIC_FONTE_URL", "TARIC_SCARICA_DATI",
               "MAGIC_HS_AMMINISTRATORI", "MAGIC_HS_INDIRIZZO", "RENDER_EXTERNAL_URL",
-              "MAGIC_HS_COPIA_URL", "MAGIC_HS_COPIA_REGIONE", "MAGIC_HS_COPIA_CHIAVE", "MAGIC_HS_COPIA_SEGRETO", "MAGIC_HS_BCE_URL"):
+              "MAGIC_HS_COPIA_URL", "MAGIC_HS_COPIA_REGIONE", "MAGIC_HS_COPIA_CHIAVE", "MAGIC_HS_COPIA_SEGRETO", "MAGIC_HS_BCE_URL",
+              "MAGIC_HS_CARBURANTE_URL"):
         monkeypatch.delenv(k, raising=False)
     return tmp_path, monkeypatch
+
+
+class FintoDHL:
+    """La pagina dei supplementi di DHL Express (tests/finto_claude.pagina_carburante); stato e pagina si cambiano nelle prove."""
+
+    def __init__(self) -> None:
+        self.stato = 200
+        self.pagina: str | None = None
+        self.richieste: list[httpx.Request] = []
+
+    def __call__(self, req: httpx.Request) -> httpx.Response:
+        self.richieste.append(req)
+        if self.stato != 200:
+            return httpx.Response(self.stato, text="errore")
+        oggi = dt.datetime.now(ZoneInfo("Europe/Rome")).date()
+        return httpx.Response(200, text=self.pagina if self.pagina is not None else pagina_carburante(oggi))
 
 
 INDIRIZZO = "https://magic-hs.onrender.com"
@@ -216,6 +236,7 @@ class Sito:
         self.github = github or FintoGitHub()
         self.s3 = FintoS3()
         self.bce = FintoBCE()
+        self.dhl = FintoDHL()
         self.attese: list[float] = []
         originale = S.verifica_modulo          # nelle prove il modulo si invia subito (niente attesa minima contro i bot)
         mp.setattr(S, "verifica_modulo", lambda segreto, valore, minimo_s=3, massimo_s=7200: originale(segreto, valore, 0, massimo_s))
@@ -231,7 +252,8 @@ class Sito:
         web = httpx.Client(transport=httpx.MockTransport(self.github), follow_redirects=True)
         self.app = crea_app(self.cfg, httpx.Client(transport=httpx.MockTransport(self.claude)), pianificatore=False, client_dati=web,
                             client_copia=httpx.Client(transport=httpx.MockTransport(self.s3)),
-                            client_bce=httpx.Client(transport=httpx.MockTransport(self.bce)))
+                            client_bce=httpx.Client(transport=httpx.MockTransport(self.bce)),
+                            client_carburante=httpx.Client(transport=httpx.MockTransport(self.dhl)))
         self.app.state.ia.attendi = self.attese.append          # i nuovi tentativi non aspettano davvero
 
     def client(self, base: str = INDIRIZZO) -> TestClient:

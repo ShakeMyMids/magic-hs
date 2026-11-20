@@ -206,8 +206,10 @@ IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
     # l'amministratore non la concede
     "domini_automatici": ["dhl.com"],
     # supplemento carburante di DHL Express per il calcolatore del trasporto (DHL lo cambia ogni settimana):
-    # {"percentuale": 35.0, "dal": "AAAA-MM-GG", "aggiornato": istante, "autore": nome}
+    # {"percentuale": Express, "economy": Economy Select o None, "dal", "al", "aggiornato", "autore", "fonte": "dhl"|"mano"}
     "carburante": None,
+    # lettura automatica dalla pagina di DHL (taric/carburante.py): esito, tentato, riuscito, messaggio
+    "carburante_auto": None,
 }
 
 

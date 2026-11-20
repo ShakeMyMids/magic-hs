@@ -34,6 +34,7 @@ from . import __version__
 from . import sicurezza as S
 from .backup import Backup, ErroreBackup
 from .cambi import cambi
+from .carburante import Carburante, ErroreCarburante
 from .config import Config
 from .copia import CopiaEsterna
 from .dati import RE_VERSIONE, GestoreDati
@@ -143,9 +144,10 @@ class BollaModificata(BaseModel):
     dati: dict[str, Any]
 
 
-# supplemento carburante di DHL Express della settimana, per il calcolatore del trasporto
-class Carburante(BaseModel):
+# supplemento carburante di DHL Express della settimana scritto a mano (Express ed Economy Select)
+class CarburanteManuale(BaseModel):
     percentuale: float = Field(ge=0, le=100)
+    economy: Optional[float] = Field(default=None, ge=0, le=100)
     dal: str = Field(default="", max_length=10)
 
 
@@ -228,8 +230,9 @@ def istante_valido(s: Any) -> str:
 # ------------------------------------------------------------------ applicazione
 def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: bool = True,
              client_dati: httpx.Client | None = None, client_copia: httpx.Client | None = None,
-             client_bce: httpx.Client | None = None) -> FastAPI:
-    """Crea il sito: client_ia, client_dati, client_copia e client_bce sostituiscono, nelle prove, i servizi esterni."""
+             client_bce: httpx.Client | None = None, client_carburante: httpx.Client | None = None) -> FastAPI:
+    """Crea il sito: client_ia, client_dati, client_copia, client_bce e client_carburante sostituiscono, nelle prove, i
+    servizi esterni."""
     try:                                   # backup preparato a sito acceso con «python -m taric ripristina»
         rimesso = Backup(cfg.dati).applica_in_attesa()
         if rimesso:
@@ -243,6 +246,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     fuori = CopiaEsterna(cfg, db, client_copia)
     cambi_doganali = CambiDoganali(db, cfg.bce_url, client_bce)
     tariffe = Tariffe(db, cfg.dati / "tariffe")
+    carburante = Carburante(cfg, db, client_carburante)
     if fuori.problema():
         log.warning("copia esterna del database spenta: %s", fuori.problema())
     for resto in (cfg.dati / "backup-scaricati").glob("*.zip"):          # copie scaricate rimaste da un invio interrotto
@@ -260,13 +264,14 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         pid = cfg.dati / "server.pid"           # per «python -m taric ripristina»: il sito e' acceso
         pid.write_text(str(os.getpid()))
         if pianificatore:
-            dati.avvia_pianificatore(copie, attesa=600, compiti=(lambda: fuori.automatica(copie),))
+            dati.avvia_pianificatore(copie, attesa=600, compiti=(lambda: fuori.automatica(copie),
+                                                                 lambda: carburante.automatica() if tariffe.in_uso() else None))
         yield
         dati.ferma()
         pid.unlink(missing_ok=True)
 
     app = FastAPI(title="MAGIC HS", docs_url=None, redoc_url=None, openapi_url=None, lifespan=vita)
-    app.state.cfg, app.state.db, app.state.dati, app.state.ia = cfg, db, dati, ia
+    app.state.cfg, app.state.db, app.state.dati, app.state.ia, app.state.carburante = cfg, db, dati, ia, carburante
     # file compressi (la nomenclatura del mese pesa circa 2 MB, compressa un quarto)
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
@@ -850,8 +855,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def trasporto(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
         """La tariffa in uso (zonario, prezzi, supplementi; i calcoli li fa js/trasporto.js) e il supplemento carburante."""
         with db.connessione() as c:
-            carburante = db.impostazioni(c)["carburante"]
-        return {"tariffa": tariffe.in_uso(), "carburante": carburante}
+            carb = db.impostazioni(c)["carburante"]
+        return {"tariffa": tariffe.in_uso(), "carburante": carb}
 
     # ------------------------------------------------------------------ storico
     @app.get("/api/storico")
@@ -1117,16 +1122,16 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def admin_riepilogo(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         with db.connessione() as c:
             in_attesa = c.execute("SELECT COUNT(*) FROM utenti WHERE stato = 'in_attesa'").fetchone()[0]
-            carburante = db.impostazioni(c)["carburante"]
+            carb = db.impostazioni(c)["carburante"]
         s = fuori.stato()
         return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso, "in_attesa": in_attesa,
                 "copia_esterna": "spenta" if s["problema"] else ("errore" if s["attiva"] and s["esito"] == "errore" else ""),
-                "carburante_giorni": giorni_carburante(carburante) if tariffe.in_uso() else None}
+                "carburante_giorni": giorni_carburante(carb) if tariffe.in_uso() else None}
 
-    def giorni_carburante(carburante: dict[str, Any] | None) -> int:
-        """Giorni dall'ultimo aggiornamento del supplemento carburante (DHL lo cambia ogni settimana); 999 se manca."""
+    def giorni_carburante(carb: dict[str, Any] | None) -> int:
+        """Giorni dall'inizio della settimana del supplemento carburante (DHL lo cambia ogni settimana); 999 se manca."""
         try:
-            return max(0, (dati._ora_locale().date() - dt.date.fromisoformat(str((carburante or {}).get("dal", ""))[:10])).days)
+            return max(0, (dati._ora_locale().date() - dt.date.fromisoformat(str((carb or {}).get("dal", ""))[:10])).days)
         except ValueError:
             return 999
 
@@ -1134,8 +1139,21 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.get("/api/admin/trasporto")
     def admin_trasporto(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         with db.connessione() as c:
-            carburante = db.impostazioni(c)["carburante"]
-        return {"versioni": tariffe.versioni(), "carburante": carburante, "carburante_giorni": giorni_carburante(carburante)}
+            carburante_attuale = db.impostazioni(c)["carburante"]
+        return {"versioni": tariffe.versioni(), "carburante": carburante_attuale, "carburante_giorni": giorni_carburante(carburante_attuale),
+                "carburante_auto": carburante.stato()}
+
+    @app.post("/api/admin/trasporto/carburante/aggiorna")
+    def admin_carburante_aggiorna(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Legge adesso il supplemento della settimana dalla pagina di DHL."""
+        try:
+            valore = carburante.aggiorna()
+        except ErroreCarburante as e:
+            with db.transazione() as c:
+                auto = db.impostazioni(c)["carburante_auto"] or {}
+                db.salva_impostazioni(c, {"carburante_auto": {**auto, "esito": "errore", "tentato": iso(), "messaggio": str(e)}})
+            raise Errore(502, f"Supplemento non letto: {e}.", "carburante") from None
+        return json_ok(carburante=valore, carburante_giorni=giorni_carburante(valore))
 
     @app.post("/api/admin/trasporto")
     async def admin_trasporto_carica(file: UploadFile = File(...), a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
@@ -1169,16 +1187,20 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return json_ok()
 
     @app.put("/api/admin/trasporto/carburante")
-    def admin_carburante(body: Carburante, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+    def admin_carburante(body: CarburanteManuale, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         dal = body.dal.strip() or dati._ora_locale().date().isoformat()
         try:
-            dt.date.fromisoformat(dal)
+            giorno = dt.date.fromisoformat(dal)
         except ValueError:
             raise Errore(422, "Data non valida (formato AAAA-MM-GG).", "data") from None
-        valore = {"percentuale": round(body.percentuale, 2), "dal": dal, "aggiornato": iso(), "autore": a["nome"]}
+        # vale fino alla domenica della sua settimana: poi la lettura automatica (se accesa) torna alla pagina di DHL
+        al = (giorno + dt.timedelta(days=6 - giorno.weekday())).isoformat()
+        valore = {"percentuale": round(body.percentuale, 2), "economy": None if body.economy is None else round(body.economy, 2),
+                  "dal": dal, "al": al, "aggiornato": iso(), "autore": a["nome"], "fonte": "mano"}
         with db.transazione() as c:
             db.salva_impostazioni(c, {"carburante": valore})
-            db.evento(c, "carburante", autore_id=a["id"], dettagli=f"{valore['percentuale']:g} % dal {dal}")
+            db.evento(c, "carburante", autore_id=a["id"], dettagli=f"{valore['percentuale']:g} %"
+                      + (f" (Economy Select {valore['economy']:g} %)" if valore["economy"] is not None else "") + f" dal {dal}, a mano")
         return json_ok(carburante=valore, carburante_giorni=giorni_carburante(valore))
 
     @app.get("/api/admin/eventi")

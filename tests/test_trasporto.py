@@ -126,9 +126,9 @@ def test_supplemento_carburante(sito: Sito, tmp_path: Path):
     r = capo.put("/api/admin/trasporto/carburante", json={"percentuale": 35.25, "dal": "2026-11-16"})
     assert r.status_code == 200, r.text
     c = sito.collega(capo).get("/api/trasporto").json()["carburante"]
-    assert (c["percentuale"], c["dal"], c["autore"]) == (35.25, "2026-11-16", "Mario Capo")
+    assert (c["percentuale"], c["economy"], c["dal"], c["al"], c["autore"], c["fonte"]) == (35.25, None, "2026-11-16", "2026-11-22", "Mario Capo", "mano")
     assert capo.get("/api/admin/riepilogo").json()["carburante_giorni"] >= 0
-    assert any(e["tipo"] == "carburante" and e["dettagli"] == "35.25 % dal 2026-11-16" for e in capo.get("/api/admin/eventi").json()["eventi"])
+    assert any(e["tipo"] == "carburante" and e["dettagli"] == "35.25 % dal 2026-11-16, a mano" for e in capo.get("/api/admin/eventi").json()["eventi"])
 
 
 @pytest.mark.skipif(not os.environ.get("TARIC_PDF_DHL"), reason="serve TARIC_PDF_DHL con la guida di DHL Express")
@@ -157,3 +157,65 @@ def test_stesso_prezzo_in_python_e_in_javascript(tmp_path: Path):
                        capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr
     assert json.loads(p.stdout) == [L.prezzo(d["prodotti"][c[0]][c[1]], c[2], c[3]) for c in casi]
+
+
+# ------------------------------------------------------------------ supplemento carburante dalla pagina di DHL (taric/carburante.py)
+def test_settimane_della_pagina_di_dhl():
+    import datetime as dt
+    from finto_claude import pagina_carburante
+    from taric.carburante import in_vigore, leggi, settimana
+    assert settimana("Novembre 16-22, 2026") == (dt.date(2026, 11, 16), dt.date(2026, 11, 22))
+    assert settimana("Ottobre 26-Novembre 1, 2026") == (dt.date(2026, 10, 26), dt.date(2026, 11, 1))
+    assert settimana("Dicembre 28, 2026-Gennaio 3, 2027") == settimana("Dicembre 28-Gennaio 3, 2027") == (dt.date(2026, 12, 28), dt.date(2027, 1, 3))
+    assert settimana("Novembre 31-35, 2026") is None and settimana("Brumaio 1-7, 2026") is None
+    for oggi in (dt.date(2026, 11, 20), dt.date(2026, 12, 31), dt.date(2027, 1, 2)):   # anche a cavallo dell'anno
+        t = leggi(pagina_carburante(oggi, 49.5, 39.75))
+        assert set(t) == {"percentuale", "economy"} and len(t["percentuale"]) == 5          # la tabella dei servizi nazionali no
+        assert in_vigore(t["percentuale"], oggi)[2] == 49.5 and in_vigore(t["economy"], oggi)[2] == 39.75
+    assert leggi("<html><body>Supplemento Carburante</body></html>") == {}
+
+
+def test_carburante_dalla_pagina_di_dhl(sito: Sito, tmp_path: Path):
+    import datetime as dt
+    capo = sito.capo()
+    capo.post("/api/admin/trasporto", files={"file": ("guida.pdf", scrivi(tmp_path / "g.pdf").read_bytes(), "application/pdf")})
+    r = capo.post("/api/admin/trasporto/carburante/aggiorna")
+    assert r.status_code == 200, r.text
+    v = r.json()["carburante"]
+    oggi = sito.app.state.carburante.oggi()
+    assert (v["percentuale"], v["economy"], v["fonte"]) == (50.0, 40.0, "dhl")
+    assert v["dal"] == (oggi - dt.timedelta(days=oggi.weekday())).isoformat() and r.json()["carburante_giorni"] <= 6
+    assert sito.collega(capo).get("/api/trasporto").json()["carburante"]["percentuale"] == 50.0
+    assert capo.get("/api/admin/trasporto").json()["carburante_auto"]["esito"] == "ok"
+    assert any(e["tipo"] == "carburante" and e["dettagli"].endswith("dalla pagina di DHL") for e in capo.get("/api/admin/eventi").json()["eventi"])
+    c = sito.app.state.carburante
+    assert not c.da_fare()                                       # letto oggi e la settimana non e' finita
+    # la pagina cambia: resta l'ultimo valore, l'errore si vede in Gestione e si riprova dopo 6 ore
+    sito.dhl.pagina = "<html><body>Pagina rifatta</body></html>"
+    r = capo.post("/api/admin/trasporto/carburante/aggiorna")
+    assert r.status_code == 502 and "non c'è il supplemento" in r.json()["errore"]
+    assert capo.get("/api/trasporto").json()["carburante"]["percentuale"] == 50.0
+    auto = capo.get("/api/admin/trasporto").json()["carburante_auto"]
+    assert auto["esito"] == "errore" and auto["riuscito"] and not c.da_fare()
+    sito.dhl.pagina = None
+    with sito.app.state.db.transazione() as t:                   # settimana finita: si rilegge subito
+        imp = sito.app.state.db.impostazioni(t)
+        sito.app.state.db.salva_impostazioni(t, {"carburante": {**imp["carburante"], "al": "2026-01-04"},
+                                                 "carburante_auto": {**imp["carburante_auto"], "esito": "ok"}})
+    assert c.da_fare()
+    n = len(sito.dhl.richieste)
+    c.automatica()
+    assert len(sito.dhl.richieste) == n + 1 and capo.get("/api/trasporto").json()["carburante"]["al"] >= oggi.isoformat()
+    # a mano (anche Economy Select): vale fino alla domenica, la lettura automatica non lo copre
+    lun = oggi - dt.timedelta(days=oggi.weekday())
+    r = capo.put("/api/admin/trasporto/carburante", json={"percentuale": 48, "economy": 38.5, "dal": lun.isoformat()})
+    assert (r.json()["carburante"]["economy"], r.json()["carburante"]["al"]) == (38.5, (lun + dt.timedelta(days=6)).isoformat())
+    with sito.app.state.db.transazione() as t:
+        sito.app.state.db.salva_impostazioni(t, {"carburante_auto": {"esito": "ok", "tentato": "2020-01-01T00:00:00Z", "riuscito": "2020-01-01T00:00:00Z"}})
+    assert not c.da_fare()
+    assert any(e["dettagli"] == f"48 % (Economy Select 38.5 %) dal {lun.isoformat()}, a mano" for e in capo.get("/api/admin/eventi").json()["eventi"])
+    r = capo.put("/api/admin/trasporto/carburante", json={"percentuale": 48, "dal": (lun - dt.timedelta(days=7)).isoformat()})
+    assert c.da_fare()                                           # la settimana scritta a mano e' finita
+    # spenta con MAGIC_HS_CARBURANTE_URL vuota: solo a mano
+    sito.riavvia(MAGIC_HS_CARBURANTE_URL="")
+    assert not sito.app.state.carburante.da_fare()

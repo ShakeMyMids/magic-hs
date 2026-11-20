@@ -102,4 +102,15 @@ prova('bolla d\'importazione: quota fino al confine UE e resto fino a destinazio
   uguale(X.quotaBolla(100, 0), { confine: 0, destinazione: 100 });
 });
 
+prova('allegato 23-01 del Reg. (UE) 2015/2447: percentuale del trasporto aereo per paese di spedizione', () => {
+  const A = require('../taric/static/js/codici-dogana.js').aereo;
+  const quota = (paese, zona) => A.zone[zona || A.paesi[paese]];
+  uguale([quota('CN'), quota('JP'), quota('IN'), quota('MA'), quota('CH'), quota('TR'), quota('BR'), quota('AU'), quota('AE')], [70, 83, 46, 33, 5, 15, 78, 79, 43]);
+  uguale([A.paesi.US, A.paesi.CA, A.paesi.RU], ['ABC', 'AB', 'KLMO']);                 // dipende dall'aeroporto di partenza
+  uguale([quota('US', 'A'), quota('US', 'B'), quota('US', 'C'), quota('RU', 'O')], [70, 78, 89, 30]);
+  assert(/New York/.test(A.aeroporti.US.A) && /Los Angeles/.test(A.aeroporti.US.B) && /Mosca/.test(A.aeroporti.RU.O));
+  uguale([A.paesi.GB, A.paesi.FR, A.paesi.IT], [undefined, undefined, undefined]);    // non sono nella tabella
+  Object.keys(A.paesi).forEach(c => A.paesi[c].split('').forEach(z => assert(A.zone[z] > 0 && A.zone[z] <= 100, c + ' ' + z)));
+});
+
 console.log(n + ' prove superate');

@@ -6,9 +6,10 @@
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc, X = window.TARIC_TRASPORTO;
+  var AEREO = (window.TARIC_CODICI || {}).aereo || { zone: {}, paesi: {}, aeroporti: {} };     // allegato 23-01 (js/codici-dogana.js)
   var dati = null, attesa = null;                     // risposta di /api/trasporto, letta una volta per pagina
   var st = { flusso: 'import', paese: '', servizio: 'worldwide', colli: [nuovoCollo()], sabato: false, areeRemote: false, batterie: false,
-    assicurazione: '', carburante: '', quota: '' };
+    assicurazione: '', carburante: '', carburanteMano: false, quota: '', zonaAerea: '' };
   var el = null, opz = {}, timer = 0, ultimo = null;
 
   function nuovoCollo() { return { quanti: '1', kg: '', l: '', p: '', h: '', pallet: false, nonSovrapponibile: false, nonNastro: false }; }
@@ -31,7 +32,7 @@
       el.innerHTML = '<p class="vuoto">Carico le tariffe…</p>';
       carica().then(function () {
         if (opz.bolla) prepara(opz.bolla);
-        if (st.carburante === '' && dati.carburante) st.carburante = nIt(dati.carburante.percentuale);
+        if (!st.carburanteMano) st.carburante = carburanteDelServizio();
         disegna();
       }, function (e) { el.innerHTML = '<p class="errore">' + esc((e && e.errore) || 'Tariffe non disponibili.') + '</p>'; });
     }
@@ -45,6 +46,7 @@
       var i = t.paesi.findIndex(function (p) { return p.codice === b.paese && p.zona; });
       if (i >= 0) st.paese = String(i);
     }
+    st.zonaAerea = ''; st.quota = quotaAllegato();
     if (b.kg > 0) {
       var n = Math.max(1, Math.round(b.colli || 1));
       st.colli = [Object.assign(nuovoCollo(), { quanti: String(n), kg: nIt(Math.round(b.kg / n * 10) / 10) })];
@@ -79,19 +81,64 @@
       spunta('batterie', 'Batterie al litio con dispositivo separato') + '</div></div></div>';
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('percento') + 'Costo</div><div id="sp-esito"></div></div></div>';
     if (opz.bolla) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Nella bolla d\'importazione</div><div class="b-campi">' +
+      '<label id="sp-aeroporto"' + (allegato().zone.length > 1 ? '' : ' hidden') + '>Aeroporto di partenza<select class="campo" data-s="zonaAerea">' + opzioniAeroporto() + '</select></label>' +
       '<label>Quota del trasporto fino al confine UE (%)<input class="campo" data-s="quota" inputmode="decimal" autocomplete="off" value="' + esc(st.quota) + '" placeholder="0-100"></label></div>' +
+      '<p class="nota" id="sp-allegato">' + esc(testoAllegato()) + '</p>' +
       '<p class="nota">Per il trasporto aereo è la percentuale dell\'allegato 23-01 del Reg. (UE) 2015/2447 per il paese di partenza: entra nel valore in dogana. ' +
       'Il resto va tra le spese fino a destinazione, nella base dell\'IVA; l\'assicurazione nel suo campo.</p><p class="nota" id="sp-bolla"></p>' +
       '<div class="fila"><button class="btn pri" type="button" data-s="usa" disabled>' + T.icona('spunta') + 'Usa nella bolla</button></div></div></div>';
     el.innerHTML = h;
     calcola();
   }
+  /* allegato 23-01: le zone del paese di partenza (più di una per Stati Uniti, Canada e Russia: dipende dall'aeroporto) */
+  function allegato() {
+    var p = dati && dati.tariffa ? dati.tariffa.paesi[+st.paese] : null;
+    return { paese: p, zone: p ? AEREO.paesi[p.codice] || '' : '', aeroporti: p ? AEREO.aeroporti[p.codice] || {} : {} };
+  }
+  function quotaAllegato() {
+    var a = allegato(), z = a.zone.length === 1 ? a.zone : (a.zone.indexOf(st.zonaAerea) >= 0 ? st.zonaAerea : '');
+    return z && st.zonaAerea !== '-' ? nIt(AEREO.zone[z]) : '';
+  }
+  function testoAllegato() {
+    var a = allegato();
+    if (!a.paese) return '';
+    if (!a.zone) return a.paese.nome + ' non è nella tabella dell\'allegato 23-01: scrivi la quota.';
+    if (a.zone.length > 1) return 'Allegato 23-01: per ' + a.paese.nome + ' la quota dipende dall\'aeroporto di partenza.';
+    return 'Allegato 23-01: ' + a.paese.nome + ', zona ' + a.zone + ', ' + nIt(AEREO.zone[a.zone]) + ' %.';
+  }
+  function opzioniAeroporto() {
+    var a = allegato();
+    return '<option value="">scegli…</option>' + a.zone.split('').map(function (z) {
+      return '<option value="' + z + '"' + (z === st.zonaAerea ? ' selected' : '') + '>' + esc('Zona ' + z + ', ' + nIt(AEREO.zone[z]) + ' %: ' + (a.aeroporti[z] || '')) + '</option>';
+    }).join('') + '<option value="-"' + (st.zonaAerea === '-' ? ' selected' : '') + '>un altro aeroporto: scrivo la quota</option>';
+  }
+  /* dopo il cambio di paese o di aeroporto: quota suggerita e campi aggiornati */
+  function aggiornaAllegato() {
+    st.quota = quotaAllegato();
+    var l = el.querySelector('#sp-aeroporto'), q = el.querySelector('[data-s="quota"]'), n = el.querySelector('#sp-allegato');
+    if (!l) return;
+    l.hidden = allegato().zone.length < 2;
+    l.querySelector('select').innerHTML = opzioniAeroporto();
+    q.value = st.quota;
+    n.textContent = testoAllegato();
+  }
   function spunta(k, testo) { return '<label class="spunta doc"><input type="checkbox" data-s="' + k + '"' + (st[k] ? ' checked' : '') + '> ' + esc(testo) + '</label>'; }
+  /* supplemento della settimana per il servizio scelto: Economy Select ha il suo (indice del gasolio), gli altri quello
+     dei servizi internazionali; vuoto se manca, e il calcolo lo dice */
+  function carburanteDelServizio() {
+    var c = dati.carburante;
+    if (!c) return '';
+    if (st.servizio === 'economy') return c.economy === null || c.economy === undefined ? '' : nIt(c.economy);
+    return nIt(c.percentuale);
+  }
   function notaCarburante() {
     var c = dati.carburante, t = dati.tariffa;
     var testo = 'Tariffe pubbliche di listino: ' + t.titolo + (t.validita ? ', valide dal ' + dataIt(t.validita) : '') + '. ';
     if (!c) testo += 'Il supplemento carburante della settimana non è stato indicato in Gestione: scrivilo qui.';
-    else testo += 'Carburante indicato in Gestione: ' + nIt(c.percentuale) + ' % dal ' + dataIt(c.dal) + ' (DHL lo cambia ogni settimana).';
+    else {
+      testo += 'Carburante ' + (c.fonte === 'dhl' ? 'della settimana dal ' + dataIt(c.dal) + ' al ' + dataIt(c.al) + ', dalla pagina di DHL' : 'indicato in Gestione dal ' + dataIt(c.dal)) +
+        ': Express ' + nIt(c.percentuale) + '\u00a0%' + (c.economy === null || c.economy === undefined ? '' : ', Economy Select ' + nIt(c.economy) + '\u00a0%') + '.';
+    }
     return '<p class="nota" id="sp-nota">' + esc(testo) + '</p>';
   }
   function opzioniServizio() {
@@ -159,6 +206,7 @@
     if (!t || t.tagName === 'SELECT' || t.type === 'checkbox') return;
     var k = t.getAttribute('data-s'), c = t.getAttribute('data-c');
     if (c !== null) st.colli[+c][k] = t.value; else st[k] = t.value;
+    if (k === 'carburante') st.carburanteMano = t.value.trim() !== '';    // scritto a mano: resta anche cambiando servizio
     clearTimeout(timer); timer = setTimeout(calcola, 200);
   });
   document.addEventListener('change', function (ev) {
@@ -170,10 +218,16 @@
       if (k === 'pallet') { var r = el.querySelector('[data-riga="' + c + '"] [data-s="nonSovrapponibile"]'); if (r) r.closest('label').hidden = !v; }
     } else st[k] = v;
     if (k === 'flusso') { var et = el.querySelector('#sp-et-paese'); if (et) et.textContent = v === 'import' ? 'Paese di partenza' : 'Paese di destinazione'; }
+    if (k === 'zonaAerea') { aggiornaAllegato(); }
     if (k === 'paese') {
+      st.zonaAerea = ''; aggiornaAllegato();
       var p = dati.tariffa.paesi[+st.paese];
       if (p && Array.isArray(p.servizi) && p.servizi.indexOf(st.servizio) < 0) st.servizio = 'worldwide';
       var s = el.querySelector('#sp-servizio'); if (s) s.innerHTML = opzioniServizio();
+    }
+    if ((k === 'paese' || k === 'servizio') && !st.carburanteMano) {
+      st.carburante = carburanteDelServizio();
+      var f = el.querySelector('[data-s="carburante"]'); if (f) f.value = st.carburante;
     }
     calcola();
   });

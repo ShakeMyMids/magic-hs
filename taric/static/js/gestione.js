@@ -279,6 +279,13 @@
     } else if (g === 's-togli') {
       T.api('DELETE', '/api/admin/sinonimi/' + encodeURIComponent(v)).then(function () { msg('ricerca', 'Sinonimo tolto.', true); if (app()) app().caricaSinonimi(); return carica(); },
         function (e) { msg('ricerca', errore(e)); disegna(); });
+    } else if (g === 'carburante-leggi') {
+      st.carburanteInCorso = true; msg('carburante-leggi', 'Leggo la pagina di DHL…', true); disegna();
+      T.api('POST', '/api/admin/trasporto/carburante/aggiorna').then(function (r) {
+        var c = r.carburante;
+        msg('carburante-leggi', 'Letto: Express ' + String(c.percentuale).replace('.', ',') + ' %' + (c.economy !== null ? ', Economy Select ' + String(c.economy).replace('.', ',') + ' %' : '') + '.', true);
+        if (T.spedizione) T.spedizione.dimentica();
+      }, function (e) { msg('carburante-leggi', errore(e)); }).then(function () { st.carburanteInCorso = false; return carica(); });
     } else if (g === 'trasporto-usa') {
       T.api('POST', '/api/admin/trasporto/' + id + '/attiva').then(function () { msg('trasporto-pdf', 'Tariffa cambiata.', true); if (T.spedizione) T.spedizione.dimentica(); },
         function (e) { msg('trasporto-pdf', errore(e)); }).then(carica);
@@ -309,9 +316,10 @@
         if (T.spedizione) T.spedizione.dimentica();
       }, function (e) { msg('trasporto-pdf', errore(e)); }).then(function () { st.trasportoInCorso = false; return carica(); });
     } else if (g === 'carburante') {
-      var perc = parseFloat(String(d.get('percentuale') || '').replace(',', '.'));
-      if (!(perc >= 0 && perc <= 100)) { msg('carburante', 'Scrivi una percentuale tra 0 e 100.'); disegna(); return true; }
-      T.api('PUT', '/api/admin/trasporto/carburante', { percentuale: perc, dal: String(d.get('dal') || '') }).then(function () {
+      var perc = parseFloat(String(d.get('percentuale') || '').replace(',', '.')), eco = String(d.get('economy') || '').trim();
+      var ecoN = eco === '' ? null : parseFloat(eco.replace(',', '.'));
+      if (!(perc >= 0 && perc <= 100) || (ecoN !== null && !(ecoN >= 0 && ecoN <= 100))) { msg('carburante', 'Scrivi percentuali tra 0 e 100.'); disegna(); return true; }
+      T.api('PUT', '/api/admin/trasporto/carburante', { percentuale: perc, economy: ecoN, dal: String(d.get('dal') || '') }).then(function () {
         msg('carburante', 'Salvato.', true); if (T.spedizione) T.spedizione.dimentica();
       }, function (e) { msg('carburante', errore(e)); }).then(carica);
     } else if (g === 's-limiti') {
@@ -373,14 +381,25 @@
     h += '<form class="modulo" data-g="trasporto-pdf"><label>Guida alle tariffe in PDF<input class="campo" type="file" name="file" accept=".pdf,application/pdf" required></label>' +
       '<div class="fila"><button class="btn pri" type="submit"' + (st.trasportoInCorso ? ' disabled' : '') + '>' + T.icona('carica') + (st.trasportoInCorso ? 'Leggo il PDF…' : 'Carica e controlla') + '</button></div>' +
       riga('trasporto-pdf') + '</form><p class="nota">Il PDF si legge e si controlla (zone, prezzi, scatti): se qualcosa non torna resta la tariffa di prima. Quando DHL pubblica la guida nuova, caricala qui.</p></div>';
-    var vecchio = R.carburante_giorni > 7;
-    h += '<div class="box s5"><div class="lab">' + T.icona('percento') + 'Supplemento carburante</div>' +
-      (c ? '<p class="cosa">' + esc(String(c.percentuale).replace('.', ',')) + ' %</p><p class="nota">Dal ' + esc(dataIt(c.dal)) + (c.autore ? ', scritto da ' + esc(c.autore) : '') + '.</p>' +
-        (vecchio ? '<p class="avviso">Indicato ' + R.carburante_giorni + ' giorni fa: DHL lo cambia ogni settimana.</p>' : '')
-        : '<p class="avviso">Non ancora indicato: il calcolatore lo chiede a chi lo usa.</p>') +
-      '<form class="modulo" data-g="carburante"><div class="due"><label>Percentuale della settimana<input class="campo" name="percentuale" inputmode="decimal" autocomplete="off" required placeholder="per esempio 35,25"></label>' +
-      '<label>Valida dal<input class="campo" type="date" name="dal"></label></div><div class="fila"><button class="btn" type="submit">Salva</button></div>' + riga('carburante') +
-      '</form><p class="nota">DHL Express la aggiorna ogni settimana (media del prezzo del carburante per aerei): la trovi su MyDHL+ e nelle fatture.</p></div></div>';
+    var vecchio = R.carburante_giorni > 7, auto = R.carburante_auto || {}, pc = function (v) { return esc(String(v).replace('.', ',')) + '\u00a0%'; };
+    h += '<div class="box s5"><div class="lab">' + T.icona('percento') + 'Supplemento carburante</div>';
+    if (c) h += '<p class="cosa">' + pc(c.percentuale) + '</p><p class="nota">Express (Worldwide e servizi a orario)' +
+      (c.economy !== null && c.economy !== undefined ? ' · Economy Select ' + pc(c.economy) : '') + '</p><p class="nota">' +
+      (c.fonte === 'dhl' ? 'Settimana dal ' + esc(dataIt(c.dal)) + ' al ' + esc(dataIt(c.al)) + ', dalla pagina di DHL (letta il ' + esc(T.dataOra(c.aggiornato)) + ').'
+        : 'Dal ' + esc(dataIt(c.dal)) + ', scritto a mano' + (c.autore ? ' da ' + esc(c.autore) : '') + '.') + '</p>' +
+      (vecchio ? '<p class="avviso">Della settimana del ' + esc(dataIt(c.dal)) + ': DHL lo cambia ogni settimana.</p>' : '');
+    else h += '<p class="avviso">Non ancora indicato: il calcolatore lo chiede a chi lo usa.</p>';
+    if (!auto.attivo) h += '<p class="nota">Lettura automatica spenta (MAGIC_HS_CARBURANTE_URL vuota): scrivilo a mano.</p>';
+    else {
+      if (auto.esito === 'errore') h += '<p class="avviso">Lettura del ' + esc(T.dataOra(auto.tentato)) + ' non riuscita: ' + esc(auto.messaggio || '') + '. Resta il valore di prima; riprovo tra 6 ore.</p>';
+      h += '<p class="nota">Si aggiorna da solo ogni giorno dalla pagina dei supplementi di DHL Express Italia.</p>' +
+        '<div class="fila"><button class="btn" type="button" data-g="carburante-leggi"' + (st.carburanteInCorso ? ' disabled' : '') + '>' + T.icona('aggiorna') + 'Leggi adesso</button></div>';
+    }
+    h += riga('carburante-leggi') + '<details class="piu"' + (auto.attivo && auto.esito !== 'errore' && !st.msg.carburante ? '' : ' open') + '><summary>Scrivi a mano</summary>' +
+      '<form class="modulo" data-g="carburante"><div class="due"><label>Express (%)<input class="campo" name="percentuale" inputmode="decimal" autocomplete="off" required placeholder="per esempio 35,25"></label>' +
+      '<label>Economy Select (%)<input class="campo" name="economy" inputmode="decimal" autocomplete="off" placeholder="facoltativo"></label></div>' +
+      '<label>Valido dal<input class="campo" type="date" name="dal"></label><div class="fila"><button class="btn" type="submit">Salva</button></div>' + riga('carburante') +
+      '</form>' + (auto.attivo ? '<p class="nota">Il valore scritto a mano vale fino alla domenica della sua settimana, poi torna quello della pagina di DHL.</p>' : '') + '</details></div></div>';
     if (V.length > 1) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('storico') + 'Tariffe caricate</div><div class="scorri"><table class="tab"><thead><tr><th>Guida</th><th>Valida dal</th><th>Caricata</th><th></th></tr></thead><tbody>' +
       V.map(function (v) {
         return '<tr' + (v.attiva ? ' class="evid"' : '') + '><td>' + esc(v.titolo) + (v.attiva ? ' <span class="st ok">in uso</span>' : '') + '</td><td data-l="Valida dal">' + esc(dataIt(v.validita)) +
