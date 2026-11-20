@@ -113,7 +113,7 @@ def main(argv: list[str]) -> int:
         return 1
     falliti = []
     with tempfile.TemporaryDirectory() as tmp:
-        cfg = carica({"TARIC_DATI": tmp, "TARIC_DATI_URL": "", "TARIC_AGGIORNAMENTI_URL": ""})
+        cfg = carica({"TARIC_DATI": tmp, "TARIC_DATI_URL": ""})
         dati = GestoreDati(cfg, Database(Path(tmp) / "taric.db"))
         for mese in mesi:
             print(f"\n=== {mese}")

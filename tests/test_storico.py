@@ -44,7 +44,8 @@ def test_mese_passato_preso_da_github_e_servito_dall_archivio(ambiente):
     assert sito.client().get("/data/2025-09-01/nomenclatura.js").status_code == 401
     # l'app con i dati di quel mese
     html = capo.get("/", params={"dati": "2025-09-01"}).text
-    assert 'src="/data/2025-09-01/nomenclatura.js"' in html and 'data-attivi="2026-11-01"' in html
+    assert 'src="/data/2025-09-01/nomenclatura.js?v=' in html and 'data-attivi="2026-11-01"' in html
+    assert f'data-v="{sito.app.state.dati.impronta("2025-09-01")}"' in html and "{{V}}" not in html     # impronta dei file dei dati
     assert 'data-attivi="2026-11-01"' in capo.get("/").text and "/data/2026-11-01/" in capo.get("/").text
     for altro in ("2024-01-01", "2025-09-1", "../x"):
         r = capo.get("/", params={"dati": altro}, follow_redirects=False)

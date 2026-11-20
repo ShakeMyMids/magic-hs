@@ -23,7 +23,7 @@
     s = String(s === undefined || s === null ? '' : s).trim().replace(/\s/g, '');
     if (!s) return NaN;
     if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
-    else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');     // 12.500 = dodicimilacinquecento
+    else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');  // 12.500 = dodicimilacinquecento (0.500 resta mezzo)
     var v = Number(s);
     return isFinite(v) && v >= 0 ? v : NaN;
   }
@@ -98,6 +98,19 @@
       while ((x = m.exec(stringhe[k] || ''))) if (!MASSA[x[1]] && !PAROLE[x[1]]) return x[1];
     }
     return '';
+  }
+  /* Quantità per un dazio per unità (calcolaDazio la vuole in pezzi per MIL e CEN, «per 1000» e «per 100 pezzi»).
+     M = {unitaQta, unitaSupCodice}. Con le unità supplementari in pezzi (NAR) è la stessa quantità; con le unità
+     supplementari nell'unità del dazio (per esempio 1 000 p/st) si dichiarano migliaia o centinaia: si riportano a pezzi.
+     Altrimenti serve una quantità a parte (quantitaDazio, nell'unità del dazio; in pezzi per MIL e CEN). */
+  function quantitaSeparata(M) {
+    var u = M && M.unitaQta, s = M && M.unitaSupCodice;
+    return !!(u && s && u !== s && !(QUANTITA[u] && s === 'NAR'));
+  }
+  function quantitaDazio(a, M) {
+    if (quantitaSeparata(M)) return numeroIt(a.quantitaDazio);
+    var q = numeroIt(a.quantita), u = M && M.unitaQta;
+    return QUANTITA[u] && M.unitaSupCodice === u ? q * Math.round(1 / QUANTITA[u]) : q;
   }
 
   /* ------------------------------------------------------------------ condizioni */
@@ -351,7 +364,7 @@
 
     var valoriF = arts.map(function (a) { return numeroIt(a.valore); });
     var pesi = bolla.ripartizione === 'massa' ? arts.map(function (a) { var v = numeroIt(a.lordo); return isNaN(v) ? numeroIt(a.netto) : v; }) : valoriF;
-    if (bolla.ripartizione === 'massa' && pesi.some(function (p) { return isNaN(p); }) && (noloEur || inoltroEur)) blocca(0, 'Per ripartire le spese in base alla massa serve la massa lorda di ogni articolo.');
+    if (bolla.ripartizione === 'massa' && pesi.some(function (p) { return isNaN(p); }) && (noloEur || inoltroEur || statEur)) blocca(0, 'Per ripartire le spese in base alla massa serve la massa lorda di ogni articolo.');
     var quoteNolo = ripartisci(noloEur, pesi.map(function (p) { return isNaN(p) ? 0 : p; }));
     var quoteInoltro = ripartisci(inoltroEur, pesi.map(function (p) { return isNaN(p) ? 0 : p; }));
     var quoteStat = ripartisci(statEur, pesi.map(function (p) { return isNaN(p) ? 0 : p; }));
@@ -372,7 +385,7 @@
       r.valoreDogana = isNaN(valoreEur) ? null : arrotonda(valoreEur + r.quotaNolo);
       if (r.valoreDogana !== null && r.valoreDogana < 0) b('Il valore in dogana risulta negativo: controlla deduzioni e importi.');
       // quantità per i dazi per unità: le unità supplementari, o una quantità a parte se il dazio usa un'altra unità
-      var qta = M.unitaQta && M.unitaSupCodice && M.unitaQta !== M.unitaSupCodice ? numeroIt(a.quantitaDazio) : numeroIt(a.quantita);
+      var qta = quantitaDazio(a, M);
       var c = { valore: r.valoreDogana === null ? NaN : r.valoreDogana, kg: numeroIt(a.netto), qta: qta, unitaQta: M.unitaQta || '' };
       var docs = a.documenti || [];
 
@@ -581,14 +594,17 @@
   function controlliTestata(bolla, ctx, giorno, conflitto, avvisi, flusso) {
     var dati = parseInt(String(ctx.dataDati || '').replace(/-/g, ''), 10);
     if (giorno > 19000101 && dati > 19000101) {
+      // mesi di distanza contati sul calendario (AAAAMMGG non si sottrae: a dicembre il mese dopo è 8900 giorni «dopo»)
+      var mesi = (Math.floor(giorno / 10000) * 12 + Math.floor(giorno / 100) % 100) - (Math.floor(dati / 10000) * 12 + Math.floor(dati / 100) % 100);
       if (giorno < dati) conflitto(0, 'La data della bolla è precedente ai dati TARIC del ' + dataIt(dati) + ': le misure finite nel frattempo non ci sono. Ricalcola la bolla con i dati di quel mese, se ci sono, o verifica sul TARIC dell\'UE (link in ogni articolo).', 'data');
-      else if (giorno - dati > 200) avvisi.push({ articolo: 0, testo: 'La data della bolla è oltre il mese dei dati TARIC (' + dataIt(dati) + '): fino ad allora le misure possono cambiare.' });
+      else if (mesi > 2 || (mesi === 2 && giorno % 100 > dati % 100)) avvisi.push({ articolo: 0, testo: 'La data della bolla è oltre il mese dei dati TARIC (' + dataIt(dati) + '): fino ad allora le misure possono cambiare.' });
     }
     var v = bolla.valuta || 'EUR', cb = (ctx.cambi || {})[v];
     if (cb && cb.contratto) avvisi.push({ articolo: 0, testo: 'Tasso di cambio fissato dal contratto (DE 14 09): in testata va dichiarato il documento 26AO e l\'accordo va conservato per i controlli (avviso ADM del 29/07/2026).' });
     if (v === 'EUR' && !vuoto(bolla.tassoContratto)) conflitto(0, 'Con la fattura in euro il tasso di cambio del contratto non si applica.', 'tassoContratto');
     if (cb && cb.manuale) avvisi.push({ articolo: 0, testo: 'Cambio di ' + v + ' scritto a mano (la BCE non lo pubblica): per le Dogane vale il cambio giornaliero della Banca d\'Italia.' });
-    if (flusso === 'export' && UE.indexOf(bolla.paese) >= 0) conflitto(0, 'La destinazione predefinita è un paese dell\'Unione: non è un\'esportazione.', 'paese');
+    if (UE.indexOf(bolla.paese) >= 0) conflitto(0, flusso === 'export' ? 'La destinazione predefinita è un paese dell\'Unione: non è un\'esportazione.'
+      : 'L\'origine predefinita è un paese dell\'Unione: la merce di origine UE non si importa come merce estera, controlla l\'origine.', 'paese');
   }
   function dataIt(n) { var s = String(n); return s.slice(6, 8) + '/' + s.slice(4, 6) + '/' + s.slice(0, 4); }
   /* conflitti tra i campi di un articolo che non dipendono dalle misure */
@@ -672,7 +688,7 @@
     calcolaDazio: calcolaDazio, unitaQuantita: unitaQuantita, parseCond: parseCond, valutaCondizioni: valutaCondizioni,
     regimi: regimi, gruppiAggiuntivi: gruppiAggiuntivi, famiglie: famiglie, controlli: controlli, calcolaImport: calcolaImport, calcolaExport: calcolaExport,
     giornoCambio: giornoCambio, euroDa: euroDa, valida: valida, codicePreferenza: codicePreferenza, codiceTributo: codiceTributo, UE: UE, INCOTERM: INCOTERM,
-    codiceIndicatori: codiceIndicatori, datiMancanti: datiMancanti
+    codiceIndicatori: codiceIndicatori, datiMancanti: datiMancanti, quantitaSeparata: quantitaSeparata, quantitaDazio: quantitaDazio
   };
   if (typeof module === 'object' && module.exports) module.exports = API;
   else radice.TARIC_CALCOLO = API;

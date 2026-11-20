@@ -9,9 +9,8 @@ Crea solo la tabella italiana (quando si ha un nuovo "Nomenclature IT.xlsx"):
   python3 -I aggiorna.py --crea-it <Nomenclature IT.xlsx> --en <Nomenclature EN.xlsx della stessa estrazione> \
       --it <nomenclatura_it.json da scrivere> --data AAAA-MM-01
 
-Scrive in --out: nomenclatura.js, rif.js, note.js, m/<capitolo>.js, versione.json e, solo se tutti i controlli
-passano, pubblica.json (elenco "as"/"path" dei file per publish_files; pubblica.json stesso non va pubblicato).
-Si pubblica solo se il codice di uscita e' 0 e l'ultima riga stampata e' "CONTROLLI OK".
+Scrive in --out: nomenclatura.js, rif.js, note.js, m/<capitolo>.js e versione.json; accanto a --out il riepilogo.txt.
+I dati si installano solo se il codice di uscita e' 0 e l'ultima riga stampata e' "CONTROLLI OK".
 Se in --src c'e' "Nomenclature IT.xlsx", la tabella italiana (--it) viene rigenerata da quel file.
 """
 import argparse, collections, datetime, hashlib, json, os, re, sys, warnings
@@ -50,14 +49,17 @@ SUB = str.maketrans("0123456789-+n", "₀₁₂₃₄₅₆₇₈₉₋₊ₙ")
 def righe(path, nome=None):
     """Righe del primo foglio (senza intestazione). Con `nome` verifica che le colonne siano quelle attese."""
     wb = openpyxl.load_workbook(path, read_only=True)
-    ws = wb.worksheets[0]
-    ws.reset_dimensions()
-    it = ws.iter_rows(values_only=True)
-    testa = [str(h).strip() if h is not None else "" for h in next(it)]
-    attese = ATTESE.get(nome)
-    if attese and testa[:len(attese)] != attese and not any(testa[:len(v)] == v for v in VARIANTI.get(nome, [])):
-        raise SystemExit(f"ERRORE: colonne cambiate nel file '{nome}'.\n  attese: {attese}\n  trovate: {testa}\nNON PUBBLICARE.")
-    return [tuple(r) for r in it]
+    try:                                   # in sola lettura il file resta aperto finche' non si chiude
+        ws = wb.worksheets[0]
+        ws.reset_dimensions()
+        it = ws.iter_rows(values_only=True)
+        testa = [str(h).strip() if h is not None else "" for h in next(it)]
+        attese = ATTESE.get(nome)
+        if attese and testa[:len(attese)] != attese and not any(testa[:len(v)] == v for v in VARIANTI.get(nome, [])):
+            raise SystemExit(f"ERRORE: colonne cambiate nel file '{nome}'.\n  attese: {attese}\n  trovate: {testa}\nNON PUBBLICARE.")
+        return [tuple(r) for r in it]
+    finally:
+        wb.close()
 
 
 def t(v):
@@ -157,7 +159,8 @@ def verifica(out, data, capitoli_attesi):
             domini[d.lower().rstrip(".,;")] += 1
 
     def carica(nome, prefisso):
-        b = open(os.path.join(out, nome), "rb").read()
+        with open(os.path.join(out, nome), "rb") as f:
+            b = f.read()
         try:
             txt = b.decode("utf-8")
             if not (txt.startswith(prefisso) and txt.endswith(";\n")):
@@ -318,7 +321,8 @@ def main():
     if not os.path.exists(a.it):
         print("ERRORE: manca la tabella italiana (--it). NON PUBBLICARE.")
         return 1
-    IT = json.load(open(a.it, encoding="utf-8"))
+    with open(a.it, encoding="utf-8") as f:
+        IT = json.load(f)
 
     # ------------------------------------------------------------ nomenclatura
     recs = []
@@ -487,7 +491,8 @@ def main():
     controlla(n_en <= 0.25 * n, f"troppe voci rimaste in inglese: {n_en} su {n}")
     variazioni = {}
     if a.prec and os.path.exists(a.prec):
-        prec = json.load(open(a.prec, encoding="utf-8"))
+        with open(a.prec, encoding="utf-8") as f:
+            prec = json.load(f)
         controlla(a.data >= prec.get("data", ""), f"i dati nuovi ({a.data}) sono piu' vecchi di quelli pubblicati ({prec.get('data')})")
         for campo, valore in (("righe", n), ("dichiarabili", n_dich), ("misure_import", conta["m"]), ("misure_export", conta["x"])):
             if prec.get(campo):
@@ -500,13 +505,6 @@ def main():
                 "capitoli": len(capitoli), "it_aggiornato": it_aggiornato, "avvisi": avvisi, "variazioni": variazioni}
     with open(os.path.join(out, "versione.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(versione, f, ensure_ascii=False, indent=1)
-    elenco = [{"as": "data/" + nome, "path": os.path.abspath(os.path.join(out, nome))} for nome in ("nomenclatura.js", "rif.js", "note.js", "versione.json")]
-    elenco += [{"as": "data/m/" + f_, "path": os.path.abspath(os.path.join(out, "m", f_))} for f_ in sorted(os.listdir(os.path.join(out, "m")))]
-    if it_aggiornato:
-        elenco.append({"as": "tools/nomenclatura_it.json", "path": os.path.abspath(a.it)})
-    da_pubblicare = os.path.join(out, "pubblica.json")
-    if os.path.exists(da_pubblicare):
-        os.remove(da_pubblicare)
     prob_v, avv_v, righe_riepilogo, n_valori = verifica(out, a.data, {r[0][:2] for r in recs if r[3] == 0})
     problemi += prob_v
     avvisi += avv_v
@@ -534,9 +532,6 @@ def main():
         for p in problemi:
             print("  -", p)
         return 1
-    with open(da_pubblicare, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(elenco, f, separators=(",", ":"))
-    print(f"file da pubblicare: {len(elenco)} (elenco in {da_pubblicare})")
     print("CONTROLLI OK")
     return 0
 

@@ -161,4 +161,5 @@ def verifica_modulo(segreto: bytes, valore: str, minimo_s: float = 3, massimo_s:
         eta = time.time() - int(t)
     except ValueError:
         return False
-    return hmac.compare_digest(firma, attesa) and minimo_s <= eta <= massimo_s
+    # in byte: compare_digest su testi con caratteri non ASCII solleva TypeError (errore 500 invece di «modulo non valido»)
+    return hmac.compare_digest(firma.encode(), attesa.encode()) and minimo_s <= eta <= massimo_s

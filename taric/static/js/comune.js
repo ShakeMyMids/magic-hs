@@ -8,6 +8,14 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   };
+  /* 'AAAA-MM' -> «novembre 2026» ('' se non è un mese) */
+  var MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+  T.meseIt = function (m) {
+    var x = /^(\d{4})-(\d{2})$/.exec(m || '');
+    return x && +x[2] >= 1 && +x[2] <= 12 ? MESI[+x[2] - 1] + ' ' + x[1] : '';
+  };
+  /* la prima riga di un testo, accorciata a n caratteri con i puntini */
+  T.taglia = function (s, n) { s = String(s || '').split('\n')[0]; return s.length > n ? s.slice(0, n - 1).trim() + '…' : s; };
 
   /* Chiamata alle API del sito. Risolve con il JSON della risposta; in caso d'errore rifiuta con
      { stato, codice, errore }. Con una sessione scaduta torna alla pagina di accesso (salvo opzioni.resta). */
@@ -102,7 +110,7 @@
     'm-t" x="14.4" y="12.4" width="5.2" height="4.4" rx=".9"/><rect class="m-r" x="20.4" y="12.4" width="5.2" height="4.4" rx=".9"/><path class="m-c" d="M4' +
     '.6 18h22.8l-2.9 6.4a1.6 1.6 0 0 1-1.46.95H8.96a1.6 1.6 0 0 1-1.46-.95z"/>' + (T.accessorio ? T.accessorio() : '') + '</svg>';   // stagioni e feste: js/disegni.js
 
-  /* tema: auto | chiaro | scuro (la pagina usa data-theme="light"/"dark") */
+  /* tema: auto | chiaro | scuro (la pagina usa data-theme="light"/"dark"; il primo lo mette js/calendario.js) */
   var TEMI = { auto: ['auto', 'Tema: come il dispositivo'], chiaro: ['sole', 'Tema chiaro'], scuro: ['luna', 'Tema scuro'] };
   function scuroAttivo() {
     var a = document.documentElement.getAttribute('data-theme');
@@ -113,14 +121,14 @@
     if (m) m.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--fondo').trim() || (scuroAttivo() ? '#0d151e' : '#e1e6eb'));
   }
   T.temaAttuale = 'auto';
-  T.tema = function (t) {
+  T.tema = function (t, soloPagina) {          // soloPagina: non lo ricorda (all'apertura della pagina)
     t = TEMI[t] ? t : 'auto';
     var r = document.documentElement;
     if (t === 'chiaro') r.setAttribute('data-theme', 'light');
     else if (t === 'scuro') r.setAttribute('data-theme', 'dark');
     else r.removeAttribute('data-theme');
     T.temaAttuale = t;
-    try { localStorage.setItem('taric2.tema', t); } catch (e) { /* nessun archivio locale */ }
+    if (!soloPagina) try { localStorage.setItem('magic-hs.tema', t); localStorage.removeItem('taric2.tema'); } catch (e) { /* nessun archivio locale */ }
     coloreBarra();
     var b = document.getElementById('tema');
     if (b) { b.innerHTML = T.icona(TEMI[t][0]); b.title = TEMI[t][1] + ' (tocca per cambiare)'; b.setAttribute('aria-label', TEMI[t][1] + ': tocca per cambiare'); }
@@ -132,7 +140,7 @@
     else T.tema(t);
     document.dispatchEvent(new CustomEvent('taric:tema', { detail: t }));
   };
-  try { T.tema(localStorage.getItem('taric2.tema') || 'auto'); } catch (e) { T.tema('auto'); }
+  T.tema(T.temaSalvato || 'auto', true);            // letto da js/calendario.js nell'<head>
   /* puntatore del mouse a forma di aereo (app.css): si spegne dal profilo, su questo dispositivo */
   T.puntatoreAereo = function (acceso) {
     document.documentElement.classList.toggle('senza-aereo', !acceso);
@@ -161,7 +169,7 @@
     stagioni();
     var b = document.getElementById('tema');
     if (b) {
-      T.tema(T.temaAttuale);
+      T.tema(T.temaAttuale, true);
       b.addEventListener('click', function () { T.cambiaTema({ auto: 'chiaro', chiaro: 'scuro', scuro: 'auto' }[T.temaAttuale]); });
     }
     var barra = document.querySelector('.barra');
@@ -181,7 +189,8 @@
     }
     Array.prototype.forEach.call(document.querySelectorAll('[data-auguri]'), function (el) {
       if (o.tema && o.auguri) {
-        el.innerHTML = (T.ornamento ? T.ornamento(o.tema) : '') + '<span>' + T.esc(o.auguri) + '</span>';
+        var simbolo = o.ha && o.ha('befana') ? 'befana' : o.tema;        // il 6 gennaio la calza, come nella scena
+        el.innerHTML = (T.ornamento ? T.ornamento(simbolo) : '') + '<span>' + T.esc(o.auguri) + '</span>';
         el.hidden = false;
       }
       el.removeAttribute('data-auguri');

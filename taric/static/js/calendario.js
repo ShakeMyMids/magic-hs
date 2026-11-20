@@ -6,7 +6,8 @@
    tema-<nome>. app.css ne prende i colori di tutta l'app e le decorazioni (festone, motivo dello sfondo, neve sulle
    schede); js/disegni.js disegna nella scena solo le decorazioni di oggi.
    Spento dal profilo (localStorage magic-hs.stagioni = "no"); l'anteprima di un altro giorno (sessionStorage
-   magic-hs.prova-giorno) vale finché resta aperta la scheda del browser. Si prova con node: tests/prova_calendario.js. */
+   magic-hs.prova-giorno) vale finché resta aperta la scheda del browser. Si prova con node: tests/prova_calendario.js.
+   Per lo stesso motivo qui va su <html> anche il tema chiaro o scuro scelto con il pulsante in alto (T.tema di comune.js). */
 (function () {
   'use strict';
 
@@ -93,7 +94,11 @@
     location.reload();
   };
 
-  if (!T.oggi.tema) return;
+  /* tema scelto: localStorage magic-hs.tema (taric2.tema nelle versioni precedenti), applicato prima del primo disegno */
   var radice = document.documentElement;
+  try { T.temaSalvato = localStorage.getItem('magic-hs.tema') || localStorage.getItem('taric2.tema') || 'auto'; } catch (e) { T.temaSalvato = 'auto'; }
+  if (T.temaSalvato === 'chiaro' || T.temaSalvato === 'scuro') radice.setAttribute('data-theme', T.temaSalvato === 'scuro' ? 'dark' : 'light');
+
+  if (!T.oggi.tema) return;
   [T.oggi.stagione, 'con-tema', 'tema-' + T.oggi.tema].concat(T.oggi.feste).forEach(function (c) { radice.classList.add(c); });
 })();

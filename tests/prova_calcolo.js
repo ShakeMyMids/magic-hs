@@ -19,6 +19,7 @@ prova('numeri scritti all\'italiana', () => {
   uguale(K.numeroIt('1.250.000'), 1250000);
   uguale(K.numeroIt('2.5'), 2.5);
   uguale(K.numeroIt(' 0,75 '), 0.75);
+  uguale(K.numeroIt('0.500'), 0.5);             // mezzo chilo, non cinquecento
   assert(isNaN(K.numeroIt('')) && isNaN(K.numeroIt('-3')) && isNaN(K.numeroIt('abc')) && isNaN(K.numeroIt(null)));
 });
 
@@ -405,6 +406,37 @@ prova('dati obbligatori per AIDA che mancano: elencati, senza bloccare il totale
   const e = K.calcolaExport({ data: '2026-11-14', valuta: 'EUR', articoli: [{ codice: '8471300000', origine: 'US', valore: '1', quantita: '1' }] },
     { misure: () => ({ righe: [M(109, '1011', 'NAR')], unitaSup: 'p/st' }), cambi: {} });
   assert(e.mancanti.some(x => x.campo === 'uscita' && /DE 5\/12/.test(x.testo)) && !e.mancanti.some(x => x.campo === 'provincia'));
+});
+
+prova('dazi per 1000 pezzi (pulcini 0105 11, uova da cova 0407 11): la quantità è in pezzi', () => {
+  const art = { quantita: '5000', quantitaDazio: '5' };
+  // unità supplementari in pezzi: la stessa quantità, nessun campo a parte (52 EUR per 1000 × 5000 = 260 €)
+  const nar = { unitaQta: 'MIL', unitaSupCodice: 'NAR' };
+  uguale([K.quantitaSeparata(nar), K.quantitaDazio(art, nar)], [false, 5000]);
+  uguale(K.calcolaDazio('52.000 EUR MIL', { qta: K.quantitaDazio(art, nar), unitaQta: 'MIL' }), { importo: 260 });
+  // unità supplementari in migliaia di pezzi (1 000 p/st): 5 migliaia = 5000 pezzi
+  const mil = { unitaQta: 'MIL', unitaSupCodice: 'MIL' };
+  uguale([K.quantitaSeparata(mil), K.quantitaDazio({ quantita: '5' }, mil)], [false, 5000]);
+  // altra unità: la quantità a parte, nell'unità del dazio
+  uguale([K.quantitaSeparata({ unitaQta: 'HLT', unitaSupCodice: 'NAR' }), K.quantitaDazio(art, { unitaQta: 'HLT', unitaSupCodice: 'NAR' })], [true, 5]);
+});
+
+prova('data della bolla oltre il mese dei dati: contata in mesi, anche a cavallo dell\'anno', () => {
+  const ctxD = (dati) => ({ misure: () => ({ righe: [M(103, '1011', '')] }), cambi: {}, dataDati: dati });
+  const oltre = (data, dati) => K.calcolaImport({ data: data, valuta: 'EUR', articoli: [] }, ctxD(dati)).avvisi.some(x => /oltre il mese/.test(x.testo));
+  uguale([oltre('2026-12-31', '2026-11-01'), oltre('2027-01-02', '2026-11-01'), oltre('2027-01-15', '2026-12-01'), oltre('2027-02-02', '2026-12-01')],
+    [false, true, false, true]);
+});
+
+prova('origine predefinita nell\'UE all\'importazione e spese statistiche da ripartire sulla massa', () => {
+  const ctxS = { misure: () => ({ righe: [M(103, '1011', '')] }), cambi: {} };
+  // l'articolo senza origine usa quella predefinita: se è un paese dell'Unione lo si segnala in testata, come all'esportazione
+  const r = K.calcolaImport({ data: '2026-11-14', valuta: 'EUR', paese: 'DE', articoli: [{ codice: '1', valore: '100' }] }, ctxS);
+  uguale(r.conflitti.map(x => [x.articolo, x.campo]), [[0, 'paese']]);
+  // anche le sole spese fino al confine italiano (valore statistico) si ripartiscono sulla massa: senza masse non si calcola
+  const m = K.calcolaImport({ data: '2026-11-14', valuta: 'EUR', ripartizione: 'massa', statSpese: { importo: '100', valuta: 'EUR' },
+    articoli: [{ codice: '1', origine: 'CN', valore: '100', lordo: '10' }, { codice: '1', origine: 'CN', valore: '100' }] }, ctxS);
+  assert(m.totali === null && m.blocchi.some(x => /massa lorda/.test(x.testo)));
 });
 
 console.log(n + ' prove superate');

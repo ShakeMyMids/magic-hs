@@ -33,7 +33,7 @@ import httpx
 
 from . import __version__
 from .config import Config
-from .db import Database, adesso, da_iso, iso, tra
+from .db import Database, adesso, da_iso, iso
 
 log = logging.getLogger("taric.dati")
 
@@ -182,6 +182,18 @@ class GestoreDati:
         p = self.archivio / f"dati-{versione}.zip"
         return p if RE_VERSIONE.match(versione) and p.is_file() else None
 
+    def impronta(self, versione: str) -> str:
+        """Cambia quando i file di una versione cambiano (stessa versione installata di nuovo, archivio riscaricato): va
+        nell'indirizzo dei file dei dati, che il browser tiene a lungo («immutable»)."""
+        f = self.versioni / versione / "versione.json"
+        if not f.is_file():
+            f = self.archivio / f"dati-{versione}.zip"
+        try:
+            st = f.stat()
+        except OSError:
+            return ""
+        return hashlib.sha256(f"{versione}:{st.st_mtime_ns}:{st.st_size}".encode()).hexdigest()[:10]
+
     def disponibile(self, versione: str) -> bool:
         return self.file(versione, "nomenclatura.js") is not None or self.archiviata(versione) is not None
 
@@ -200,11 +212,11 @@ class GestoreDati:
         out = {d.name for d in self.versioni.iterdir() if d.is_dir() and RE_VERSIONE.match(d.name) and (d / "nomenclatura.js").is_file()}
         return out | {p.name[5:15] for p in self.archivio.glob("dati-*.zip") if RE_VERSIONE.match(p.name[5:15])}
 
-    def pubblicati(self) -> dict[str, dict[str, Any]]:
-        """I mesi pubblicati nella pagina «dati» di GitHub ({versione: asset}), ricordati per un'ora. Se GitHub non
-        risponde vale l'ultimo elenco avuto."""
+    def pubblicati(self, fresco: bool = False) -> dict[str, dict[str, Any]]:
+        """I mesi pubblicati nella pagina «dati» di GitHub ({versione: asset}), ricordati per un'ora (fresco: chiesti di
+        nuovo, per l'aggiornamento del mese). Se GitHub non risponde vale l'ultimo elenco avuto."""
         quando, elenco = self._pubblicati
-        if quando and time.monotonic() - quando < ELENCO_VALIDO:
+        if not fresco and quando and time.monotonic() - quando < ELENCO_VALIDO:
             return elenco
         if not self.cfg.dati_url:
             return {}
@@ -250,39 +262,46 @@ class GestoreDati:
         tutte = sorted(self.locali() | pubblicati)
         return tutte[0] if tutte else None
 
+    def _scarica_asset(self, asset: dict[str, Any], dest: Path) -> None:
+        """Scarica in dest un archivio della pagina «dati» di GitHub: indirizzo controllato, dimensione limitata e, se
+        GitHub la da', impronta SHA-256 uguale a quella pubblicata."""
+        url = str(asset.get("browser_download_url") or "")
+        if not (url.startswith("https://") or url.startswith("http://127.0.0.1:")):
+            raise ValueError("indirizzo dei dati non valido")
+        h, totale = hashlib.sha256(), 0
+        with self.client.stream("GET", url, timeout=httpx.Timeout(120, connect=15)) as d:
+            d.raise_for_status()
+            with open(dest, "wb") as f:
+                for blocco in d.iter_bytes(1 << 20):
+                    totale += len(blocco)
+                    if totale > MAX_ZIP:
+                        raise ValueError("archivio dei dati troppo grande")
+                    h.update(blocco)
+                    f.write(blocco)
+        digest = str(asset.get("digest") or "")
+        if digest.startswith("sha256:") and h.hexdigest() != digest[7:].lower():
+            raise ValueError("i dati scaricati non corrispondono a quelli pubblicati")
+
     def _scarica_storico(self, versione: str, asset: dict[str, Any]) -> None:
         with self._lock_storico:
             if self.disponibile(versione):
                 return
-            url = str(asset.get("browser_download_url") or "")
-            if not (url.startswith("https://") or url.startswith("http://127.0.0.1:")):
-                raise ValueError("indirizzo dei dati non valido")
             tmp = self.archivio / f".{versione}.{secrets.token_hex(4)}.zip"
             try:
-                h, totale = hashlib.sha256(), 0
-                with self.client.stream("GET", url, timeout=httpx.Timeout(120, connect=15)) as d:
-                    d.raise_for_status()
-                    with open(tmp, "wb") as f:
-                        for blocco in d.iter_bytes(1 << 20):
-                            totale += len(blocco)
-                            if totale > MAX_ZIP:
-                                raise ValueError("archivio dei dati troppo grande")
-                            h.update(blocco)
-                            f.write(blocco)
-                digest = str(asset.get("digest") or "")
-                if digest.startswith("sha256:") and h.hexdigest() != digest[7:].lower():
-                    raise ValueError("i dati scaricati non corrispondono a quelli pubblicati")
+                self._scarica_asset(asset, tmp)
                 controlla_archivio(tmp, versione)
                 sposta(tmp, self.archivio / f"dati-{versione}.zip")
                 log.info("dati TARIC di %s archiviati per la consultazione a una data passata", versione)
             finally:
                 tmp.unlink(missing_ok=True)
 
-    def _pota(self) -> None:
+    def _pota(self, tieni: str = "") -> None:
+        """Tiene le VERSIONI_TENUTE piu' recenti, quella in uso e `tieni` (quella appena installata, anche se e' di un mese
+        passato: altrimenti sparirebbe subito dopo il messaggio «Installati i dati»)."""
         att = self.attiva()
         nomi = sorted((d.name for d in self.versioni.iterdir() if d.is_dir() and RE_VERSIONE.match(d.name)), reverse=True)
         for n in nomi[VERSIONI_TENUTE:]:
-            if n != att:
+            if n not in (att, tieni):
                 shutil.rmtree(self.versioni / n, ignore_errors=True)
 
     # ------------------------------------------------------------------ aggiornamento
@@ -364,7 +383,6 @@ class GestoreDati:
                 return self._chiudi(agg_id, "errore", messaggio, registro, mese, autore_id)
             self._fase("installo la nuova versione")
             out = cartella / "out" / "data"
-            (out / "pubblica.json").unlink(missing_ok=True)
             riepilogo = cartella / "out" / "riepilogo.txt"
             if riepilogo.exists():
                 shutil.copyfile(riepilogo, out / "riepilogo.txt")
@@ -390,7 +408,7 @@ class GestoreDati:
         sposta(cartella, dest)
         if att is None or dest.name >= att:
             self.imposta_attiva(dest.name)
-        self._pota()
+        self._pota(tieni=dest.name)
         return self.info_versione(dest.name)
 
     @staticmethod
@@ -404,34 +422,13 @@ class GestoreDati:
     def _dati_pronti(self, mese: str, dest: Path) -> Path | None:
         """I dati del mese gia' pronti su GitHub, estratti e controllati in dest; None se non ci sono o non vanno bene
         (si preparano allora in locale)."""
-        nome = f"dati-{mese}-01.zip"
         try:
-            r = self.client.get(self.cfg.dati_url, headers={"accept": "application/vnd.github+json"}, timeout=20)
-            if r.status_code != 200:
-                log.info("dati pronti non disponibili (GitHub risponde %s)", r.status_code)
-                return None
-            asset = next((a for a in r.json().get("assets") or [] if isinstance(a, dict) and a.get("name") == nome), None)
+            asset = self.pubblicati(fresco=True).get(f"{mese}-01")
             if asset is None:
                 log.info("dati pronti di %s non ancora su GitHub", mese)
                 return None
-            url = str(asset.get("browser_download_url") or "")
-            if not (url.startswith("https://") or url.startswith("http://127.0.0.1:")):
-                return None
-            digest = str(asset.get("digest") or "")
             archivio = dest.with_suffix(".zip")
-            h, totale = hashlib.sha256(), 0
-            with self.client.stream("GET", url, timeout=httpx.Timeout(120, connect=15)) as d:
-                if d.status_code != 200:
-                    return None
-                with open(archivio, "wb") as f:
-                    for blocco in d.iter_bytes(1 << 20):
-                        totale += len(blocco)
-                        if totale > MAX_ZIP:
-                            raise ValueError("archivio dei dati troppo grande")
-                        h.update(blocco)
-                        f.write(blocco)
-            if digest.startswith("sha256:") and h.hexdigest() != digest[7:].lower():
-                raise ValueError("i dati scaricati non corrispondono a quelli pubblicati")
+            self._scarica_asset(asset, archivio)
             estrai_dati(archivio, dest)
             archivio.unlink(missing_ok=True)
             info = json.loads((dest / "versione.json").read_text(encoding="utf-8"))
@@ -576,4 +573,4 @@ class GestoreDati:
         return r["registro"] if r else ""
 
 
-__all__ = ["GestoreDati", "tra"]
+__all__ = ["GestoreDati", "RE_VERSIONE", "estrai_dati", "nome_ufficiale"]

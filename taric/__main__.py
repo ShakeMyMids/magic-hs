@@ -63,8 +63,10 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["TARIC_DATI"] = a.dati
     if a.comando == "server":
         return avvia_server(a.porta, a.host)
-    dati = Path(os.environ.get("TARIC_DATI") or "dati")
-    b = Backup(dati)
+    from .config import carica
+    cfg = carica()                       # stessa cartella e stesso numero di copie del sito (TARIC_BACKUP_COPIE)
+    dati = cfg.dati
+    b = Backup(dati, cfg.backup_copie)
     try:
         if a.comando == "backup":
             print(f"Backup salvato: {b.crea()}")

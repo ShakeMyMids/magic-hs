@@ -135,7 +135,7 @@
     }
     function passo(t) {
       if (!document.contains(el)) return;
-      var dt = prima ? Math.min(0.05, (t - prima) / 1000) : 0; prima = t;
+      var dt = prima ? Math.min(0.05, (t - prima) / 1000) : 0; prima = t;     // al ritorno su una scheda nascosta, al massimo 50 ms
       if (!s.fine) {
         // nave che salpa e nave che arriva
         if (s.salpa) {
@@ -179,7 +179,6 @@
     el.addEventListener('keydown', function (ev) {
       if ((ev.key === ' ' || ev.key === 'Enter') && !(ev.target.closest && ev.target.closest('button'))) { ev.preventDefault(); sgancia(); }
     });
-    document.addEventListener('visibilitychange', function () { prima = 0; });
     setTimeout(function () { var b = $('via'); if (b) b.focus(); }, 30);
     return f;
   };

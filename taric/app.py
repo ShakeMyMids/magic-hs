@@ -26,6 +26,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 from starlette.middleware.gzip import GZipMiddleware
 
 from . import __version__
@@ -65,6 +66,7 @@ MESSAGGI_IA = {
     "refused": "L'IA non ha elaborato questa richiesta. Prova a descrivere la merce in un altro modo.",
     "empty_completion": "L'IA non ha restituito una risposta. Prova a riformulare la descrizione.",
     "invalid_json": "La risposta non era leggibile. Riprova.",
+    "risposta_troncata": "La risposta dell'IA era troppo lunga ed è stata interrotta: descrivi la merce in modo più preciso e riprova.",
     "prompt_too_large": "La richiesta è troppo lunga. Accorcia la descrizione e riprova.",
     "upstream_timeout": "L'IA ha impiegato troppo tempo a rispondere. Riprova.",
     "upstream_error": "Errore temporaneo nel collegamento con il servizio di intelligenza artificiale. Riprova tra poco.",
@@ -188,12 +190,31 @@ def segreto_moduli(cartella: Path) -> bytes:
     """Segreto per firmare il modulo di registrazione, salvato nella cartella dei dati (sul disco del server)."""
     f = cartella / "segreto-moduli.key"
     if not f.exists():
-        f.write_text(secrets.token_hex(32), encoding="utf-8")
-        try:
-            f.chmod(0o600)
-        except OSError:
+        try:                                   # creato gia' leggibile solo dal servizio, mai per un istante da tutti
+            fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
             pass
+        else:
+            with os.fdopen(fd, "w", encoding="utf-8") as scritto:
+                scritto.write(secrets.token_hex(32))
     return f.read_text(encoding="utf-8").strip().encode()
+
+
+def nome_pulito(nome: str) -> str:
+    """Nome e cognome senza spazi ai lati: almeno due caratteri veri (il modello conta anche gli spazi)."""
+    n = " ".join(nome.split())
+    if len(n) < 2:
+        raise Errore(422, "Scrivi nome e cognome.", "nome")
+    return n
+
+
+RE_ISTANTE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+def istante_valido(s: Any) -> str:
+    """Un orario come lo scrive il sito (AAAA-MM-GGThh:mm:ssZ), altrimenti adesso: da un file importato arriva di tutto."""
+    s = str(s or "")
+    return s if RE_ISTANTE.match(s) else iso()
 
 
 # ------------------------------------------------------------------ applicazione
@@ -215,6 +236,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     cambi_doganali = CambiDoganali(db, cfg.bce_url, client_bce)
     if fuori.problema():
         log.warning("copia esterna del database spenta: %s", fuori.problema())
+    for resto in (cfg.dati / "backup-scaricati").glob("*.zip"):          # copie scaricate rimaste da un invio interrotto
+        resto.unlink(missing_ok=True)
 
     segreto = segreto_moduli(cfg.dati)
     with db.transazione() as c:       # gli indirizzi di MAGIC_HS_AMMINISTRATORI sono sempre amministratori attivi
@@ -337,7 +360,8 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         mostra = request.query_params.get("dati") or v
         if mostra != v and not (RE_VERSIONE.match(mostra) and dati.disponibile(mostra)):
             return RedirectResponse("/", 303)
-        html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{DATI}}", f"/data/{mostra}/").replace("{{ATTIVI}}", v)
+        html = (STATIC / "index.html").read_text(encoding="utf-8").replace("{{DATI}}", f"/data/{mostra}/").replace("{{ATTIVI}}", v) \
+            .replace("{{V}}", dati.impronta(mostra))
         return HTMLResponse(con_impronte(html), headers={"Cache-Control": "no-cache"})
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
@@ -447,7 +471,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             uid = c.execute(
                 "INSERT INTO utenti(email, nome, azienda, richiesta, hash_password, ruolo, stato, quota_ia, email_confermata, creato, aggiornato) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
-                (email, body.nome.strip(), body.azienda.strip(), body.richiesta.strip(), S.hash_password(body.password),
+                (email, nome_pulito(body.nome), body.azienda.strip(), body.richiesta.strip(), S.hash_password(body.password),
                  "amministratore" if amministratore else "utente", "attivo" if attivo else "in_attesa", 0 if automatico else None,
                  iso(), iso())).lastrowid
             db.evento(c, "registrazione", uid, uid, f"{email}" + (" (amministratore)" if amministratore else
@@ -501,13 +525,22 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     @app.post("/api/io/password")
     def cambia_password(body: CambioPassword, request: Request, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
-        if not S.verifica_password(u["hash_password"], body.attuale):
+        chiave = f"password-attuale:{u['id']}"         # chi ha la sessione non puo' provare password all'infinito
+        with db.transazione() as c:
+            bloccato = S.conta(c, chiave, 900) >= 5
+            sbagliata = not bloccato and not S.verifica_password(u["hash_password"], body.attuale)
+            if sbagliata:
+                S.registra(c, chiave)
+        if bloccato:
+            raise Errore(429, "Troppi tentativi non riusciti: riprova tra 15 minuti.", "troppi_tentativi")
+        if sbagliata:
             raise Errore(403, "La password attuale non è corretta.", "credenziali")
         if (problema := S.problema_password(body.nuova, u["email"])):
             raise Errore(422, problema, "password")
         with db.transazione() as c:
             c.execute("UPDATE utenti SET hash_password = ?, aggiornato = ? WHERE id = ?", (S.hash_password(body.nuova), iso(), u["id"]))
             S.chiudi_tutte(c, u["id"], tranne=request.cookies.get(COOKIE))
+            S.azzera(c, chiave)
             db.evento(c, "password_cambiata", u["id"], u["id"])
         return json_ok()
 
@@ -552,9 +585,10 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         mese = mese_corrente()
         with db.connessione() as c:
             uso = {r["utente_id"]: dict(r) for r in c.execute(
-                "SELECT utente_id, COUNT(DISTINCT CASE WHEN tipo = 'classifica' AND operazione != '' AND (esito = 'ok' OR token_in > 0) "
-                "THEN operazione END) AS classificazioni, COUNT(*) AS richieste, COALESCE(SUM(token_in), 0) AS token_in, "
-                "COALESCE(SUM(token_out), 0) AS token_out FROM uso_ia WHERE mese = ? GROUP BY utente_id", (mese,))}
+                "SELECT utente_id, COUNT(*) AS richieste, COALESCE(SUM(token_in), 0) AS token_in, "
+                "COALESCE(SUM(token_out), 0) AS token_out FROM uso_ia WHERE mese = ? AND utente_id IS NOT NULL GROUP BY utente_id", (mese,))}
+            for uid_, u_ in uso.items():                 # contate come per il limite mensile (ServizioIA.usate)
+                u_["classificazioni"] = ia.usate(c, uid_, mese)
             out = []
             for r in c.execute("SELECT * FROM utenti ORDER BY CASE stato WHEN 'in_attesa' THEN 0 ELSE 1 END, nome").fetchall():
                 d = {k: r[k] for k in ("id", "nome", "email", "azienda", "richiesta", "ruolo", "stato", "quota_ia", "motivo_stato",
@@ -579,7 +613,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 c.execute("UPDATE utenti SET quota_ia = ? WHERE id = ?", (body.quota_ia, uid))
                 db.evento(c, "quota_ia", uid, a["id"], "predefinito" if body.quota_ia is None else str(body.quota_ia))
             if "nome" in campi and body.nome:
-                c.execute("UPDATE utenti SET nome = ? WHERE id = ?", (body.nome.strip(), uid))
+                c.execute("UPDATE utenti SET nome = ? WHERE id = ?", (nome_pulito(body.nome), uid))
             if "azienda" in campi and body.azienda is not None:
                 c.execute("UPDATE utenti SET azienda = ? WHERE id = ?", (body.azienda.strip(), uid))
             c.execute("UPDATE utenti SET aggiornato = ? WHERE id = ?", (iso(), uid))
@@ -663,11 +697,19 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     @app.get("/api/admin/backup")
     def admin_backup(a: sqlite3.Row = Depends(richiede_admin)) -> FileResponse:
-        """Copia del database da tenere fuori dal server (account, storico, preferiti, uso dell'IA)."""
-        f = copie.crea()
+        """Copia del database da tenere fuori dal server (account, storico, preferiti, uso dell'IA). Si scrive in un file a
+        parte, cancellato dopo l'invio: fuori dall'elenco dei backup giornalieri, che altrimenti perderebbe i piu' vecchi."""
+        cartella = cfg.dati / "backup-scaricati"
+        cartella.mkdir(mode=0o700, parents=True, exist_ok=True)
+        nome = f"magic-hs-{dt.datetime.now():%Y-%m-%d-%H%M%S}.zip"
+        f = cartella / f"{secrets.token_hex(4)}-{nome}"
+        try:
+            copie.scrivi(f)
+        except ErroreBackup as e:
+            raise Errore(409, f"Copia non riuscita: {e}.", "backup") from None
         with db.transazione() as c:
-            db.evento(c, "backup_scaricato", autore_id=a["id"], dettagli=f.name)
-        return FileResponse(f, media_type="application/zip", filename=f.name)
+            db.evento(c, "backup_scaricato", autore_id=a["id"], dettagli=nome)
+        return FileResponse(f, media_type="application/zip", filename=nome, background=BackgroundTask(f.unlink, missing_ok=True))
 
     @app.post("/api/admin/copia-esterna")
     def admin_copia_esterna(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
@@ -707,7 +749,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.put("/api/io")
     def modifica_io(body: Profilo, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
         with db.transazione() as c:
-            c.execute("UPDATE utenti SET nome = ?, azienda = ?, aggiornato = ? WHERE id = ?", (body.nome.strip(), body.azienda.strip(), iso(), u["id"]))
+            c.execute("UPDATE utenti SET nome = ?, azienda = ?, aggiornato = ? WHERE id = ?", (nome_pulito(body.nome), body.azienda.strip(), iso(), u["id"]))
         return json_ok()
 
     @app.put("/api/io/preferenze")
@@ -723,14 +765,16 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             c.execute("UPDATE utenti SET preferenze = ? WHERE id = ?", (json.dumps(pref), u["id"]))
         return json_ok()
 
-    # ------------------------------------------------------------------ storico
     # ------------------------------------------------------------------ bolle simulate
     MASSIMO_BOLLE = 500
 
     def testo_bolla(dati: dict[str, Any]) -> str:
-        testo = json.dumps(dati, ensure_ascii=False)
-        if len(testo) > 300_000 or len(dati.get("articoli") or []) > 99:
+        articoli = dati.get("articoli")
+        if isinstance(articoli, list) and len(articoli) > 99:
             raise Errore(413, "Bolla troppo grande: al massimo 99 articoli.", "troppo_grande")
+        testo = json.dumps(dati, ensure_ascii=False)
+        if len(testo) > 300_000:
+            raise Errore(413, "Bolla troppo grande da salvare: accorcia descrizioni e note.", "troppo_grande")
         return testo
 
     @app.get("/api/bolle")
@@ -792,6 +836,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         except ErroreCambio as e:
             raise Errore(e.stato, e.messaggio, e.codice) from None
 
+    # ------------------------------------------------------------------ storico
     @app.get("/api/storico")
     def storico(limite: int = 50, prima: int = 0, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
         limite = max(1, min(limite, 100))
@@ -848,8 +893,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         if not RE_CODICE.match(codice):
             raise Errore(422, "Codice non valido.", "codice")
         with db.transazione() as c:
-            if c.execute("SELECT COUNT(*) FROM preferiti WHERE utente_id = ?", (u["id"],)).fetchone()[0] >= 1000:
-                raise Errore(409, "Hai già 1000 preferiti: eliminane qualcuno.", "troppi")
+            nuovo = c.execute("SELECT 1 FROM preferiti WHERE utente_id = ? AND codice = ?", (u["id"], codice)).fetchone() is None
+            if nuovo and c.execute("SELECT COUNT(*) FROM preferiti WHERE utente_id = ?", (u["id"],)).fetchone()[0] >= 1000:
+                raise Errore(409, "Hai già 1000 preferiti: eliminane qualcuno.", "troppi")       # la nota di uno che c'e' si cambia sempre
             c.execute("INSERT INTO preferiti(utente_id, codice, nota, quando) VALUES (?, ?, ?, ?) "
                       "ON CONFLICT(utente_id, codice) DO UPDATE SET nota = excluded.nota", (u["id"], codice, body.nota.strip(), iso()))
         return json_ok()
@@ -881,12 +927,15 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             # l'esportazione va dalla più recente: dalla più vecchia, a parità d'orario nello stesso ordine
             for v in sorted((v for v in reversed(body["storico"]) if isinstance(v, dict)), key=lambda v: str(v.get("quando") or "")):
                 testo, dati_ = str(v.get("testo") or "").strip()[:2000], v.get("dati")
-                quando = str(v.get("quando") or iso())[:40]
+                quando = istante_valido(v.get("quando"))
                 if not testo or not isinstance(dati_, dict) or (quando, testo) in visti:
+                    continue
+                testo_dati = json.dumps(dati_, ensure_ascii=False)
+                if len(testo_dati) > 200_000:          # come /api/storico: troncato non sarebbe piu' JSON (esporta e Apri fallirebbero)
                     continue
                 codice = str(v.get("codice") or "")
                 c.execute("INSERT INTO storico(utente_id, quando, testo, codice, dati) VALUES (?, ?, ?, ?, ?)",
-                          (u["id"], quando, testo, codice if RE_CODICE.match(codice) else "", json.dumps(dati_, ensure_ascii=False)[:200_000]))
+                          (u["id"], quando, testo, codice if RE_CODICE.match(codice) else "", testo_dati))
                 visti.add((quando, testo))
                 nuove += 1
             c.execute("DELETE FROM storico WHERE utente_id = ? AND id NOT IN (SELECT id FROM storico WHERE utente_id = ? ORDER BY quando DESC LIMIT 500)",
@@ -898,7 +947,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 if c.execute("SELECT COUNT(*) FROM preferiti WHERE utente_id = ?", (u["id"],)).fetchone()[0] >= 1000:
                     break
                 np += c.execute("INSERT INTO preferiti(utente_id, codice, nota, quando) VALUES (?, ?, ?, ?) ON CONFLICT(utente_id, codice) DO NOTHING",
-                                (u["id"], codice, str(p.get("nota") or "").strip()[:500], str(p.get("quando") or iso())[:40])).rowcount
+                                (u["id"], codice, str(p.get("nota") or "").strip()[:500], istante_valido(p.get("quando")))).rowcount
         return json_ok(storico=nuove, preferiti=np)
 
     # ------------------------------------------------------------------ preferiti: cosa e' cambiato con i dati del mese
@@ -1038,13 +1087,13 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 "server_misconfigured": "Il servizio rifiuta la chiave o non trova il modello: controlla chiave, indirizzo e nome del modello.",
                 "upstream_error": "Non riesco a raggiungere il servizio: controlla l'indirizzo e, se in azienda c'è un proxy, chiedi all'IT.",
             }.get(e.codice) or MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"])
-            raise Errore(e.stato_http, messaggio, e.codice)
+            raise Errore(e.stato_http, messaggio, e.codice) from None
 
     def elenco_modelli() -> dict[str, Any]:
         try:
             return json_ok(modelli=ia.modelli())
         except ErroreIA as e:
-            raise Errore(e.stato_http, "Non riesco a leggere l'elenco dei modelli: controlla chiave e indirizzo, oppure scrivi il nome a mano.", e.codice)
+            raise Errore(e.stato_http, "Non riesco a leggere l'elenco dei modelli: controlla chiave e indirizzo, oppure scrivi il nome a mano.", e.codice) from None
 
     # ------------------------------------------------------------------ gestione: dati TARIC e registro
     @app.get("/api/admin/riepilogo")
@@ -1078,6 +1127,11 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         return PlainTextResponse(f.read_text(encoding="utf-8") if f else "Riepilogo non disponibile.")
 
     def mese_richiesto(m: str) -> str:
+        if m:
+            try:
+                dt.date(int(m[:4]), int(m[5:7]), 1)
+            except ValueError:
+                raise Errore(422, "Mese non valido (formato AAAA-MM).", "mese") from None
         return m or dati._ora_locale().strftime("%Y-%m")
 
     @app.post("/api/admin/dati/aggiorna")
@@ -1102,7 +1156,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                     dest.unlink(missing_ok=True)
                     raise Errore(413, "Archivio troppo grande (massimo 300 MB).", "troppo_grande")
                 f.write(blocco)
-        if not dati.avvia(mese, "caricamento", archivio=dest, autore_id=a["id"]):
+        if not dati.avvia(mese, "caricamento", archivio=dest, autore_id=a["id"]):      # avvia toglie l'archivio
             raise Errore(409, "C'è già un aggiornamento in corso.", "in_corso")
         return json_ok(mese=mese)
 
@@ -1111,7 +1165,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         try:
             dati.imposta_attiva(body.versione)
         except ValueError:
-            raise Errore(404, "Versione non disponibile.", "non_trovato")
+            raise Errore(404, "Versione non disponibile.", "non_trovato") from None
         with db.transazione() as c:
             db.evento(c, "dati_versione_attivata", autore_id=a["id"], dettagli=body.versione)
         return json_ok()

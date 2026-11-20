@@ -8,18 +8,19 @@
   var fase = document.getElementById('fase');
 
   function mostra(testo, ok) { esito.innerHTML = testo ? '<p class="' + (ok ? 'esito-ok' : 'errore') + '">' + esc(testo) + '</p>' : ''; }
+  function nomeMese(m) { return T.meseIt(m) || m || ''; }
   function occupato(si) { var b = modulo.querySelector('button[type="submit"]'); if (b) b.disabled = si; }
 
   T.api('GET', '/api/io').then(function (u) {
     if (u.ruolo !== 'amministratore') return;
     document.getElementById('admin').hidden = false;
     document.getElementById('scarica').addEventListener('click', function () {
-      T.api('POST', '/api/admin/dati/aggiorna', { mese: '' }).then(function (r) { mostra('Download di ' + r.mese + ' avviato.', true); }, function (e) { mostra(e.errore); });
+      T.api('POST', '/api/admin/dati/aggiorna', { mese: '' }).then(function (r) { mostra('Download di ' + nomeMese(r.mese) + ' avviato.', true); }, function (e) { mostra(e.errore); });
     });
     modulo.addEventListener('submit', function (ev) {
       ev.preventDefault();
       occupato(true); mostra('Caricamento in corso…', true);
-      T.api('POST', '/api/admin/dati/carica', new FormData(modulo)).then(function (r) { mostra('Archivio caricato: installazione di ' + r.mese + ' avviata.', true); },
+      T.api('POST', '/api/admin/dati/carica', new FormData(modulo)).then(function (r) { mostra('Archivio caricato: installazione di ' + nomeMese(r.mese) + ' avviata.', true); },
         function (e) { mostra(e.errore); }).then(function () { occupato(false); });
     });
   });
