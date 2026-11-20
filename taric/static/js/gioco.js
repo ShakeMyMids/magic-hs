@@ -23,6 +23,13 @@
     return h + '<rect class="d-porta" x="' + (LC - 3) + '" width="3" height="' + HC + '"/><rect class="d-lucido" width="' + LC + '" height="1.5"/></g>';
   }
   function centroPosto(i) { return X0 + i * LP + LP / 2; }
+  /* la cabina del gruista accanto al carrello: dentro c'è Simone, l'autore (js/disegni.js) */
+  function cabina() {
+    if (!T.autoreTesta) return '';
+    return '<g class="g-cabina" data-g="cabina"><rect class="d-t" x="16" y="' + (BRACCIO - 4) + '" width="26" height="25" rx="3"/>' +
+      '<rect class="g-vetro" x="19" y="' + (BRACCIO - 1) + '" width="20" height="18" rx="2"/>' +
+      '<g class="g-simone"><g class="av-piccola" transform="translate(19.2 ' + (BRACCIO - 2.6) + ') scale(.165)">' + T.autoreTesta() + '</g></g></g>';
+  }
 
   T.gioco = function () {
     if (document.querySelector('.finestra.gioco')) return;
@@ -37,7 +44,7 @@
         '<g class="d-gru"><path d="M10 ' + BRACCIO + 'H590M24 ' + BRACCIO + 'V' + (BRACCIO - 14) + 'M576 ' + BRACCIO + 'V' + (BRACCIO - 14) + '"/></g>' +
         '<g data-g="nave"></g>' +
         '<g data-g="bersaglio" class="g-bersaglio"></g>' +
-        '<g data-g="carrello"><rect class="d-t" x="-16" y="' + (BRACCIO - 6) + '" width="32" height="12" rx="3"/>' +
+        '<g data-g="carrello"><rect class="d-t" x="-16" y="' + (BRACCIO - 6) + '" width="32" height="12" rx="3"/>' + cabina() +
           '<path class="g-cavo" data-g="cavo" d="M0 ' + (BRACCIO + 6) + 'V' + APPESO + '"/><g data-g="appeso"></g></g>' +
         '<g data-g="cade"></g><g data-g="spruzzi"></g>' +
         '<rect class="d-mare" y="270" width="' + L + '" height="50"/>' +
@@ -91,6 +98,11 @@
       void w.offsetWidth; w.classList.add('vai');
     }
     function annuncia(t) { $('annuncio').textContent = t; }
+    function gruista(classe) {                     // Simone nella cabina: esulta o scuote la testa
+      var c = $('cabina');
+      if (!c) return;
+      c.classList.remove('esulta', 'peccato'); void c.getBoundingClientRect(); c.classList.add(classe);
+    }
     function inizia() {
       s = { punti: 0, riserva: RISERVA, x: 40, verso: 1, velocita: 150, cade: null, fine: false };
       nuovaNave(); riserva();
@@ -110,6 +122,7 @@
       s.punti += perfetto ? 2 : 1; s.caricati += 1;
       s.velocita = Math.min(430, s.velocita * 1.06);
       scritta(perfetto ? 'Al centro! +2' : '+1', perfetto ? 'oro' : '');
+      gruista('esulta');
       annuncia('Caricato. Punti ' + s.punti + '.');
       if (s.caricati >= PER_NAVE) { s.punti += 5; s.salpa = 1; $('bersaglio').innerHTML = ''; scritta('Nave piena: salpa! +5', 'oro'); annuncia('Nave piena, cinque punti in più. Punti ' + s.punti + '.'); }
       else { disegnaNave(); nuovoBersaglio(); }
@@ -119,7 +132,7 @@
       var x = s.cade.x;
       s.cade = null; $('cade').innerHTML = '';
       $('spruzzi').innerHTML = '<g class="g-spruzzo" transform="translate(' + x + ' 272)"><circle r="5" cx="-14" cy="-6"/><circle r="7" cy="-12"/><circle r="5" cx="14" cy="-6"/></g>';
-      s.riserva -= 1; riserva();
+      s.riserva -= 1; riserva(); gruista('peccato');
       if (s.riserva <= 0) finisci();
       else { scritta('Splash!'); annuncia('In mare. Riserva ' + s.riserva + '.'); }
     }
@@ -127,7 +140,8 @@
       s.fine = true; $('sgancia').disabled = true;
       var r = record(), nuovo = s.punti > r;
       if (nuovo) { salvaRecord(s.punti); $('record').textContent = s.punti; }
-      $('velo').innerHTML = '<p class="g-titolo">' + (nuovo ? 'Nuovo record!' : 'Fine turno') + '</p><p><b>' + s.punti + '</b> ' + (s.punti === 1 ? 'punto' : 'punti') +
+      $('velo').innerHTML = (nuovo && T.autore ? '<div class="g-autore">' + T.autore({ esulta: true }) + '</div>' : '') +
+        '<p class="g-titolo">' + (nuovo ? 'Nuovo record!' : 'Fine turno') + '</p><p><b>' + s.punti + '</b> ' + (s.punti === 1 ? 'punto' : 'punti') +
         (nuovo ? '' : ' · record ' + esc(r)) + '</p><button class="btn pri" type="button" data-g="via">' + T.icona('aggiorna') + 'Gioca ancora</button>';
       $('velo').hidden = false;
       annuncia('Fine turno: ' + s.punti + ' punti' + (nuovo ? ', nuovo record.' : '.'));

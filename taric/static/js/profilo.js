@@ -180,10 +180,17 @@
       mostra.join('') + (righe.length > mostra.length ? '<li>e altre ' + (righe.length - mostra.length) + ' differenze: aprilo per vedere le misure di oggi.</li>' : '') + '</ul></details>';
   }
 
+  /* chi ha risposto: Simone, l'autore, con il suo avatar (js/disegni.js); gli altri amministratori con le iniziali */
+  function chiRisponde(r) {
+    if (!r) return '';
+    if (r.autore && T.autore) return '<span class="chi-risponde" title="' + esc(r.nome) + '">' + T.autore() + '</span>';
+    return '<span class="iniziali" aria-hidden="true">' + esc(String(r.nome || '').trim().split(/\s+/).slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase()) + '</span>';
+  }
   function rigaSegnalazione(v) {
     return '<div class="voce segnalazione' + (v.letta ? '' : ' nuova') + '"><div><span class="m">' + esc(T.dataOra(v.creata)) + '</span> ' +
       (v.stato === 'chiusa' ? '<span class="st ok">risolta</span>' : '<span class="st in_attesa">aperta</span>') + (v.letta ? '' : ' <span class="st attivo">risposta nuova</span>') +
-      '<p class="t">' + esc(v.testo) + '</p>' + (v.risposta ? '<p class="risposta"><b>Risposta:</b> ' + esc(v.risposta) + '</p>' : '') + '</div></div>';
+      '<p class="t">' + esc(v.testo) + '</p>' + (v.risposta ? '<div class="risposta">' + chiRisponde(v.risposta_di) +
+      '<p><b>' + (v.risposta_di ? esc(v.risposta_di.nome) : 'Risposta') + ':</b> ' + esc(v.risposta) + '</p></div>' : '') + '</div></div>';
   }
   function rigaPreferito(v) {
     var d = app().descrizione(v.codice), perc = app().percorso(v.codice);

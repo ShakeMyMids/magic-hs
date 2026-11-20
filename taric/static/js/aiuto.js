@@ -138,6 +138,8 @@
           'Poi puoi simulare una bolla doganale e calcolare il costo di una spedizione con DHL Express.', e: sel('.scena') },
         { t: 'Accedi', d: 'Se hai già un account, entra con la tua email e la password.', e: function () { return q('#accedi') || q('[data-a="accedi"]'); } },
         { t: 'Richiedi un account', d: 'Se non ce l\'hai, chiedilo qui: l\'amministratore approva la richiesta e poi entri con la tua email.', e: sel('[data-a="richiedi"]') },
+        { t: 'Chi l\'ha fatto', d: 'MAGIC HS l\'ha costruito ' + (T.AUTORE || 'Simone') + ': se ti serve qualcosa o hai un\'idea, scrivi a ' + (T.AUTORE || 'Simone') + '.',
+          e: function () { var f = document.querySelector('.firma'); return visibile(f) ? f : null; } },
         { t: 'Ci vediamo dentro', d: 'Una volta dentro premi «?» in ogni sezione: ti spiego io come funziona.', e: function () { return visibile(tasto) ? tasto : null; } }
       ];
     },

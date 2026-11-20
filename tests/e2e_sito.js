@@ -86,6 +86,9 @@ async function accedi(p, email, password) {
   // il porto da toccare (js/porto.js) e il gioco «Carica la nave» (js/gioco.js)
   await capo.click('.scena-larga .t-nave', { force: true });
   ok(await capo.evaluate(() => document.querySelector('.scena-larga .t-nave').classList.contains('suona')), 'scena: toccata, la nave suona la sirena');
+  await capo.click('.scena-larga .t-simone', { force: true });
+  ok(await capo.evaluate(() => document.querySelector('.scena-larga .t-simone').classList.contains('saluta') &&
+    !document.querySelector('.scena-larga .t-gru').classList.contains('cala')), 'scena: Simone, sulla banchina, saluta (e la gru resta ferma)');
   await capo.keyboard.type('gioca');
   await capo.waitForSelector('.finestra.gioco');
   await capo.click('[data-g="via"]');
@@ -94,7 +97,7 @@ async function accedi(p, email, password) {
     return !!(m && d) && Math.abs(+m[1] - (+d[1] + 8)) < 3; }, null, { timeout: 15000, polling: 'raf' });
   await capo.keyboard.press('Space');
   await capo.waitForFunction(() => +document.querySelector('[data-g="punti"]').textContent >= 1, null, { timeout: 5000 });
-  ok(true, 'gioco: si apre scrivendo «gioca», il container sganciato sul posto indicato fa punto');
+  ok(await capo.evaluate(() => document.querySelector('.g-cabina').classList.contains('esulta')), 'gioco: si apre scrivendo «gioca», il container sganciato sul posto indicato fa punto e Simone esulta');
   await capo.keyboard.press('Escape');
   ok(await capo.isHidden('.finestra.gioco'), 'gioco: si chiude con Esc');
 
@@ -525,7 +528,7 @@ async function accedi(p, email, password) {
   await capo.reload(); await pronta(capo);
   await capo.waitForSelector('.toast >> text=L\'amministratore ha risposto a una tua segnalazione');
   await capo.click('#tab-profilo'); await capo.waitForSelector('.segnalazione >> text=Il regime si sceglie in ogni articolo, sotto il codice.');
-  ok(await capo.isVisible('.segnalazione >> text=risposta nuova') && await capo.isVisible('.segnalazione >> text=risolta'),
+  ok(await capo.isVisible('.segnalazione >> text=risposta nuova') && await capo.isVisible('.segnalazione >> text=risolta') && await capo.isVisible('.segnalazione .chi-risponde .avatar'),
     'segnalazioni: la risposta arriva a chi l\'ha scritta, con un avviso all\'apertura e nel Profilo');
   await capo.click('#tab-gestione');
 
@@ -585,8 +588,11 @@ async function accedi(p, email, password) {
     'accesso: Marino si presenta da solo, senza coprire l\'accesso');
   await nuovoDispositivo.click('[data-aiuto="avanti"]');                      // «Sì, presentamela»
   await nuovoDispositivo.waitForSelector('.aiuto:not(.invito)', { state: 'attached' });
-  ok((await nuovoDispositivo.textContent('#aiuto-titolo')) === 'MAGIC HS' && (await nuovoDispositivo.textContent('.aiuto-passo')) === '1 di 5', 'accesso: presenta l\'app in 5 passi');
+  ok((await nuovoDispositivo.textContent('#aiuto-titolo')) === 'MAGIC HS' && (await nuovoDispositivo.textContent('.aiuto-passo')) === '1 di 6', 'accesso: presenta l\'app in 6 passi');
   for (let k = 0; k < 4; k++) await nuovoDispositivo.click('[data-aiuto="avanti"]');
+  ok((await nuovoDispositivo.textContent('#aiuto-testo')).startsWith('MAGIC HS l\'ha costruito Simone') && await nuovoDispositivo.isVisible('.firma .avatar'),
+    'accesso: Marino presenta Simone, l\'autore, con la sua firma');
+  await nuovoDispositivo.click('[data-aiuto="avanti"]');
   ok((await nuovoDispositivo.textContent('#aiuto-titolo')) === 'Ci vediamo dentro' && await nuovoDispositivo.isHidden('[data-aiuto="segnala"]'), 'accesso: l\'ultimo passo rimanda al «?» delle sezioni');
   await nuovoDispositivo.click('[data-aiuto="avanti"]'); await nuovoDispositivo.waitForSelector('.aiuto', { state: 'detached' });
   await nuovoDispositivo.reload(); await nuovoDispositivo.waitForTimeout(2500);

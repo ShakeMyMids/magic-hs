@@ -39,6 +39,10 @@
   --g-becco:#f4b63f; --g-macchia:#d7373b; --g-zampe:#ef8b2c; --g-guancia:#f3a6bf; --g-occhio:#17222e; --g-luce:#ffffff;
   --g-cappello:#ffffff; --g-banda:#1b5584; --g-visiera:#17222e; --g-stemma:#e9a72e; --g-colletto:#1b5584; --g-nodo:#e9772e;
   --aiuto-velo:rgba(10,24,38,.42);
+  /* Simone, l'autore (js/disegni.js: T.autore e la figura sulla banchina) */
+  --av-pelle:#efc6a6; --av-pelle-ombra:#e0ad8a; --av-capelli:#3a2a20; --av-barba:#4a3527; --av-tratto:#1d2b3a; --av-lente:rgba(170,205,235,.12);
+  --av-maglia:#a9b0b8; --av-maglia-ombra:#959ca5; --av-labbra:#c97b6b; --av-orecchino:#17222e; --av-pantaloni:#24324a; --av-scarpa:#f4f6f8;
+  --av-cartellina:#a0703e; --av-foglio:#f5f7fa;
   /* stagioni e feste (js/calendario.js) */
   --d-sole:#f4b63f; --d-neve:#ffffff; --d-fiore:#f3a6bf; --d-mimosa:#f5c623; --d-foglia:#4f9a55; --d-foglia-nuova:#7dbb5c;
   --d-autunno-1:#dd9a35; --d-autunno-2:#c75a2c; --d-tronco:#8b6a4e; --d-cuore:#e0506a; --d-verde:#1f9a4f; --d-rosso:#d7373b; --d-zucca:#ef8b2c;
@@ -524,7 +528,9 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .voce.segnalazione .t{margin:6px 0 4px;white-space:pre-wrap;overflow-wrap:anywhere}
 .voce.segnalazione .m{margin:0}
 .voce.segnalazione.nuova{padding-left:12px;box-shadow:inset 3px 0 0 var(--accento)}
-.voce.segnalazione .risposta{margin:6px 0 0;padding:8px 12px;border-radius:var(--r-m);background:var(--carta-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.voce.segnalazione .risposta{display:flex;gap:10px;align-items:flex-start;margin:6px 0 0;padding:8px 12px;border-radius:var(--r-m);background:var(--carta-2)}
+.voce.segnalazione .risposta p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.voce.segnalazione .risposta .iniziali{flex:none}
 .voce.segnalazione .modulo{margin-top:10px}
 .piede .link{font-size:13px}
 .modulo{display:grid;gap:14px;max-width:640px}
@@ -1038,6 +1044,56 @@ html.con-finestra{overflow:hidden}
 }
 @media (forced-colors:active){.aiuto-luce{outline:3px solid Highlight;outline-offset:0}.aiuto-fumetto,.aiuto-fumetto::before{border-color:CanvasText}}
 @media print{.aiuto{display:none !important}}
+
+/* ================================================================ Simone, l'autore di MAGIC HS (js/disegni.js)
+   Il busto (.avatar) nella firma, nelle risposte alle segnalazioni e nel gioco; la figura sulla banchina (.t-simone) saluta
+   quando la si tocca (js/porto.js). La testa della figura è la stessa del busto rimpicciolita: tratti più spessi. */
+.avatar{display:block;width:100%;height:auto;overflow:visible}
+.av-t{stroke:var(--av-tratto);stroke-width:1.7;stroke-linejoin:round}
+.av-pelle{fill:var(--av-pelle)} .av-pelle-ombra{fill:var(--av-pelle-ombra)} .av-capelli{fill:var(--av-capelli)} .av-barba{fill:var(--av-barba)}
+.av-maglia{fill:var(--av-maglia)} .av-orecchino{fill:var(--av-orecchino)}
+.av-collo-maglia{fill:none;stroke:var(--av-maglia-ombra);stroke-width:2.2;stroke-linecap:round}
+.av-lente{fill:var(--av-lente);stroke:var(--av-tratto);stroke-width:1.9}
+.av-filo,.av-linea,.av-ciglia,.av-ricci,.av-bocca{fill:none;stroke-linecap:round}
+.av-filo{stroke:var(--av-tratto);stroke-width:1.9} .av-linea{stroke:var(--av-tratto);stroke-width:1.6}
+.av-ciglia{stroke:var(--av-capelli);stroke-width:2.6} .av-ricci{stroke:var(--av-capelli);stroke-width:1.4} .av-bocca{stroke:var(--av-labbra);stroke-width:2.4}
+.av-bordo-m,.av-manica,.av-bordo-b,.av-braccio{fill:none;stroke-linecap:round}
+.av-bordo-m{stroke:var(--av-tratto);stroke-width:16.4} .av-manica{stroke:var(--av-maglia);stroke-width:13}
+.av-bordo-b{stroke:var(--av-tratto);stroke-width:12.4} .av-braccio{stroke:var(--av-pelle);stroke-width:9}
+/* la figura sulla banchina */
+.t-simone{cursor:var(--mano,pointer)}
+.av-piccola .av-t{stroke-width:5} .av-piccola .av-lente,.av-piccola .av-filo{stroke-width:6} .av-piccola .av-linea{stroke-width:5}
+.av-piccola .av-ciglia,.av-piccola .av-bocca{stroke-width:7} .av-piccola .av-ricci{display:none}
+.av-t-s{stroke:var(--av-tratto);stroke-width:.5;stroke-linejoin:round}
+.av-pantaloni{fill:var(--av-pantaloni);stroke:var(--av-tratto);stroke-width:.4}
+.av-scarpa{fill:var(--av-scarpa);stroke:var(--av-tratto);stroke-width:.4}
+.av-braccio-s{fill:none;stroke:var(--av-pelle);stroke-width:1.9;stroke-linecap:round}
+.av-cartellina{fill:var(--av-cartellina);stroke:var(--av-tratto);stroke-width:.4} .av-foglio{fill:var(--av-foglio)}
+.av-gilet{fill:var(--d-cont-1)} .av-catarifrangente{fill:none;stroke:var(--av-foglio);stroke-width:.9}
+.av-nuvoletta{fill:var(--carta);stroke:var(--linea-forte);stroke-width:.4}
+.av-ciao{font:700 6px var(--f);fill:var(--inchiostro)}
+.s-saluto{transform-box:fill-box;transform-origin:8% 4%}
+.s-ciao{opacity:0}
+.t-simone.saluta .s-saluto{animation:simone-saluta 1.6s ease-in-out}
+.t-simone.saluta .s-ciao{animation:simone-ciao 1.6s ease both}
+@keyframes simone-saluta{15%,45%,75%{transform:rotate(-155deg)}30%,60%{transform:rotate(-120deg)}}
+@keyframes simone-ciao{0%,100%{opacity:0}12%,85%{opacity:1}}
+
+/* la firma in fondo alle pagine e il volto accanto alle risposte alle segnalazioni */
+.firma{display:inline-flex;align-items:center;gap:8px}
+.firma-volto,.chi-risponde{flex:none;display:block;width:30px;height:30px;border-radius:50%;overflow:hidden;background:var(--accento-tenue)}
+.firma-volto .avatar,.chi-risponde .avatar{transform:translateY(7%)}
+.chi-risponde{width:36px;height:36px}
+.accesso .piede{align-items:center;text-align:center}
+.accesso .piede::before{display:none}
+/* nel gioco: Simone nella cabina della gru esulta ai container presi e scuote la testa a quelli in mare */
+.g-vetro{fill:var(--d-cielo);stroke:var(--d-tratto);stroke-width:1}
+.g-simone{transform-box:fill-box;transform-origin:50% 100%}
+.g-cabina.esulta .g-simone{animation:g-esulta .5s var(--dolce)}
+.g-cabina.peccato .g-simone{animation:g-peccato .6s ease-in-out}
+@keyframes g-esulta{40%{transform:translateY(-5px) rotate(-6deg)}70%{transform:translateY(-2px) rotate(4deg)}}
+@keyframes g-peccato{20%,60%{transform:rotate(-9deg)}40%,80%{transform:rotate(9deg)}}
+.g-autore{width:84px;margin:0 auto -4px}
 
 /* gestione degli utenti del sito: pannello sotto la riga della persona */
 .tab tr.dettaglio td{padding:0 0 14px;border-top:0}

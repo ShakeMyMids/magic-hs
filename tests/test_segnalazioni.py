@@ -40,6 +40,8 @@ def test_segnalazione_e_risposta(sito: Sito):
     assert luca.get("/api/io").json()["risposte"] == 1
     mie = luca.get("/api/segnalazioni").json()["voci"]
     assert (mie[0]["stato"], mie[0]["risposta"], mie[0]["letta"]) == ("chiusa", "Mancava il codice 142 nella casella 36: ora è spiegato.", False)
+    # chi ha risposto: l'autore (il primo di MAGIC_HS_AMMINISTRATORI) con il suo avatar
+    assert mie[0]["risposta_di"] == {"nome": "Mario Capo", "autore": True}
     assert luca.post("/api/segnalazioni/lette").status_code == 200
     assert luca.get("/api/io").json()["risposte"] == 0
     # riaperta senza cambiare la risposta: niente di nuovo per l'autore; nel registro gli eventi
@@ -66,3 +68,21 @@ def test_segnalazioni_limitate_e_account_eliminato(sito: Sito):
     assert capo.delete(f"/api/admin/utenti/{uid}").status_code == 200
     v = capo.get("/api/admin/segnalazioni").json()["voci"]
     assert len(v) == 11 and sum(1 for x in v if x["autore"] == "") == 10
+
+
+def test_risposta_di_un_altro_amministratore(sito: Sito):
+    capo = sito.capo()
+    luca = sito.collega(capo)
+    anna = sito.collega(capo, "Anna Neri", "anna@azienda.it")
+    sid = anna.post("/api/segnalazioni", json={"testo": "Non trovo il tasto Stampa"}).json()["id"]
+    assert anna.get("/api/segnalazioni").json()["voci"][0]["risposta_di"] is None
+    capo.patch(f"/api/admin/utenti/{sito.id_di(capo, 'luca@azienda.it')}", json={"ruolo": "amministratore"})
+    luca.put(f"/api/admin/segnalazioni/{sid}", json={"stato": "aperta", "risposta": "È in alto, accanto a Copia codice."})
+    assert anna.get("/api/segnalazioni").json()["voci"][0]["risposta_di"] == {"nome": "Luca Bianchi", "autore": False}
+    # chiusa dall'autore senza cambiare la risposta: la risposta resta di Luca
+    capo.put(f"/api/admin/segnalazioni/{sid}", json={"stato": "chiusa", "risposta": "È in alto, accanto a Copia codice."})
+    assert anna.get("/api/segnalazioni").json()["voci"][0]["risposta_di"]["nome"] == "Luca Bianchi"
+    # MAGIC_HS_AUTORE sceglie l'autore
+    sito.riavvia(MAGIC_HS_AUTORE="luca@azienda.it")
+    anna = sito.accedi("anna@azienda.it")
+    assert anna.get("/api/segnalazioni").json()["voci"][0]["risposta_di"] == {"nome": "Luca Bianchi", "autore": True}

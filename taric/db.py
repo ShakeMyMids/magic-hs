@@ -222,6 +222,10 @@ SCHEMA = [
         autore_id INTEGER REFERENCES utenti(id) ON DELETE SET NULL
     );
     """,
+    # versione 9: chi ha scritto la risposta a una segnalazione (l'autore di MAGIC HS compare con il suo avatar)
+    """
+    ALTER TABLE segnalazioni ADD COLUMN risposta_da INTEGER REFERENCES utenti(id) ON DELETE SET NULL;
+    """,
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
