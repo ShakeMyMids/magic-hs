@@ -50,6 +50,16 @@ async function accedi(p, email, password) {
 
 (async () => {
   const b = await chromium.launch();
+  // Marino si presenta da solo la prima volta in ogni sezione: nelle prove le sezioni sono già viste (l'invito si prova nella Bolla)
+  const nuovoContesto = b.newContext.bind(b);
+  b.newContext = async (o) => {
+    const c = await nuovoContesto(o);
+    await c.addInitScript(() => {
+      try { if (localStorage.getItem('magic-hs.aiuto-visto') === null) localStorage.setItem('magic-hs.aiuto-visto', '["classifica","nomenclatura","bolla","profilo"]'); }
+      catch (e) { /* pagina senza archivio */ }
+    });
+    return c;
+  };
   const ca = await b.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light' });
   const capo = await ca.newPage(); attenzione(capo, 'capo');
 
@@ -186,7 +196,7 @@ async function accedi(p, email, password) {
   await capo.click('#tab-gestione');
   await capo.waitForSelector('button[data-g="u-apri"]');
   ok((await capo.$$('button[data-g="u-apri"]')).length === 1 && await capo.isVisible('td >> text=capo@azienda.it'), 'in Utenti c\'è l\'amministratore');
-  ok((await capo.$$('.sotto button')).length === 6, 'Utenti, IA, Dati TARIC, Ricerca, Trasporto, Registro');
+  ok((await capo.$$('.sotto button')).length === 7, 'Utenti, IA, Dati TARIC, Ricerca, Trasporto, Segnalazioni, Registro');
   ok(await capo.isHidden('#aiuto'), 'in Gestione niente tasto dell\'aiuto');
 
   // parole cercate senza risultati e sinonimo aggiunto dall'amministratore
@@ -301,9 +311,20 @@ async function accedi(p, email, password) {
   ok(Object.keys(oggetti).length === 1 && Object.values(oggetti)[0] > 1000, 'copia esterna adesso: il .zip del database è nell\'archivio');
 
   // bolla simulata: biciclette dalla Cina con antidumping (produttore «altri», B999) in dollari (finta BCE: 1 € = 1,0867 USD)
+  // la prima volta nella sezione Marino arriva da solo e chiede se spiegarla, senza bloccare la pagina
+  await capo.evaluate(() => localStorage.setItem('magic-hs.aiuto-visto', '["classifica","nomenclatura","profilo"]'));
   await capo.click('#tab-bolla');
-  // aiuto: Marino, il gabbiano, spiega la sezione a passi (elenco delle bolle: 5 passi), con le frecce, Esc e il tasto ?
   await capo.waitForSelector('[data-b="nuova"]');
+  await capo.waitForSelector('.aiuto.invito .aiuto-fumetto');
+  ok((await capo.textContent('#aiuto-titolo')) === 'Ciao, sono Marino!' && (await capo.textContent('#aiuto-testo')) === 'Vuoi che ti spieghi la sezione Bolla? Bastano pochi passi.' &&
+    await capo.isHidden('.aiuto-blocco') && (await capo.evaluate(() => localStorage.getItem('magic-hs.aiuto-visto'))).includes('bolla'),
+    'aiuto: la prima volta nella Bolla Marino si presenta da solo, senza bloccare la pagina, e non lo rifà');
+  await capo.click('[data-aiuto="avanti"]');                                   // «Sì, spiegami»
+  await capo.waitForSelector('.aiuto:not(.invito)', { state: 'attached' });
+  ok((await capo.textContent('.aiuto-passo')) === '1 di 5' && (await capo.textContent('#aiuto-titolo')) === 'Bolla' && !(await capo.textContent('#aiuto-testo')).startsWith('Ciao'),
+    'aiuto: «Sì, spiegami» comincia la visita');
+  await capo.keyboard.press('Escape'); await capo.waitForSelector('.aiuto', { state: 'detached' });
+  // aiuto: Marino, il gabbiano, spiega la sezione a passi (elenco delle bolle: 5 passi), con le frecce, Esc e il tasto ?
   await capo.click('#aiuto'); await capo.waitForSelector('.aiuto .aiuto-fumetto');
   ok((await capo.textContent('#aiuto-titolo')) === 'Bolla' && (await capo.textContent('.aiuto-passo')) === '1 di 5' && await capo.isVisible('.aiuto .marino') &&
     (await capo.textContent('#aiuto-testo')).startsWith('Ciao, sono Marino!'), 'aiuto: Marino arriva, si presenta e spiega la Bolla');
@@ -313,9 +334,17 @@ async function accedi(p, email, password) {
   await capo.keyboard.press('Escape'); await capo.waitForSelector('.aiuto', { state: 'detached' });
   await capo.keyboard.press('?'); await capo.waitForSelector('.aiuto .aiuto-fumetto');
   for (let k = 0; k < 4; k++) await capo.click('[data-aiuto="avanti"]');
-  ok((await capo.textContent('.aiuto-passo')) === '5 di 5' && (await capo.textContent('[data-aiuto="avanti"]')).includes('Fine'), 'aiuto: l\'ultimo passo indica il tasto «?»');
-  await capo.click('[data-aiuto="avanti"]'); await capo.waitForSelector('.aiuto', { state: 'detached' });
-  ok(true, 'aiuto: Esc, il tasto ? e Fine aprono e chiudono Marino');
+  ok((await capo.textContent('.aiuto-passo')) === '5 di 5' && (await capo.textContent('[data-aiuto="avanti"]')).includes('Fine') && await capo.isVisible('[data-aiuto="segnala"]'),
+    'aiuto: l\'ultimo passo indica il tasto «?» e «Segnala un problema»');
+  // segnalazione di un problema dall'ultimo passo di Marino (l'amministratore la legge più avanti, in Gestione)
+  await capo.click('[data-aiuto="segnala"]'); await capo.waitForSelector('.finestra.segnala textarea');
+  await capo.click('.finestra.segnala button[type=submit]');
+  ok(await capo.isVisible('.finestra.segnala >> text=Scrivi qualche parola in più sul problema.'), 'segnalazione: senza testo non parte');
+  await capo.fill('.finestra.segnala textarea', 'Nella bolla non trovo dove si sceglie il regime tariffario.');
+  await capo.click('.finestra.segnala button[type=submit]');
+  await capo.waitForSelector('.toast >> text=Segnalazione mandata');
+  await capo.waitForSelector('.aiuto', { state: 'detached' });
+  ok(await capo.isHidden('.finestra.segnala'), 'aiuto: Esc, il tasto ? e «Segnala un problema» aprono e chiudono Marino; la segnalazione parte');
   await capo.click('[data-b="nuova"][data-tipo="import"]');
   await capo.fill('[data-f="riferimento"]', 'Fattura di prova');
   await capo.fill('[data-f="valuta"]', 'USD'); await capo.press('[data-f="valuta"]', 'Tab');
@@ -334,6 +363,10 @@ async function accedi(p, email, password) {
   const bolla = (await capo.innerText('#b-esito')).replace(/\s+/g, ' ');
   ok(/10\.000,00 €/.test(bolla) && /Dazio 14 % 1\.400,00 €/.test(bolla) && /Antidumping \(B999\) 48,5 % 4\.850,00 €/.test(bolla) &&
     /B00 IVA all'importazione 3\.575,00 €/.test(bolla) && /Totale da pagare 9\.825,00 €/.test(bolla), 'bolla: valore in dogana, dazio, antidumping, IVA e totale');
+  // antidumping: i dati sono del primo del mese, la bolla di oggi (dopo): avviso con il link al TARIC dell'UE per codice, origine e giorno
+  const taricUe = await capo.getAttribute('#b-esito .b-avvisi a[href*="dds2/taric"]', 'href');
+  ok(/Dazi antidumping o compensativi: i dati TARIC sono del \d\d\/\d\d\/\d{4} e si aggiornano una volta al mese/.test(bolla) &&
+    /Taric=8712003090/.test(taricUe) && /Area=CN/.test(taricUe), 'bolla: avviso sugli antidumping dei dati del mese, con il TARIC dell\'UE');
   // dati obbligatori della dichiarazione ancora vuoti (tracciato H1): non bloccano il totale e portano al campo
   await capo.click('#b-esito .b-mancanti summary');
   await capo.click('#b-esito .b-mancanti button:has-text("Importatore (DE 13 04)")');
@@ -477,6 +510,22 @@ async function accedi(p, email, password) {
   await capo.click('#esito a:has-text("Oggi")');
   await capo.waitForSelector('#esito [data-act="in-bolla"]'); await pronta(capo);
   ok(await capo.isHidden('#storico') && !new URL(capo.url()).searchParams.get('dati'), 'mese passato: «Oggi» torna ai dati in uso con lo stesso codice');
+  await capo.click('#tab-gestione');
+
+  // la segnalazione mandata dalla Bolla: l'amministratore la legge in Gestione, risponde e la risolve; la risposta torna a chi l'ha scritta
+  await capo.waitForSelector('text=C\'è una segnalazione di un problema da leggere');
+  await capo.click('button[data-v="segnalazioni"]');
+  await capo.waitForSelector('.segnalazione >> text=Nella bolla non trovo dove si sceglie il regime tariffario.');
+  ok(await capo.isVisible('.segnalazione >> text=Mario Capo') && await capo.isVisible('.segnalazione >> text=Bolla · schermo 1280x860'),
+    'segnalazioni: in Gestione con chi l\'ha mandata, la sezione e lo schermo');
+  await capo.fill('form[data-g="segnalazione"] textarea[name=risposta]', 'Il regime si sceglie in ogni articolo, sotto il codice.');
+  await capo.click('form[data-g="segnalazione"] button[data-stato="chiusa"]');
+  await capo.waitForSelector('text=Segnalazione risolta.');
+  await capo.reload(); await pronta(capo);
+  await capo.waitForSelector('.toast >> text=L\'amministratore ha risposto a una tua segnalazione');
+  await capo.click('#tab-profilo'); await capo.waitForSelector('.segnalazione >> text=Il regime si sceglie in ogni articolo, sotto il codice.');
+  ok(await capo.isVisible('.segnalazione >> text=risposta nuova') && await capo.isVisible('.segnalazione >> text=risolta'),
+    'segnalazioni: la risposta arriva a chi l\'ha scritta, con un avviso all\'apertura e nel Profilo');
   await capo.click('#tab-gestione');
 
   // password dimenticata: link preparato dall'amministratore

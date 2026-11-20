@@ -19,9 +19,11 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   storico (colonna `condivisa` dalla preferenza `condividi`), preferiti (`/api/preferiti/cambi`: differenze con la versione
   precedente dei dati, da `taric/cambi.py`), archivio aziendale (`/api/archivio`), sinonimi (`/api/sinonimi`), parole senza
   risultati (`/api/ricerche-vuote`, anonime), bolle simulate (`/api/bolle`, personali) e cambio doganale del mese
-  (`/api/cambio`), tariffa del trasporto (`/api/trasporto`), IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
+  (`/api/cambio`), tariffa del trasporto (`/api/trasporto`), segnalazioni di problemi (`/api/segnalazioni`, le proprie con la
+  risposta, `lette`; `risposte` di `/api/io` conta quelle nuove), IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
   `ia`, `impostazioni`, `backup`, `copia-esterna`, dati TARIC (con lo stato della copia esterna), `ricerca` e `sinonimi`,
-  `trasporto` (PDF delle tariffe, versioni, `trasporto/carburante` a mano, `trasporto/carburante/aggiorna`), registro. `/api/salute` per Render. Middleware: compressione gzip e cache lunga per i file con `?v=`. Gli errori si restituiscono come
+  `trasporto` (PDF delle tariffe, versioni, `trasporto/carburante` a mano, `trasporto/carburante/aggiorna`), `segnalazioni`
+  (risposta, `stato` aperta/chiusa, eliminazione; quelle aperte nel `riepilogo`), registro. `/api/salute` per Render. Middleware: compressione gzip e cache lunga per i file con `?v=`. Gli errori si restituiscono come
   `{"errore": "<messaggio italiano>", "codice": "<codice>"}`.
 - `taric/config.py`: configurazione dalle variabili d'ambiente (`TARIC_*`, `GEMINI_API_KEY`, `MAGIC_HS_*`,
   `RENDER_EXTERNAL_URL` per `config.indirizzo`, `MAGIC_HS_COPIA_*` per la copia esterna, `MAGIC_HS_BCE_URL` per i cambi,
@@ -98,7 +100,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   senza pagina, `window.TARIC_CALCOLO` e modulo di node: dazi, condizioni con i documenti, regimi, codice addizionale del
   produttore per famiglia, ripartizione al centesimo, `calcolaImport`/`calcolaExport`; ogni cosa incerta diventa un blocco
   con il motivo, mai una stima; i `conflitti` tra i campi (con il `campo` da evidenziare) non bloccano il totale; codici della
-  casella 36 con `codicePreferenza` e della 47 con `codiceTributo`; `datiMancanti` elenca i dati obbligatori vuoti del tracciato H1
+  casella 36 con `codicePreferenza` e della 47 con `codiceTributo`; `verificaTaric` dell'articolo con antidumping o compensativi
+  in una bolla dopo la data dei dati (`ctx.dataDati`), che `bolla.js` completa con il link al TARIC dell'UE; `datiMancanti` elenca i dati obbligatori vuoti del tracciato H1
   EUCDM 6.2 o della colonna B1, senza bloccare; si prova con `node tests/prova_calcolo.js`), `js/codici-dogana.js` (liste di codici delle
   tabelle ADM: imballaggi, natura della transazione, modi di trasporto, aggiunte e detrazioni, metodi, rappresentanza; `aereo`:
   allegato 23-01 del Reg. UE 2015/2447, zone A-Q con la percentuale e zone per paese, più di una per US, CA e RU secondo
@@ -124,7 +127,11 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   `T.festone` (striscia in cima alla barra) e `T.accessorio` (logo); `comune.js` li inserisce con `data-auguri` e
   l'avviso dell'anteprima), `js/gioco.js` (`T.gioco()`, «Carica la nave»: SVG con le variabili `--d-*`, record in `localStorage`
   `magic-hs.gioco`), `T.vignetta()` di `disegni.js` per gli elenchi vuoti, codici recenti di `app.js` (`magic-hs.recenti`),
-  `js/aiuto.js` (Marino, il gabbiano marinaio dell'aiuto: tasto `#aiuto` «?» nella barra, nascosto in Gestione, o il tasto ?; visita a passi della sezione aperta con `PASSI[vista]`, ogni passo con `t`, `d` ed `e` che trova l'elemento da illuminare, spesso il `.box` dalla sua `.lab` con `box(/^…/)`: i passi senza elemento si saltano, quindi se cambi un'etichetta o un riquadro controlla i passi; luce `.aiuto-luce` e fumetto `.aiuto-posto` seguiti a ogni fotogramma; disegno SVG con le classi `mr-*` e i colori `--g-*`; le prove sono in `tests/e2e_sito.js`),
+  `js/aiuto.js` (Marino, il gabbiano marinaio dell'aiuto: tasto `#aiuto` «?» nella barra, nascosto in Gestione, o il tasto ?; visita a passi della sezione aperta con `PASSI[vista]`, ogni passo con `t`, `d` ed `e` che trova l'elemento da illuminare, spesso il `.box` dalla sua `.lab` con `box(/^…/)`: i passi senza elemento si saltano, quindi se cambi un'etichetta o un riquadro controlla i passi; luce `.aiuto-luce` e fumetto `.aiuto-posto` seguiti a ogni fotogramma; la prima volta in una sezione l'invito `.aiuto.invito`
+  (niente velo né fuoco; sezioni già viste in `localStorage` `magic-hs.aiuto-visto`, che `tests/e2e_sito.js` riempie in ogni contesto); disegno SVG con le classi `mr-*` e i colori `--g-*`; le prove sono in `tests/e2e_sito.js`),
+  `js/segnala.js` (`T.segnala()`, finestra «Segnala un problema» aperta dagli elementi `[data-segnala]` e dall'ultimo passo di
+  Marino: testo e contesto, cioè sezione, codice aperto, schermo, browser, dati in uso; tabella `segnalazioni` con `letta` per la
+  risposta nuova; Gestione › Segnalazioni in `gestione.js`, «Segnalazioni» nel profilo),
   `js/attiva-ia.js` (festa alla prima «Prova» riuscita
   dell'amministratore: `T.festaIA`, scena `T.festa()` di `disegni.js`, animazioni `.festa` in `app.css` con lo stato
   finale uguale a quello senza animazioni). Tema «porto»: blu marina e arancio dei container, colori solo nelle variabili

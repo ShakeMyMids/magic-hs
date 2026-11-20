@@ -194,6 +194,23 @@ SCHEMA = [
         attiva INTEGER NOT NULL DEFAULT 0
     );
     """,
+    # versione 7: segnalazioni di problemi dagli utenti, con la risposta dell'amministratore (letta: l'autore l'ha vista)
+    """
+    CREATE TABLE segnalazioni (
+        id INTEGER PRIMARY KEY,
+        creata TEXT NOT NULL,
+        autore_id INTEGER REFERENCES utenti(id) ON DELETE SET NULL,
+        testo TEXT NOT NULL,
+        sezione TEXT NOT NULL DEFAULT '',
+        contesto TEXT NOT NULL DEFAULT '{}',
+        stato TEXT NOT NULL DEFAULT 'aperta',
+        risposta TEXT NOT NULL DEFAULT '',
+        chiusa TEXT,
+        chiusa_da INTEGER REFERENCES utenti(id) ON DELETE SET NULL,
+        letta INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX segnalazioni_autore ON segnalazioni(autore_id, creata);
+    """,
 ]
 
 IMPOSTAZIONI_PREDEFINITE: dict[str, Any] = {
@@ -281,10 +298,12 @@ class Database:
                           "ON CONFLICT(chiave) DO UPDATE SET valore = excluded.valore", (k, json.dumps(val)))
 
     def pulizia(self) -> None:
-        """Sessioni e link scaduti, tentativi di accesso vecchi, registro degli eventi piu' vecchio di due anni."""
+        """Sessioni e link scaduti, tentativi di accesso vecchi, registro degli eventi e segnalazioni risolte piu' vecchi
+        di due anni."""
         with self.transazione() as c:
             c.execute("DELETE FROM sessioni WHERE scade < ?", (iso(),))
             c.execute("DELETE FROM eventi WHERE quando < ?", (tra(days=-730),))
+            c.execute("DELETE FROM segnalazioni WHERE stato = 'chiusa' AND chiusa < ?", (tra(days=-730),))
             c.execute("DELETE FROM gettoni WHERE scade < ?", (iso(),))
             c.execute("DELETE FROM tentativi WHERE quando < ?", (time.time() - 86400,))
 

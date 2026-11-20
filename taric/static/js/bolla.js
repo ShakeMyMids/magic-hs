@@ -518,9 +518,15 @@
       Array.prototype.forEach.call(el.querySelectorAll(sel), function (x) { x.classList.add('in-conflitto'); });
     });
   }
+  /* il TARIC dell'UE per il codice, l'origine e il giorno della bolla (per i dazi che i dati del mese non hanno ancora) */
+  function linkTaric(r) {
+    var a = dati().articoli[r.n - 1] || {};
+    return ' <a href="' + esc(app().urlTaric(String(a.codice || '').replace(/\D/g, ''), a.origine || dati().paese || '', giorno())) +
+      '" target="_blank" rel="noopener">' + T.icona('link') + 'TARIC dell\'UE</a>';
+  }
   function avvertenzeHtml(R) {
     var av = (R.avvisi || []).map(function (a) { return '<li><b>Intestazione</b>: ' + esc(a.testo) + '</li>'; });
-    R.articoli.forEach(function (r) { r.avvertenze.forEach(function (t) { av.push('<li><b>Articolo ' + r.n + '</b>: ' + esc(prima(t)) + '</li>'); }); });
+    R.articoli.forEach(function (r) { r.avvertenze.forEach(function (t) { av.push('<li><b>Articolo ' + r.n + '</b>: ' + esc(prima(t)) + (t === r.verificaTaric ? linkTaric(r) : '') + '</li>'); }); });
     return av.length ? '<div class="b-avvisi"><p class="et">Da tenere presente</p><ul>' + av.join('') + '</ul></div>' : '';
   }
   function nomeTributo(t) {

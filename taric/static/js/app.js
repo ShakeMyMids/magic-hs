@@ -1693,6 +1693,8 @@ function avvia() {
     $('#chi-iniziali').parentNode.title = u.nome + (u.email ? ' · ' + u.email : '');
     $('#tab-gestione').hidden = u.ruolo !== 'amministratore';
     if (u.ruolo === 'amministratore' && T.segnaRichieste) T.segnaRichieste();      // puntino sulla scheda Gestione per le richieste da approvare
+    if (u.risposte) T.avviso(u.risposte === 1 ? 'L\'amministratore ha risposto a una tua segnalazione: la trovi nel Profilo.'
+      : 'L\'amministratore ha risposto a ' + u.risposte + ' tue segnalazioni: le trovi nel Profilo.');
     T.tema(u.preferenze.tema);
     state.country = u.preferenze.paese || '';
     state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';

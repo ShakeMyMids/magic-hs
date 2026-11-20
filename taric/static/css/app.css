@@ -519,6 +519,14 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .voce .cod{font:650 15px/1.2 var(--f);color:var(--inchiostro)}
 .voce .azioni{grid-row:1 / span 2;grid-column:2;align-self:center}
 @media (max-width:560px){.voce{grid-template-columns:1fr}.voce .azioni{grid-row:auto;grid-column:1}}
+/* segnalazioni di problemi (js/segnala.js): nel profilo con la risposta, in Gestione con il modulo per rispondere */
+.voce.segnalazione{grid-template-columns:minmax(0,1fr)}
+.voce.segnalazione .t{margin:6px 0 4px;white-space:pre-wrap;overflow-wrap:anywhere}
+.voce.segnalazione .m{margin:0}
+.voce.segnalazione.nuova{padding-left:12px;box-shadow:inset 3px 0 0 var(--accento)}
+.voce.segnalazione .risposta{margin:6px 0 0;padding:8px 12px;border-radius:var(--r-m);background:var(--carta-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.voce.segnalazione .modulo{margin-top:10px}
+.piede .link{font-size:13px}
 .modulo{display:grid;gap:14px;max-width:640px}
 .modulo label{display:flex;flex-direction:column;gap:6px;font-size:13.5px;font-weight:550;color:var(--secondario)}
 .modulo .campo{flex:none;width:100%}
@@ -976,6 +984,9 @@ html.con-finestra{overflow:hidden}
 .aiuto-testa .tasto-ico{margin:-8px -8px -8px 0}
 #aiuto-testo{margin:6px 0 12px;font-size:15px;line-height:1.45}
 .aiuto-fumetto .fila{justify-content:flex-end}
+.aiuto-fumetto [data-aiuto="segnala"]{margin-right:auto;font-size:14px}
+/* invito della prima volta: niente velo, la pagina resta usabile */
+.aiuto.invito .aiuto-blocco,.aiuto.invito .aiuto-luce{display:none}
 .ico.gira{transform:rotate(180deg)}
 /* il disegno */
 .marino .mr-bianco,.marino .mr-ala,.marino .mr-punta,.marino .mr-becco,.marino .mr-cappello,.marino .mr-banda,.marino .mr-visiera,.marino .mr-colletto,.marino .mr-nodo,

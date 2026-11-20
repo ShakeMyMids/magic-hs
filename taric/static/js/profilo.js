@@ -4,7 +4,7 @@
   'use strict';
   var T = window.TARIC, esc = T.esc;
   var el = document.getElementById('view-profilo');
-  var st = { storico: [], totale: 0, finito: false, preferiti: [], filtro: '', caricato: false, msg: {} };
+  var st = { storico: [], totale: 0, finito: false, preferiti: [], segnalazioni: [], filtro: '', caricato: false, msg: {} };
   var vista = T.viste = T.viste || {};
 
   function $(s) { return el.querySelector(s); }
@@ -19,8 +19,14 @@
       T.api('GET', '/api/storico?limite=50').then(function (r) { st.storico = r.voci; st.totale = r.totale; st.finito = r.voci.length >= r.totale; }),
       T.api('GET', '/api/preferiti').then(function (r) { st.preferiti = r.voci; }),
       T.api('GET', '/api/preferiti/cambi').then(function (r) { st.cambi = r; segnaVisti(); }, function () { st.cambi = null; }),
+      T.api('GET', '/api/segnalazioni').then(function (r) { st.segnalazioni = r.voci; }, function () { st.segnalazioni = []; }),
       app().aggiornaIo()
-    ]).then(disegna, function (e) { el.innerHTML = '<p class="errore">' + esc(e.errore || 'Profilo non disponibile.') + '</p>'; });
+    ]).then(function () { disegna(); risposteLette(); }, function (e) { el.innerHTML = '<p class="errore">' + esc(e.errore || 'Profilo non disponibile.') + '</p>'; });
+  }
+  /* le risposte nuove si segnano come lette quando compaiono nel profilo (restano evidenziate fino al prossimo caricamento) */
+  function risposteLette() {
+    if (!st.segnalazioni.some(function (x) { return !x.letta; })) return;
+    T.api('POST', '/api/segnalazioni/lette').then(function () { if (u()) u().risposte = 0; }, function () { /* restano da leggere */ });
   }
 
   vista.profilo = {
@@ -84,6 +90,11 @@
     if (T.installata && !T.installata()) h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('installa') + 'MAGIC HS come app</div>' +
       '<p class="nota">Collegamento sul desktop del computer o icona sulla schermata Home del telefono: si apre con un tocco, nella sua finestra.</p>' +
       '<div class="fila"><button class="btn sm" type="button" data-installa>' + T.icona('installa') + 'Installa</button></div></div></div>';
+
+    h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Segnalazioni' + (st.segnalazioni.length ? '<span class="dx">' + st.segnalazioni.length + '</span>' : '') + '</div>' +
+      '<p class="nota">Qualcosa non funziona o manca? Scrivilo all\'amministratore: qui trovi le sue risposte.</p>' +
+      (st.segnalazioni.length ? '<div class="elenco">' + st.segnalazioni.map(rigaSegnalazione).join('') + '</div>' : '') +
+      '<div class="fila"><button class="btn sm" type="button" data-segnala>' + T.icona('attenzione') + 'Segnala un problema</button></div></div></div>';
 
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'I tuoi dati</div>' +
       '<p class="nota">Storico, preferiti e preferenze sono nel tuo account: li ritrovi da qualsiasi PC. «Esporta» ne salva una copia in un file, «Importa» la riporta qui.</p>' +
@@ -168,6 +179,11 @@
       mostra.join('') + (righe.length > mostra.length ? '<li>e altre ' + (righe.length - mostra.length) + ' differenze: aprilo per vedere le misure di oggi.</li>' : '') + '</ul></details>';
   }
 
+  function rigaSegnalazione(v) {
+    return '<div class="voce segnalazione' + (v.letta ? '' : ' nuova') + '"><div><span class="m">' + esc(T.dataOra(v.creata)) + '</span> ' +
+      (v.stato === 'chiusa' ? '<span class="st ok">risolta</span>' : '<span class="st in_attesa">aperta</span>') + (v.letta ? '' : ' <span class="st attivo">risposta nuova</span>') +
+      '<p class="t">' + esc(v.testo) + '</p>' + (v.risposta ? '<p class="risposta"><b>Risposta:</b> ' + esc(v.risposta) + '</p>' : '') + '</div></div>';
+  }
   function rigaPreferito(v) {
     var d = app().descrizione(v.codice), perc = app().percorso(v.codice);
     var titolo = perc.length > 1 ? perc[perc.length - 2] + ' › ' + d : d;

@@ -1,6 +1,7 @@
 /* MAGIC HS - Marino, il gabbiano marinaio dell'aiuto. Con il tasto «?» della barra (o il tasto ? fuori dai campi) arriva in
    volo e spiega la sezione aperta a passi: illumina una parte della pagina alla volta e la racconta nel fumetto, con
-   Indietro, Avanti e Chiudi (anche con le frecce e con Esc). Gestione no: lì il tasto non c'è.
+   Indietro, Avanti e Chiudi (anche con le frecce e con Esc). Gestione no: lì il tasto non c'è. La prima volta che si apre
+   una sezione arriva da solo e chiede se spiegarla (invito che non blocca la pagina, una volta per sezione e dispositivo).
    I passi di ogni vista sono in PASSI: «e» trova l'elemento da illuminare nella pagina com'è adesso; se non c'è il passo
    si salta (il primo e l'ultimo parlano senza indicare niente). I colori del disegno sono le variabili --g-* di app.css;
    con il movimento ridotto Marino compare e sparisce senza volare. */
@@ -49,7 +50,8 @@
   function sel(s) { return function () { return q(s); }; }
 
   /* ------------------------------------------------------------------ i passi di ogni vista */
-  var FINE = { t: 'Quando vuoi', d: 'Se hai un dubbio premi «?»: torno io. Buon lavoro!', e: function () { return visibile(tasto) ? tasto : null; } };
+  var FINE = { t: 'Quando vuoi', d: 'Se hai un dubbio premi «?»: torno io. Se qualcosa non funziona, scrivilo all\'amministratore. Buon lavoro!',
+    e: function () { return visibile(tasto) ? tasto : null; } };
   var PASSI = {
     classifica: function () {
       var dom = document.querySelector('.domanda'), ia = !!(dom && dom.classList.contains('modo-ia'));
@@ -135,6 +137,7 @@
         { t: 'Storico', d: 'Le tue classificazioni, da riaprire quando vuoi. Se le condividi, i colleghi le ritrovano cercando.', e: riq(/^Storico delle classificazioni/) },
         { t: 'Preferiti', d: 'I codici salvati con «Aggiungi ai preferiti»: ti avviso quando cambiano con i dati nuovi.', e: riq(/^Voci preferite/) },
         { t: 'App', d: 'Installa MAGIC HS sul computer o sul telefono, come un\'app.', e: riq(/^MAGIC HS come app/) },
+        { t: 'Segnalazioni', d: 'Qualcosa non funziona o manca? Scrivilo all\'amministratore: qui trovi le sue risposte.', e: riq(/^Segnalazioni/) },
         { t: 'I tuoi dati', d: 'Esporta storico, preferiti e preferenze in un file, o importali da un altro account.', e: riq(/^I tuoi dati/) },
         FINE
       ];
@@ -143,32 +146,81 @@
 
   /* ------------------------------------------------------------------ apertura e chiusura */
   function ridotto() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
-  function apri() {
-    var v = vista();
-    if (aperto || !PASSI[v] || document.querySelector('.velo')) return;
-    var passi = PASSI[v]().filter(function (p, k, tuttiPassi) { return !p.e || k === tuttiPassi.length - 1 || p.e(); });
-    passi[0] = { t: passi[0].t, d: 'Ciao, sono Marino! ' + passi[0].d };      // si presenta in ogni sezione
+  /* Marino arriva: per la visita (aria-modal, il fuoco nel fumetto) o per l'invito della prima volta (non blocca niente) */
+  function crea(v, invito) {
     var el = document.createElement('div');
-    el.className = 'aiuto arriva';
-    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+    el.className = 'aiuto arriva' + (invito ? ' invito' : '');
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', invito ? 'false' : 'true');
     el.setAttribute('aria-labelledby', 'aiuto-titolo'); el.setAttribute('aria-describedby', 'aiuto-testo');
     el.innerHTML = '<div class="aiuto-blocco"></div><div class="aiuto-luce senza"></div>' +
       '<div class="aiuto-posto"><div class="aiuto-gabbiano vola">' + MARINO + '</div>' +
       '<div class="aiuto-fumetto"><div class="aiuto-testa"><b id="aiuto-titolo"></b><span class="aiuto-passo"></span>' +
       '<button class="tasto-ico" type="button" data-aiuto="chiudi" aria-label="Chiudi l\'aiuto">' + T.icona('chiudi') + '</button></div>' +
       '<p id="aiuto-testo" aria-live="polite"></p>' +
-      '<div class="fila"><button class="btn sm" type="button" data-aiuto="indietro">' + T.icona('indietro') + 'Indietro</button>' +
+      '<div class="fila"><button class="link" type="button" data-aiuto="segnala" hidden>' + T.icona('attenzione') + 'Segnala un problema</button>' +
+      '<button class="btn sm" type="button" data-aiuto="no" hidden>No, grazie</button>' +
+      '<button class="btn sm" type="button" data-aiuto="indietro">' + T.icona('indietro') + 'Indietro</button>' +
       '<button class="btn sm pri" type="button" data-aiuto="avanti"></button></div></div></div>';
     document.body.appendChild(el);
-    document.documentElement.classList.add('con-aiuto');
-    aperto = { el: el, passi: passi, i: -1, prima: document.activeElement, vista: v };
+    aperto = { el: el, passi: [], i: -1, prima: document.activeElement, vista: v, invito: invito };
     var g = el.querySelector('.aiuto-gabbiano');
     function atterra() { g.classList.remove('vola'); el.classList.remove('arriva'); }
     g.addEventListener('animationend', function f(ev) { if (ev.target === g) { g.removeEventListener('animationend', f); atterra(); } });
     setTimeout(atterra, ridotto() ? 0 : 1400);             // se l'animazione non parte (scheda in secondo piano)
+  }
+  function apri() {
+    var v = vista();
+    if (!PASSI[v] || document.querySelector('.velo')) return;
+    if (aperto && aperto.invito) { inizia(false); return; }
+    if (aperto) return;
+    crea(v, false);
+    inizia(true);
+  }
+  /* la visita: con il saluto se Marino non si è già presentato nell'invito */
+  function inizia(saluto) {
+    var a = aperto, passi = PASSI[a.vista]().filter(function (p, k, tuttiPassi) { return !p.e || k === tuttiPassi.length - 1 || p.e(); });
+    if (saluto) passi[0] = { t: passi[0].t, d: 'Ciao, sono Marino! ' + passi[0].d };
+    a.passi = passi; a.invito = false;
+    a.el.classList.remove('invito'); a.el.setAttribute('aria-modal', 'true');
+    a.el.querySelector('[data-aiuto="no"]').hidden = true;
+    document.documentElement.classList.add('con-aiuto');
     vai(0);
-    el.querySelector('[data-aiuto="avanti"]').focus({ preventScroll: true });
+    a.el.querySelector('[data-aiuto="avanti"]').focus({ preventScroll: true });
     requestAnimationFrame(segui);
+  }
+
+  /* la prima volta che si apre una sezione (su questo dispositivo) Marino arriva da solo e chiede se spiegarla; l'invito
+     non blocca la pagina e non prende il fuoco. Le sezioni già viste sono in localStorage magic-hs.aiuto-visto. */
+  var NOMI = { classifica: 'Classifica', nomenclatura: 'Nomenclatura', bolla: 'Bolla', profilo: 'Profilo' }, CHIAVE = 'magic-hs.aiuto-visto', attesaInvito = 0;
+  function giaViste() {
+    try { var l = JSON.parse(localStorage.getItem(CHIAVE) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return null; }   // null: senza archivio, niente inviti
+  }
+  function segnaVista(v) {
+    var l = giaViste();
+    if (!l || l.indexOf(v) >= 0) return;
+    l.push(v);
+    try { localStorage.setItem(CHIAVE, JSON.stringify(l)); } catch (e) { /* senza archivio */ }
+  }
+  function invita(v) {
+    crea(v, true);
+    segnaVista(v);
+    var el = aperto.el;
+    el.querySelector('#aiuto-titolo').textContent = 'Ciao, sono Marino!';
+    el.querySelector('#aiuto-testo').textContent = 'Vuoi che ti spieghi la sezione ' + NOMI[v] + '? Bastano pochi passi.';
+    el.querySelector('[data-aiuto="indietro"]').hidden = true;
+    el.querySelector('[data-aiuto="no"]').hidden = false;
+    el.querySelector('[data-aiuto="avanti"]').innerHTML = T.icona('spunta') + 'Sì, spiegami';
+  }
+  function forseInvita() {
+    clearTimeout(attesaInvito);
+    var v = vista(), l = giaViste();
+    if (!PASSI[v] || !l || l.indexOf(v) >= 0) return;
+    attesaInvito = setTimeout(function () {
+      if (vista() !== v || aperto) return;
+      // pagina non ancora pronta, una finestra aperta o la scheda del browser in secondo piano: si riprova tra poco
+      if (document.querySelector('.velo') || document.hidden || !(T.app && T.app.utente && T.app.utente())) { forseInvita(); return; }
+      invita(v);
+    }, 1500);
   }
   function chiudi() {
     if (!aperto) return;
@@ -192,6 +244,7 @@
     el.querySelector('.aiuto-passo').textContent = (i + 1) + ' di ' + n;
     el.querySelector('#aiuto-testo').textContent = p.d;
     el.querySelector('[data-aiuto="indietro"]').hidden = i === 0;
+    el.querySelector('[data-aiuto="segnala"]').hidden = i !== n - 1 || !T.segnala;
     el.querySelector('[data-aiuto="avanti"]').innerHTML = i === n - 1 ? T.icona('spunta') + 'Fine' : 'Avanti' + T.icona('indietro', 'gira');
     var g = el.querySelector('.aiuto-gabbiano');
     if (i > 0) { g.classList.remove('salta', 'parla'); void g.offsetWidth; g.classList.add('salta', 'parla'); }
@@ -257,16 +310,17 @@
     var b = ev.target.closest('[data-aiuto]');
     if (!b) return;
     var k = b.getAttribute('data-aiuto');
-    if (k === 'chiudi') chiudi();
+    if (k === 'chiudi' || k === 'no') chiudi();
+    else if (k === 'segnala') { chiudi(); if (T.segnala) T.segnala(); }
+    else if (aperto.invito) { if (k === 'avanti') inizia(false); }                    // «Sì, spiegami»
     else if (k === 'indietro') vai(aperto.i - 1);
     else if (k === 'avanti') { if (aperto.i === aperto.passi.length - 1) chiudi(); else vai(aperto.i + 1); }
   });
   document.addEventListener('keydown', function (ev) {
-    if (!aperto) {
-      var t = ev.target;
-      if (ev.key === '?' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) && visibile(tasto)) {
-        ev.preventDefault(); apri();
-      }
+    if (!aperto || aperto.invito) {                               // l'invito non prende i tasti, tranne Esc e ?
+      var t = ev.target, campo = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+      if (ev.key === '?' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !campo && visibile(tasto)) { ev.preventDefault(); apri(); }
+      else if (aperto && ev.key === 'Escape' && !campo) { ev.preventDefault(); chiudi(); }
       return;
     }
     if (ev.key === 'Escape') { ev.preventDefault(); chiudi(); }
@@ -280,8 +334,8 @@
       else if (!aperto.el.contains(document.activeElement)) { ev.preventDefault(); b[0].focus(); }
     }
   }, true);
-  /* il tasto c'è in tutte le sezioni tranne Gestione; cambiando sezione Marino se ne va */
-  function aggiorna() { var v = vista(); tasto.hidden = !PASSI[v]; if (aperto && aperto.vista !== v) chiudi(); }
+  /* il tasto c'è in tutte le sezioni tranne Gestione; cambiando sezione Marino se ne va (e nella nuova, la prima volta, si presenta) */
+  function aggiorna() { var v = vista(); tasto.hidden = !PASSI[v]; if (aperto && aperto.vista !== v) chiudi(); forseInvita(); }
   var osserva = new MutationObserver(aggiorna);
   Array.prototype.forEach.call(document.querySelectorAll('main > section[id^="view-"]'), function (s) { osserva.observe(s, { attributes: true, attributeFilter: ['hidden'] }); });
   aggiorna();

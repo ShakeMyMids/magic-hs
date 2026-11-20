@@ -38,7 +38,7 @@ from .carburante import Carburante, ErroreCarburante
 from .config import Config
 from .copia import CopiaEsterna
 from .dati import RE_VERSIONE, GestoreDati
-from .db import Database, iso
+from .db import Database, iso, tra
 from .ia import ErroreIA, ServizioIA, mese_corrente
 from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
 from .trasporto import MASSIMO_PDF, ErroreTariffe, Tariffe
@@ -142,6 +142,26 @@ class Bolla(BaseModel):
 class BollaModificata(BaseModel):
     riferimento: str = Field(default="", max_length=120)
     dati: dict[str, Any]
+
+
+# segnalazione di un problema: il testo e dove si trovava chi scrive (sezione, codice aperto, schermo, browser)
+class ContestoSegnalazione(BaseModel):
+    indirizzo: str = Field(default="", max_length=300)
+    codice: str = Field(default="", max_length=20)
+    schermo: str = Field(default="", max_length=20)
+    browser: str = Field(default="", max_length=300)
+    versione: str = Field(default="", max_length=40)
+
+
+class Segnalazione(BaseModel):
+    testo: str = Field(min_length=5, max_length=2000)
+    sezione: str = Field(default="", max_length=40)
+    contesto: ContestoSegnalazione = Field(default_factory=ContestoSegnalazione)
+
+
+class RispostaSegnalazione(BaseModel):
+    stato: Literal["aperta", "chiusa"]
+    risposta: str = Field(default="", max_length=2000)
 
 
 # supplemento carburante di DHL Express della settimana scritto a mano (Express ed Economy Select)
@@ -753,7 +773,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                                "condividi": pref.get("condividi", True) is not False},
                 "ia": {"disponibile": ia.disponibile and lim != 0 and not tetto, "configurata": ia.disponibile, "nome": cfg.ia_nome, "limite": lim,
                        "usate": ia.usate(c, u["id"]), "mese": mese_corrente(), "tetto": tetto},
-                "dati": {"versione": dati.attiva(), "aggiornamento": (dati.in_corso or {}).get("fase")}}
+                "dati": {"versione": dati.attiva(), "aggiornamento": (dati.in_corso or {}).get("fase")},
+                # risposte dell'amministratore alle proprie segnalazioni non ancora viste nel profilo
+                "risposte": c.execute("SELECT COUNT(*) FROM segnalazioni WHERE autore_id = ? AND letta = 0", (u["id"],)).fetchone()[0]}
 
     @app.get("/api/io")
     def io(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
@@ -777,6 +799,81 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             if body.condividi is not None:
                 pref["condividi"] = body.condividi
             c.execute("UPDATE utenti SET preferenze = ? WHERE id = ?", (json.dumps(pref), u["id"]))
+        return json_ok()
+
+    # ------------------------------------------------------------------ segnalazioni di problemi
+    SEGNALAZIONI_ORA = 10                    # al massimo in un'ora per persona
+
+    def riga_segnalazione(r: sqlite3.Row, admin: bool) -> dict[str, Any]:
+        v = {"id": r["id"], "creata": r["creata"], "testo": r["testo"], "sezione": r["sezione"], "stato": r["stato"],
+             "risposta": r["risposta"], "chiusa": r["chiusa"], "letta": bool(r["letta"])}
+        if admin:
+            try:
+                contesto = json.loads(r["contesto"] or "{}")
+            except ValueError:
+                contesto = {}
+            v.update(contesto=contesto, autore=r["autore"] or "", email=r["email"] or "", chiusa_da=r["chiusa_da_nome"] or "")
+        return v
+
+    def breve(testo: str) -> str:
+        t = " ".join(testo.split())
+        return t if len(t) <= 80 else t[:79] + "…"
+
+    @app.post("/api/segnalazioni")
+    def segnala(body: Segnalazione, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        testo = body.testo.strip()
+        if len(testo) < 5:
+            raise Errore(422, "Scrivi qualche parola in più sul problema.", "testo")
+        with db.transazione() as c:
+            if c.execute("SELECT COUNT(*) FROM segnalazioni WHERE autore_id = ? AND creata > ?",
+                         (u["id"], tra(hours=-1))).fetchone()[0] >= SEGNALAZIONI_ORA:
+                raise Errore(429, "Hai mandato molte segnalazioni nell'ultima ora: riprova più tardi.", "troppe")
+            sid = c.execute("INSERT INTO segnalazioni(creata, autore_id, testo, sezione, contesto) VALUES (?, ?, ?, ?, ?)",
+                            (iso(), u["id"], testo, body.sezione.strip(), json.dumps(body.contesto.model_dump(), ensure_ascii=False))).lastrowid
+            db.evento(c, "segnalazione", u["id"], u["id"], breve(testo))
+        return json_ok(id=sid)
+
+    @app.get("/api/segnalazioni")
+    def mie_segnalazioni(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        with db.connessione() as c:
+            righe = c.execute("SELECT * FROM segnalazioni WHERE autore_id = ? ORDER BY creata DESC, id DESC LIMIT 50", (u["id"],)).fetchall()
+        return {"voci": [riga_segnalazione(r, False) for r in righe]}
+
+    @app.post("/api/segnalazioni/lette")
+    def segnalazioni_lette(u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        with db.transazione() as c:
+            c.execute("UPDATE segnalazioni SET letta = 1 WHERE autore_id = ? AND letta = 0", (u["id"],))
+        return json_ok()
+
+    @app.get("/api/admin/segnalazioni")
+    def admin_segnalazioni(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.connessione() as c:
+            righe = c.execute("SELECT s.*, u.nome AS autore, u.email AS email, d.nome AS chiusa_da_nome FROM segnalazioni s "
+                              "LEFT JOIN utenti u ON u.id = s.autore_id LEFT JOIN utenti d ON d.id = s.chiusa_da "
+                              "ORDER BY s.stato = 'chiusa', s.creata DESC, s.id DESC LIMIT 300").fetchall()
+        return {"voci": [riga_segnalazione(r, True) for r in righe]}
+
+    @app.put("/api/admin/segnalazioni/{sid}")
+    def admin_segnalazione(sid: int, body: RispostaSegnalazione, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        risposta = body.risposta.strip()
+        with db.transazione() as c:
+            r = c.execute("SELECT * FROM segnalazioni WHERE id = ?", (sid,)).fetchone()
+            if r is None:
+                raise Errore(404, "Segnalazione non trovata.", "non_trovato")
+            # l'autore la vede come nuova se cambia la risposta o la segnalazione viene risolta
+            nuova = risposta != r["risposta"] or (body.stato == "chiusa" and r["stato"] != "chiusa")
+            c.execute("UPDATE segnalazioni SET stato = ?, risposta = ?, chiusa = ?, chiusa_da = ?, letta = ? WHERE id = ?",
+                      (body.stato, risposta, iso() if body.stato == "chiusa" else None, a["id"] if body.stato == "chiusa" else None,
+                       0 if nuova and (risposta or body.stato == "chiusa") else r["letta"], sid))
+            if body.stato != r["stato"]:
+                db.evento(c, "segnalazione_risolta" if body.stato == "chiusa" else "segnalazione_riaperta", r["autore_id"], a["id"], breve(r["testo"]))
+        return json_ok()
+
+    @app.delete("/api/admin/segnalazioni/{sid}")
+    def admin_elimina_segnalazione(sid: int, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        with db.transazione() as c:
+            if not c.execute("DELETE FROM segnalazioni WHERE id = ?", (sid,)).rowcount:
+                raise Errore(404, "Segnalazione non trovata.", "non_trovato")
         return json_ok()
 
     # ------------------------------------------------------------------ bolle simulate
@@ -1122,9 +1219,11 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     def admin_riepilogo(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
         with db.connessione() as c:
             in_attesa = c.execute("SELECT COUNT(*) FROM utenti WHERE stato = 'in_attesa'").fetchone()[0]
+            segnalazioni = c.execute("SELECT COUNT(*) FROM segnalazioni WHERE stato = 'aperta'").fetchone()[0]
             carb = db.impostazioni(c)["carburante"]
         s = fuori.stato()
         return {"ia": ia.disponibile, "ia_nome": cfg.ia_nome, "dati": dati.attiva(), "aggiornamento": dati.in_corso, "in_attesa": in_attesa,
+                "segnalazioni": segnalazioni,
                 "copia_esterna": "spenta" if s["problema"] else ("errore" if s["attiva"] and s["esito"] == "errore" else ""),
                 "carburante_giorni": giorni_carburante(carb) if tariffe.in_uso() else None}
 

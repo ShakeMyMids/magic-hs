@@ -20,7 +20,8 @@
     backup_scaricato: 'Copia del database scaricata', sessioni_chiuse: 'Uscita da tutti i dispositivi',
     copia_esterna: 'Copia del database mandata fuori', copia_esterna_errore: 'Copia esterna non riuscita',
     sinonimo: 'Sinonimo aggiunto', sinonimo_tolto: 'Sinonimo tolto', tariffe_trasporto: 'Tariffe di trasporto caricate',
-    tariffe_trasporto_attivate: 'Tariffe di trasporto cambiate', carburante: 'Supplemento carburante cambiato'
+    tariffe_trasporto_attivate: 'Tariffe di trasporto cambiate', carburante: 'Supplemento carburante cambiato',
+    segnalazione: 'Problema segnalato', segnalazione_risolta: 'Segnalazione risolta', segnalazione_riaperta: 'Segnalazione riaperta'
   };
   function numero(n) { return Number(n || 0).toLocaleString('it-IT'); }
 
@@ -38,6 +39,7 @@
     if (st.sotto === 'dati') chiamate.push(T.api('GET', '/api/admin/dati').then(function (r) { st.dati = r; }));
     if (st.sotto === 'ricerca') chiamate.push(T.api('GET', '/api/admin/ricerca').then(function (r) { st.ricerca = r; }));
     if (st.sotto === 'trasporto') chiamate.push(T.api('GET', '/api/admin/trasporto').then(function (r) { st.trasporto = r; }));
+    if (st.sotto === 'segnalazioni') chiamate.push(T.api('GET', '/api/admin/segnalazioni').then(function (r) { st.segnalazioni = r.voci; }));
     if (st.sotto === 'registro') chiamate.push(T.api('GET', '/api/admin/eventi?limite=300').then(function (r) { st.eventi = r.eventi; }));
     return Promise.all(chiamate).then(disegna, function (e) { el.innerHTML = '<p class="errore">' + esc(errore(e)) + '</p>'; });
   }
@@ -45,12 +47,12 @@
   /* ------------------------------------------------------------------ disegno */
   function disegna() {
     var r = st.riep, h = '';
-    var schede = [['utenti', 'Utenti', 'utenti'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['ricerca', 'Ricerca', 'cerca'], ['trasporto', 'Trasporto', 'nave'], ['registro', 'Registro', 'registro']];
+    var schede = [['utenti', 'Utenti', 'utenti'], ['ia', 'Intelligenza artificiale', 'scintille'], ['dati', 'Dati TARIC', 'database'], ['ricerca', 'Ricerca', 'cerca'], ['trasporto', 'Trasporto', 'nave'], ['segnalazioni', 'Segnalazioni', 'attenzione'], ['registro', 'Registro', 'registro']];
     h += '<div class="sotto" role="group" aria-label="Parti della gestione">' + schede.map(function (x) {
       return '<button class="btn sm" type="button" data-g="sotto" data-v="' + x[0] + '"' + (st.sotto === x[0] ? ' aria-current="page"' : '') + '>' + T.icona(x[2]) + x[1] + '</button>';
     }).join('') + '</div>';
     if (r) h += avvisi(r);
-    h += { dati: dati, registro: registro, ia: ia, utenti: utenti, ricerca: ricerca, trasporto: trasporto }[st.sotto]();
+    h += { dati: dati, registro: registro, ia: ia, utenti: utenti, ricerca: ricerca, trasporto: trasporto, segnalazioni: segnalazioni }[st.sotto]();
     el.innerHTML = h;
     pianificaRinfresco();
   }
@@ -58,6 +60,8 @@
   function avvisi(r) {
     var a = [], h = '';
     if (r.in_attesa && st.sotto !== 'utenti') a.push(r.in_attesa === 1 ? 'C\'è una richiesta di account da approvare: vai su Utenti.' : 'Ci sono ' + r.in_attesa + ' richieste di account da approvare: vai su Utenti.');
+    if (r.segnalazioni && st.sotto !== 'segnalazioni') a.push(r.segnalazioni === 1 ? 'C\'è una segnalazione di un problema da leggere: vai su Segnalazioni.'
+      : 'Ci sono ' + r.segnalazioni + ' segnalazioni di problemi da leggere: vai su Segnalazioni.');
     if (!r.ia && st.sotto !== 'ia') a.push('La classificazione assistita è spenta: inserisci la chiave di Gemini nel servizio su Render (vedi Intelligenza artificiale).');
     if (!r.dati) a.push('Non ci sono ancora dati TARIC: vai su Dati TARIC.');
     if (r.copia_esterna && st.sotto !== 'dati') a.push(r.copia_esterna === 'errore' ? 'L\'ultima copia del database fuori da Render non è riuscita: vedi Dati TARIC.' : 'La copia del database fuori da Render è spenta: manca qualcosa nelle variabili MAGIC_HS_COPIA_* (vedi Dati TARIC).');
@@ -228,12 +232,15 @@
     return h + '</div></div>';
   }
 
-  /* puntino sulla scheda Gestione quando ci sono richieste da approvare */
+  /* puntino sulla scheda Gestione quando ci sono richieste da approvare o segnalazioni da leggere */
   function segnaRichieste(r) {
     var tab = document.getElementById('tab-gestione');
     if (!tab) return;
-    tab.classList.toggle('novita', !!r.in_attesa);
-    if (r.in_attesa) tab.title = r.in_attesa === 1 ? 'Una richiesta di account da approvare' : r.in_attesa + ' richieste di account da approvare'; else tab.removeAttribute('title');
+    var t = [];
+    if (r.in_attesa) t.push(r.in_attesa === 1 ? 'una richiesta di account da approvare' : r.in_attesa + ' richieste di account da approvare');
+    if (r.segnalazioni) t.push(r.segnalazioni === 1 ? 'una segnalazione da leggere' : r.segnalazioni + ' segnalazioni da leggere');
+    tab.classList.toggle('novita', t.length > 0);
+    if (t.length) tab.title = t.join(', ').charAt(0).toUpperCase() + t.join(', ').slice(1); else tab.removeAttribute('title');
   }
   T.segnaRichieste = function () { T.api('GET', '/api/admin/riepilogo').then(segnaRichieste, function () { /* niente puntino */ }); };
 
@@ -286,6 +293,10 @@
         msg('carburante-leggi', 'Letto: Express ' + String(c.percentuale).replace('.', ',') + ' %' + (c.economy !== null ? ', Economy Select ' + String(c.economy).replace('.', ',') + ' %' : '') + '.', true);
         if (T.spedizione) T.spedizione.dimentica();
       }, function (e) { msg('carburante-leggi', errore(e)); }).then(function () { st.carburanteInCorso = false; return carica(); });
+    } else if (g === 'segnalazione-elimina') {
+      if (!window.confirm('Eliminare questa segnalazione? Non si può annullare.')) return true;
+      T.api('DELETE', '/api/admin/segnalazioni/' + id).then(function () { msg('segnalazioni', 'Segnalazione eliminata.', true); },
+        function (e) { msg('segnalazioni', errore(e)); }).then(carica);
     } else if (g === 'trasporto-usa') {
       T.api('POST', '/api/admin/trasporto/' + id + '/attiva').then(function () { msg('trasporto-pdf', 'Tariffa cambiata.', true); if (T.spedizione) T.spedizione.dimentica(); },
         function (e) { msg('trasporto-pdf', errore(e)); }).then(carica);
@@ -296,7 +307,14 @@
     } else return false;
     return true;
   }
-  function modulo(g, f, d) {
+  function modulo(g, f, d, premuto) {
+    if (g === 'segnalazione') {
+      var stato = premuto && premuto.getAttribute('data-stato') === 'aperta' ? 'aperta' : 'chiusa', prima = f.getAttribute('data-stato');
+      T.api('PUT', '/api/admin/segnalazioni/' + f.getAttribute('data-id'), { stato: stato, risposta: String(d.get('risposta') || '') }).then(function () {
+        msg('segnalazioni', stato === prima ? 'Risposta salvata.' : stato === 'chiusa' ? 'Segnalazione risolta.' : 'Segnalazione riaperta.', true);
+      }, function (e) { msg('segnalazioni', errore(e)); }).then(carica);
+      return true;
+    }
     if (g === 'u-limite') {
       var q = String(d.get('quota') || '').trim();
       T.api('PATCH', '/api/admin/utenti/' + f.getAttribute('data-id'), { quota_ia: q === '' ? null : parseInt(q, 10) })
@@ -408,6 +426,39 @@
     return h;
   }
 
+  /* ---------- segnalazioni di problemi dagli utenti (js/segnala.js): risposta, risolta o riaperta ---------- */
+  var SEZIONI = { classifica: 'Classifica', nomenclatura: 'Nomenclatura', bolla: 'Bolla', profilo: 'Profilo', gestione: 'Gestione' };
+  function browserBreve(ua) {
+    var b = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'browser';
+    var so = /iPhone|iPad/.test(ua) ? 'iPhone o iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : '';
+    return b + (so ? ' su ' + so : '');
+  }
+  function segnalazioni() {
+    var V = st.segnalazioni;
+    if (!V) return '<p class="vuoto">Carico…</p>';
+    var aperte = V.filter(function (x) { return x.stato === 'aperta'; }).length;
+    var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('attenzione') + 'Segnalazioni<span class="dx">' + (aperte ? aperte + ' da leggere' : 'nessuna da leggere') + '</span></div>' + riga('segnalazioni');
+    if (!V.length) h += '<p class="vuoto illustrato">' + (T.vignetta ? T.vignetta('gru') : '') + 'Nessuna segnalazione.</p>';
+    else h += '<div class="elenco">' + V.map(rigaSegnalazione).join('') + '</div>';
+    return h + '</div></div>';
+  }
+  function rigaSegnalazione(v) {
+    var c = v.contesto || {}, aperta = v.stato === 'aperta';
+    var dove = [SEZIONI[v.sezione] || v.sezione, c.codice ? 'codice ' + c.codice : '', c.schermo ? 'schermo ' + c.schermo : ''].filter(Boolean).join(' · ');
+    return '<div class="voce segnalazione' + (aperta ? ' nuova' : '') + '"><div>' +
+      '<span class="m">' + esc(T.dataOra(v.creata)) + ' · ' + esc(v.autore || 'account eliminato') + (v.email ? ' (' + esc(v.email) + ')' : '') + '</span> ' +
+      (aperta ? '<span class="st in_attesa">da leggere</span>' : '<span class="st ok">risolta</span>') +
+      '<p class="t">' + esc(v.testo) + '</p>' +
+      '<p class="m">' + esc(dove) + (c.browser ? ' · <span title="' + esc(c.browser) + '">' + esc(browserBreve(c.browser)) + '</span>' : '') +
+      (v.chiusa ? ' · risolta il ' + esc(T.dataOra(v.chiusa)) + (v.chiusa_da ? ' da ' + esc(v.chiusa_da) : '') : '') + '</p>' +
+      '<form class="modulo" data-g="segnalazione" data-id="' + esc(v.id) + '" data-stato="' + esc(v.stato) + '">' +
+      '<label>Risposta (la vede chi l\'ha mandata, nel suo profilo)<textarea class="campo" name="risposta" rows="2" maxlength="2000">' + esc(v.risposta) + '</textarea></label>' +
+      '<div class="fila">' + (aperta ? '<button class="btn sm pri" type="submit" data-stato="chiusa">' + T.icona('spunta') + 'Risolta</button>' +
+        '<button class="btn sm" type="submit" data-stato="aperta">Salva la risposta</button>'
+        : '<button class="btn sm" type="submit" data-stato="chiusa">Salva la risposta</button><button class="btn sm" type="submit" data-stato="aperta">Riapri</button>') +
+      '<button class="btn sm" type="button" data-g="segnalazione-elimina" data-id="' + esc(v.id) + '">' + T.icona('cestino') + 'Elimina</button></div></form></div></div>';
+  }
+
   /* ---------- registro ---------- */
   function registro() {
     var h = '<div class="foglio"><div class="box"><div class="lab">' + T.icona('registro') + 'Registro degli eventi<span class="dx">ultimi ' + st.eventi.length + '</span></div>';
@@ -433,7 +484,7 @@
     if (!g) return;
     ev.preventDefault();
     var d = new FormData(f);
-    if (modulo(g, f, d)) return;
+    if (modulo(g, f, d, ev.submitter)) return;
     if (g === 'aggiorna') {
       T.api('POST', '/api/admin/dati/aggiorna', { mese: String(d.get('mese') || '').trim() })
         .then(function (r) { msg('aggiorna', 'Aggiornamento di ' + nomeMese(r.mese) + ' avviato: segui l\'avanzamento qui sopra.', true); }, function (e) { msg('aggiorna', errore(e)); }).then(carica);
