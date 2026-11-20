@@ -543,7 +543,7 @@
   /* ---------------------------------------------------------------- Simone, l'autore di MAGIC HS
      Stile da cartone animato: contorno nero sottile e uniforme, colori piatti, testa grande, occhi grandi con le palpebre
      un po' abbassate, naso a ricciolo, bocca a una linea. Capelli mossi sopra e rasati sfumati ai lati, occhiali tondi
-     sottili, barba corta, orecchino, felpa con il cappuccio. Il busto (T.autore) firma le pagine e le risposte alle
+     neri, barba corta, orecchino, felpa con il cappuccio. Il busto (T.autore) firma le pagine e le risposte alle
      segnalazioni; a braccia alzate esulta nel gioco. La testa (120 x 140) si riusa piccola per la figura sulla banchina, che
      saluta quando la si tocca (js/porto.js), e nella cabina del gioco. Colori nelle variabili --av-* di app.css. */
   T.AUTORE = 'Simone';
@@ -565,8 +565,8 @@
       '<path class="av-barba av-t" d="M50.6 77.4C53.8 74.8 57.2 74.8 60 76.2C62.8 74.8 66.2 74.8 69.4 77.4C66.2 77.2 63 77.6 60 78.2C57 77.6 53.8 77.2 50.6 77.4Z"/>' +
       '<path class="av-linea" d="M54.6 82.2Q60.2 85 65.6 81.8"/><path class="av-linea" d="M61 62.5C57.8 64.2 58.2 68.4 62.2 68"/>' +
       occhio(49.5) + occhio(70.5) +
-      '<circle class="av-fine" cx="49.5" cy="56" r="9.9"/><circle class="av-fine" cx="70.5" cy="56" r="9.9"/>' +
-      '<path class="av-fine" d="M59.4 55.2Q60 54.4 60.6 55.2M39.6 54.8L31.6 53.6M80.4 54.8L88.4 53.6"/>' +
+      '<circle class="av-montatura" cx="49.5" cy="56" r="10.1"/><circle class="av-montatura" cx="70.5" cy="56" r="10.1"/>' +
+      '<path class="av-montatura" d="M59.4 55Q60 54 60.6 55M39.4 54.6L31.4 53.4M80.6 54.6L88.6 53.4"/>' +
       // capelli mossi solo sopra
       '<path class="av-capelli av-t" d="M36.6 31C37 21.5 43.6 15.6 48.6 17.8C51.6 11.2 59.6 10.2 62.2 14.8C66.2 10.4 74.4 12 75.4 17.6C80.6 16.6 84.6 22.6 83.4 31' +
       'C81.6 33.6 79 34.2 76.8 32.4C73.6 34.6 69.4 34.4 66.8 32.4C63.6 34.8 58.8 34.6 56.2 32.4C53 34.6 48.6 34.4 46 32.2C43.2 34.2 39 34 36.6 31Z"/>' +
@@ -575,12 +575,15 @@
   T.autoreTesta = testaAutore;
   T.autore = function (opz) {
     opz = opz || {};
-    var braccia = 'M30 122Q20 106 21 90Q21 78 24 70M90 122Q100 106 99 90Q99 78 96 70';
+    // a braccia alzate: busto stretto che scende dalle ascelle, braccia dalle spalle aperte a V (lontane dalla testa)
+    var braccia = 'M31 117Q21 101 16.5 83Q14.5 75 13.5 68M89 117Q99 101 103.5 83Q105.5 75 106.5 68';
     var su = opz.esulta ? '<path class="av-bordo-m" d="' + braccia + '"/><path class="av-manica" d="' + braccia + '"/>' +
-      '<circle class="av-pelle av-t" cx="24.5" cy="64" r="6"/><circle class="av-pelle av-t" cx="95.5" cy="64" r="6"/>' : '';
+      '<circle class="av-pelle av-t" cx="13" cy="62" r="6"/><circle class="av-pelle av-t" cx="107" cy="62" r="6"/>' : '';
+    var busto = opz.esulta ? 'M23 140C24 131 25.5 125 27 120.5C33 110.5 44 106.5 60 106.5C76 106.5 87 110.5 93 120.5C94.5 125 96 131 97 140Z'
+      : 'M12 140C13 118 30 106.5 60 106.5C90 106.5 107 118 108 140Z';
     return '<svg class="avatar' + (opz.esulta ? ' esulta' : '') + (opz.classe ? ' ' + opz.classe : '') + '" viewBox="0 0 120 140" aria-hidden="true" focusable="false">' + su +
-      '<path class="av-felpa av-t" d="M12 140C13 118 30 106.5 60 106.5C90 106.5 107 118 108 140Z"/>' +
-      '<path class="av-linea" d="M30 140C31 130 32 124 34 120M90 140C89 130 88 124 86 120"/>' +
+      '<path class="av-felpa av-t" d="' + busto + '"/>' +
+      (opz.esulta ? '' : '<path class="av-linea" d="M30 140C31 130 32 124 34 120M90 140C89 130 88 124 86 120"/>') +
       '<path class="av-felpa2 av-t" d="M38 109.6C38 100.6 47.4 96 60 96C72.6 96 82 100.6 82 109.6C82 116 72.4 119.6 60 119.6C47.6 119.6 38 116 38 109.6Z"/>' +
       '<path class="av-pelle av-t" d="M54 95V109C57 111.4 63 111.4 66 109V95Z"/>' +
       '<path class="av-felpa av-t" d="M44 111C49 116.4 54.6 118 60 118C65.4 118 71 116.4 76 111C73 120.4 67 124.4 60 124.4C53 124.4 47 120.4 44 111Z"/>' +

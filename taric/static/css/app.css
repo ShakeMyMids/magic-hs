@@ -40,7 +40,7 @@
   --g-cappello:#ffffff; --g-banda:#1b5584; --g-visiera:#17222e; --g-stemma:#e9a72e; --g-colletto:#1b5584; --g-nodo:#e9772e;
   --aiuto-velo:rgba(10,24,38,.42);
   /* Simone, l'autore (js/disegni.js: T.autore e la figura sulla banchina) */
-  --av-pelle:#eddcb4; --av-tratto:#141414; --av-capelli:#3f2b1f; --av-barba:#94735a; --av-occhio:#fdfdf8;
+  --av-pelle:#eddcb4; --av-tratto:#141414; --av-montatura:#0b0b0b; --av-capelli:#3f2b1f; --av-barba:#94735a; --av-occhio:#fdfdf8;
   --av-sfuma-1:#6e5b4b; --av-sfuma-2:#b7a385; --av-felpa:#3a689a; --av-felpa-ombra:#2b5079; --av-laccio:#f3f1ea;
   --av-pantaloni:#24324a; --av-scarpa:#f4f6f8; --av-cartellina:#a0703e; --av-foglio:#f5f7fa;
   /* stagioni e feste (js/calendario.js) */
@@ -1054,12 +1054,13 @@ html.con-finestra{overflow:hidden}
 .av-sfuma1{fill:var(--av-sfuma-1)} .av-sfuma2{fill:var(--av-sfuma-2)} .av-felpa{fill:var(--av-felpa)} .av-felpa2{fill:var(--av-felpa-ombra)}
 .av-linea,.av-fine,.av-laccio{fill:none;stroke-linecap:round;stroke-linejoin:round}
 .av-linea{stroke:var(--av-tratto);stroke-width:1.25} .av-fine{stroke:var(--av-tratto);stroke-width:1} .av-laccio{stroke:var(--av-laccio);stroke-width:1.6}
+.av-montatura{fill:none;stroke:var(--av-montatura);stroke-width:2.3;stroke-linecap:round}
 .av-bordo-m,.av-manica{fill:none;stroke-linecap:round}
 .av-bordo-m{stroke:var(--av-tratto);stroke-width:14.5} .av-manica{stroke:var(--av-felpa);stroke-width:12}
 /* la figura sulla banchina */
 .t-simone{cursor:var(--mano,pointer)}
-.av-piccola .av-t,.av-piccola .av-linea{stroke-width:5} .av-piccola .av-fine{stroke-width:5} .av-piccola .av-ricci{display:none}
-.av-media .av-t,.av-media .av-linea{stroke-width:2.6} .av-media .av-fine{stroke-width:2.2} .av-media .av-ricci{display:none}
+.av-piccola .av-t,.av-piccola .av-linea{stroke-width:5} .av-piccola .av-fine{stroke-width:5} .av-piccola .av-montatura{stroke-width:7} .av-piccola .av-ricci{display:none}
+.av-media .av-t,.av-media .av-linea{stroke-width:2.6} .av-media .av-fine{stroke-width:2.2} .av-media .av-montatura{stroke-width:3.6} .av-media .av-ricci{display:none}
 .av-t-s{stroke:var(--av-tratto);stroke-width:.5;stroke-linejoin:round}
 .av-pantaloni{fill:var(--av-pantaloni);stroke:var(--av-tratto);stroke-width:.4}
 .av-scarpa{fill:var(--av-scarpa);stroke:var(--av-tratto);stroke-width:.4}
