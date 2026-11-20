@@ -1,9 +1,9 @@
-/* MAGIC HS - Gabbo, il gabbiano marinaio dell'aiuto. Con il tasto «?» della barra (o il tasto ? fuori dai campi) arriva in
+/* MAGIC HS - Marino, il gabbiano marinaio dell'aiuto. Con il tasto «?» della barra (o il tasto ? fuori dai campi) arriva in
    volo e spiega la sezione aperta a passi: illumina una parte della pagina alla volta e la racconta nel fumetto, con
    Indietro, Avanti e Chiudi (anche con le frecce e con Esc). Gestione no: lì il tasto non c'è.
    I passi di ogni vista sono in PASSI: «e» trova l'elemento da illuminare nella pagina com'è adesso; se non c'è il passo
    si salta (il primo e l'ultimo parlano senza indicare niente). I colori del disegno sono le variabili --g-* di app.css;
-   con il movimento ridotto Gabbo compare e sparisce senza volare. */
+   con il movimento ridotto Marino compare e sparisce senza volare. */
 (function () {
   'use strict';
   var T = window.TARIC, esc = T.esc;
@@ -12,26 +12,26 @@
   var aperto = null;            // { el, passi, i, prima, ultimoPosto }
 
   /* ------------------------------------------------------------------ il gabbiano (in piedi; .vola: ali alzate) */
-  var GABBO = '<svg class="gabbo" viewBox="0 0 100 110" aria-hidden="true" focusable="false">' +
-    '<g class="gb-zampe"><path class="gb-gamba" d="M43 88 L42 100M57 88 L57 100"/>' +
+  var MARINO = '<svg class="marino" viewBox="0 0 100 110" aria-hidden="true" focusable="false">' +
+    '<g class="mr-zampe"><path class="mr-gamba" d="M43 88 L42 100M57 88 L57 100"/>' +
     '<path d="M34 103.5 Q36 99 42 99.5 Q48 99 50 103.5 L46 102.5 L42 104 L38 102.5 Z"/><path d="M49 103.5 Q51 99 57 99.5 Q63 99 65 103.5 L61 102.5 L57 104 L53 102.5 Z"/></g>' +
-    '<g class="gb-ala-su gb-dietro"><path class="gb-ala" d="M52 58 C53 42 51 26 46 10 L41 20 L45 21 L39 32 L44 33 L40 44 L46 45 L45 55 Z"/></g>' +
-    '<path class="gb-punta" d="M24 70 L6 77 L9 82 L27 79 Z"/>' +
-    '<path class="gb-bianco" d="M52 46 C70 47 79 61 77 74 C75 87 63 93 49 93 C33 93 21 84 21 71 C21 57 34 46 52 46 Z"/>' +
-    '<path class="gb-ombra" d="M73 70 C72 83 62 90 49 90 C60 86 69 80 73 70 Z"/>' +
-    '<g class="gb-ala-giu"><path class="gb-ala" d="M27 63 C35 55 52 57 58 67 C61 77 51 86 35 84 C25 83 19 74 27 63 Z"/>' +
-    '<path class="gb-punta" d="M27 75 C20 79 13 82 7 83 C13 76 20 72 28 70 Z"/></g>' +
-    '<g class="gb-ala-su gb-davanti"><path class="gb-ala" d="M44 62 C42 44 34 24 16 6 L11 18 L15 19.5 L7 30 L12 31.5 L6 42 L13 42.5 L11 53 L19 52 L23 62 C30 66 38 66 44 62 Z"/>' +
-    '<path class="gb-punta" d="M16 6 C18.5 9 20 12 21 15 L15 19.5 L11 18 Z"/></g>' +
-    '<path class="gb-colletto" d="M42 51 L54 59 L67 49 L66 57 L54 66 L43 59 Z"/><circle class="gb-nodo" cx="54" cy="61" r="3.2"/>' +
-    '<g class="gb-testa"><circle class="gb-bianco" cx="58" cy="35" r="17"/><ellipse class="gb-guancia" cx="65" cy="43" rx="3.6" ry="2.3"/>' +
-    '<g class="gb-occhio"><circle class="gb-pupilla" cx="63" cy="32" r="3.4"/><circle class="gb-luce" cx="64.3" cy="30.8" r="1.1"/></g>' +
-    '<path class="gb-becco gb-becco-giu" d="M71 41 Q80 41 85 42 Q79 46.5 72 44.5 Z"/><path class="gb-becco" d="M70 36 Q82 35 91 39.5 Q82 41.5 71 41.5 Z"/>' +
-    '<circle class="gb-macchia" cx="83" cy="42.6" r="1.5"/>' +
-    '<g class="gb-berretto" transform="rotate(-8 58 22)"><path class="gb-cappello" d="M43 25 Q40 13 58 11 Q77 11 75 23 Z"/>' +
-    '<path class="gb-banda" d="M42.5 22 L75.5 21 L76 27 L43 28 Z"/><path class="gb-visiera" d="M61 27 Q73 26 80 30 Q70 32 60 30.5 Z"/>' +
-    '<circle class="gb-stemma" cx="58" cy="24.5" r="2"/></g></g></svg>';
-  T.gabbo = function () { return GABBO; };
+    '<g class="mr-ala-su mr-dietro"><path class="mr-ala" d="M52 58 C53 42 51 26 46 10 L41 20 L45 21 L39 32 L44 33 L40 44 L46 45 L45 55 Z"/></g>' +
+    '<path class="mr-punta" d="M24 70 L6 77 L9 82 L27 79 Z"/>' +
+    '<path class="mr-bianco" d="M52 46 C70 47 79 61 77 74 C75 87 63 93 49 93 C33 93 21 84 21 71 C21 57 34 46 52 46 Z"/>' +
+    '<path class="mr-ombra" d="M73 70 C72 83 62 90 49 90 C60 86 69 80 73 70 Z"/>' +
+    '<g class="mr-ala-giu"><path class="mr-ala" d="M27 63 C35 55 52 57 58 67 C61 77 51 86 35 84 C25 83 19 74 27 63 Z"/>' +
+    '<path class="mr-punta" d="M27 75 C20 79 13 82 7 83 C13 76 20 72 28 70 Z"/></g>' +
+    '<g class="mr-ala-su mr-davanti"><path class="mr-ala" d="M44 62 C42 44 34 24 16 6 L11 18 L15 19.5 L7 30 L12 31.5 L6 42 L13 42.5 L11 53 L19 52 L23 62 C30 66 38 66 44 62 Z"/>' +
+    '<path class="mr-punta" d="M16 6 C18.5 9 20 12 21 15 L15 19.5 L11 18 Z"/></g>' +
+    '<path class="mr-colletto" d="M42 51 L54 59 L67 49 L66 57 L54 66 L43 59 Z"/><circle class="mr-nodo" cx="54" cy="61" r="3.2"/>' +
+    '<g class="mr-testa"><circle class="mr-bianco" cx="58" cy="35" r="17"/><ellipse class="mr-guancia" cx="65" cy="43" rx="3.6" ry="2.3"/>' +
+    '<g class="mr-occhio"><circle class="mr-pupilla" cx="63" cy="32" r="3.4"/><circle class="mr-luce" cx="64.3" cy="30.8" r="1.1"/></g>' +
+    '<path class="mr-becco mr-becco-giu" d="M71 41 Q80 41 85 42 Q79 46.5 72 44.5 Z"/><path class="mr-becco" d="M70 36 Q82 35 91 39.5 Q82 41.5 71 41.5 Z"/>' +
+    '<circle class="mr-macchia" cx="83" cy="42.6" r="1.5"/>' +
+    '<g class="mr-berretto" transform="rotate(-8 58 22)"><path class="mr-cappello" d="M43 25 Q40 13 58 11 Q77 11 75 23 Z"/>' +
+    '<path class="mr-banda" d="M42.5 22 L75.5 21 L76 27 L43 28 Z"/><path class="mr-visiera" d="M61 27 Q73 26 80 30 Q70 32 60 30.5 Z"/>' +
+    '<circle class="mr-stemma" cx="58" cy="24.5" r="2"/></g></g></svg>';
+  T.marino = function () { return MARINO; };
 
   /* ------------------------------------------------------------------ dove siamo e cosa c'è nella pagina */
   function sezione() { return document.querySelector('main > section[id^="view-"]:not([hidden])'); }
@@ -56,7 +56,7 @@
       var sw = document.getElementById('interruttore-ia'), conIA = visibile(sw), bloccata = !!(sw && sw.classList.contains('con-divieto'));
       var proposta = !!q('#esito .principale .perche'), archivio = tutti('#risultati .lab').some(function (l) { return /azienda/.test(l.textContent); });
       return [
-        { t: 'Classifica', d: 'Ciao, sono Gabbo! Qui trovi il codice TARIC di una merce: cercalo con una parola o con un codice' +
+        { t: 'Classifica', d: 'Qui trovi il codice TARIC di una merce: cercalo con una parola o con un codice' +
           (conIA ? ', oppure fatti aiutare dall\'IA.' : '.') },
         ia ? { t: 'Descrivi la merce', d: 'Descrivila come a un collega: cos\'è, di che materiale, a cosa serve. Poi premi «Classifica».', e: sel('.cerca-merce') }
           : { t: 'Cerca', d: 'Scrivi una parola, come «scarpe di cuoio», o le prime cifre di un codice e premi «Cerca». Conosco anche i sinonimi.', e: sel('.cerca-merce') },
@@ -147,12 +147,13 @@
     var v = vista();
     if (aperto || !PASSI[v] || document.querySelector('.velo')) return;
     var passi = PASSI[v]().filter(function (p, k, tuttiPassi) { return !p.e || k === tuttiPassi.length - 1 || p.e(); });
+    passi[0] = { t: passi[0].t, d: 'Ciao, sono Marino! ' + passi[0].d };      // si presenta in ogni sezione
     var el = document.createElement('div');
     el.className = 'aiuto arriva';
     el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-labelledby', 'aiuto-titolo'); el.setAttribute('aria-describedby', 'aiuto-testo');
     el.innerHTML = '<div class="aiuto-blocco"></div><div class="aiuto-luce senza"></div>' +
-      '<div class="aiuto-posto"><div class="aiuto-gabbiano vola">' + GABBO + '</div>' +
+      '<div class="aiuto-posto"><div class="aiuto-gabbiano vola">' + MARINO + '</div>' +
       '<div class="aiuto-fumetto"><div class="aiuto-testa"><b id="aiuto-titolo"></b><span class="aiuto-passo"></span>' +
       '<button class="tasto-ico" type="button" data-aiuto="chiudi" aria-label="Chiudi l\'aiuto">' + T.icona('chiudi') + '</button></div>' +
       '<p id="aiuto-testo" aria-live="polite"></p>' +
@@ -279,7 +280,7 @@
       else if (!aperto.el.contains(document.activeElement)) { ev.preventDefault(); b[0].focus(); }
     }
   }, true);
-  /* il tasto c'è in tutte le sezioni tranne Gestione; cambiando sezione Gabbo se ne va */
+  /* il tasto c'è in tutte le sezioni tranne Gestione; cambiando sezione Marino se ne va */
   function aggiorna() { var v = vista(); tasto.hidden = !PASSI[v]; if (aperto && aperto.vista !== v) chiudi(); }
   var osserva = new MutationObserver(aggiorna);
   Array.prototype.forEach.call(document.querySelectorAll('main > section[id^="view-"]'), function (s) { osserva.observe(s, { attributes: true, attributeFilter: ['hidden'] }); });
