@@ -124,6 +124,7 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   `T.festone` (striscia in cima alla barra) e `T.accessorio` (logo); `comune.js` li inserisce con `data-auguri` e
   l'avviso dell'anteprima), `js/gioco.js` (`T.gioco()`, «Carica la nave»: SVG con le variabili `--d-*`, record in `localStorage`
   `magic-hs.gioco`), `T.vignetta()` di `disegni.js` per gli elenchi vuoti, codici recenti di `app.js` (`magic-hs.recenti`),
+  `js/aiuto.js` (Gabbo, il gabbiano marinaio dell'aiuto: tasto `#aiuto` «?» nella barra, nascosto in Gestione, o il tasto ?; visita a passi della sezione aperta con `PASSI[vista]`, ogni passo con `t`, `d` ed `e` che trova l'elemento da illuminare, spesso il `.box` dalla sua `.lab` con `box(/^…/)`: i passi senza elemento si saltano, quindi se cambi un'etichetta o un riquadro controlla i passi; luce `.aiuto-luce` e fumetto `.aiuto-posto` seguiti a ogni fotogramma; disegno SVG con le classi `gb-*` e i colori `--g-*`; le prove sono in `tests/e2e_sito.js`),
   `js/attiva-ia.js` (festa alla prima «Prova» riuscita
   dell'amministratore: `T.festaIA`, scena `T.festa()` di `disegni.js`, animazioni `.festa` in `app.css` con lo stato
   finale uguale a quello senza animazioni). Tema «porto»: blu marina e arancio dei container, colori solo nelle variabili

@@ -187,6 +187,7 @@ async function accedi(p, email, password) {
   await capo.waitForSelector('button[data-g="u-apri"]');
   ok((await capo.$$('button[data-g="u-apri"]')).length === 1 && await capo.isVisible('td >> text=capo@azienda.it'), 'in Utenti c\'è l\'amministratore');
   ok((await capo.$$('.sotto button')).length === 6, 'Utenti, IA, Dati TARIC, Ricerca, Trasporto, Registro');
+  ok(await capo.isHidden('#aiuto'), 'in Gestione niente tasto dell\'aiuto');
 
   // parole cercate senza risultati e sinonimo aggiunto dall'amministratore
   await capo.click('button[data-v="ricerca"]');
@@ -301,6 +302,20 @@ async function accedi(p, email, password) {
 
   // bolla simulata: biciclette dalla Cina con antidumping (produttore «altri», B999) in dollari (finta BCE: 1 € = 1,0867 USD)
   await capo.click('#tab-bolla');
+  // aiuto: Gabbo, il gabbiano, spiega la sezione a passi (elenco delle bolle: 5 passi), con le frecce, Esc e il tasto ?
+  await capo.waitForSelector('[data-b="nuova"]');
+  await capo.click('#aiuto'); await capo.waitForSelector('.aiuto .aiuto-fumetto');
+  ok((await capo.textContent('#aiuto-titolo')) === 'Bolla' && (await capo.textContent('.aiuto-passo')) === '1 di 5' && await capo.isVisible('.aiuto .gabbo'),
+    'aiuto: Gabbo arriva e presenta la Bolla');
+  await capo.keyboard.press('ArrowRight');
+  await capo.waitForSelector('.aiuto-luce:not(.senza)');                   // la luce si allarga sulla parte spiegata
+  ok((await capo.textContent('#aiuto-titolo')) === 'Nuova bolla', 'aiuto: avanti con la freccia, la parte spiegata è illuminata');
+  await capo.keyboard.press('Escape'); await capo.waitForSelector('.aiuto', { state: 'detached' });
+  await capo.keyboard.press('?'); await capo.waitForSelector('.aiuto .aiuto-fumetto');
+  for (let k = 0; k < 4; k++) await capo.click('[data-aiuto="avanti"]');
+  ok((await capo.textContent('.aiuto-passo')) === '5 di 5' && (await capo.textContent('[data-aiuto="avanti"]')).includes('Fine'), 'aiuto: l\'ultimo passo indica il tasto «?»');
+  await capo.click('[data-aiuto="avanti"]'); await capo.waitForSelector('.aiuto', { state: 'detached' });
+  ok(true, 'aiuto: Esc, il tasto ? e Fine aprono e chiudono Gabbo');
   await capo.click('[data-b="nuova"][data-tipo="import"]');
   await capo.fill('[data-f="riferimento"]', 'Fattura di prova');
   await capo.fill('[data-f="valuta"]', 'USD'); await capo.press('[data-f="valuta"]', 'Tab');

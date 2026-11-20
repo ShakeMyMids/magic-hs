@@ -63,7 +63,7 @@
     var t = ev.target;
     if (ev.ctrlKey || ev.metaKey || ev.altKey || !ev.key || ev.key.length !== 1) return;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-    if (document.querySelector('.velo')) return;                          // c'è una finestra aperta (anche il gioco)
+    if (document.querySelector('.velo, .aiuto')) return;                  // c'è una finestra aperta (anche il gioco) o l'aiuto
     scritto = (scritto + ev.key.toLowerCase()).slice(-8);
     Object.keys(PAROLE).forEach(function (p) {
       if (scritto.slice(-p.length) === p) { scritto = ''; PAROLE[p](); }

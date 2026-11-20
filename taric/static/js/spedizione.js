@@ -90,9 +90,11 @@
     el.innerHTML = h;
     calcola();
   }
+  /* il paese della tariffa scelto (nessuno con il campo vuoto: +'' sarebbe 0, l'Italia) */
+  function paeseScelto() { return dati && dati.tariffa && st.paese !== '' ? dati.tariffa.paesi[+st.paese] || null : null; }
   /* allegato 23-01: le zone del paese di partenza (più di una per Stati Uniti, Canada e Russia: dipende dall'aeroporto) */
   function allegato() {
-    var p = dati && dati.tariffa ? dati.tariffa.paesi[+st.paese] : null;
+    var p = paeseScelto();
     return { paese: p, zone: p ? AEREO.paesi[p.codice] || '' : '', aeroporti: p ? AEREO.aeroporti[p.codice] || {} : {} };
   }
   function quotaAllegato() {
@@ -142,7 +144,7 @@
     return '<p class="nota" id="sp-nota">' + esc(testo) + '</p>';
   }
   function opzioniServizio() {
-    var t = dati.tariffa, p = t.paesi[+st.paese], disp = p && Array.isArray(p.servizi) ? p.servizi : null;
+    var p = paeseScelto(), disp = p && Array.isArray(p.servizi) ? p.servizi : null;
     return ['worldwide', '12:00', '10:30', '9:00', 'economy'].map(function (s) {
       var no = disp && disp.indexOf(s) < 0;
       return '<option value="' + s + '"' + (s === st.servizio ? ' selected' : '') + (no ? ' disabled' : '') + '>' + esc(X.NOMI[s] + (no ? ' (non disponibile)' : '')) + '</option>';
@@ -221,7 +223,7 @@
     if (k === 'zonaAerea') { aggiornaAllegato(); }
     if (k === 'paese') {
       st.zonaAerea = ''; aggiornaAllegato();
-      var p = dati.tariffa.paesi[+st.paese];
+      var p = paeseScelto();
       if (p && Array.isArray(p.servizi) && p.servizi.indexOf(st.servizio) < 0) st.servizio = 'worldwide';
       var s = el.querySelector('#sp-servizio'); if (s) s.innerHTML = opzioniServizio();
     }
