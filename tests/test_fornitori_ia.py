@@ -223,3 +223,28 @@ def test_prova_del_servizio_e_azure(ambiente):
     assert c.post("/api/admin/ia/prova?livello=standard").json()["modello"] == "gpt-classifica"
     assert [x["corpo"]["model"] for x in s.claude.richieste[-2:]] == ["gpt-mini", "gpt-classifica"]
     assert c.post("/api/admin/ia/prova?livello=altro").status_code == 422
+
+
+def test_gemini_limiti_con_i_testi_veri(ambiente):
+    """Gemini scrive in ogni 429 «check your plan and billing details»: e' un limite al minuto o al giorno, da riprovare
+    o da spiegare come tale, non il credito finito. Il credito finito di OpenAI e' un 429 «insufficient_quota»."""
+    s, a = sito_con_ia(ambiente, fornitore="gemini", chiave="chiave-gemini")
+    testo = ("You exceeded your current quota, please check your plan and billing details. For more information on this error, "
+             "head to: https://ai.google.dev/gemini-api/docs/rate-limits.\n* Quota exceeded for metric: "
+             "generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-2.0-flash")
+    errore = lambda quota: httpx.Response(429, json={"error": {"code": 429, "message": testo, "status": "RESOURCE_EXHAUSTED", "details": [
+        {"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{"quotaId": quota}]},
+        {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "3s"}]}})
+    s.claude.risposte = [errore("GenerateRequestsPerMinutePerProjectPerModel-FreeTier"), FintoClaude.testo('{"voci": []}'),
+                         errore("GenerateRequestsPerDayPerProjectPerModel-FreeTier")]
+    assert a.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": "a"}).status_code == 200    # riprovata da sola
+    assert s.attese == [3.0]
+    r = a.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": "b"}).json()
+    assert r["codice"] == "limite_giornaliero"
+
+
+def test_openai_credito_finito(ambiente):
+    s2, a2 = sito_con_ia(ambiente, fornitore="openai", chiave="k", url="https://api.example.com/v1", modello="m")
+    s2.claude.risposte = [httpx.Response(429, json={"error": {"message": "You exceeded your current quota, please check your plan and billing details.",
+                                                              "type": "insufficient_quota", "code": "insufficient_quota"}})]
+    assert a2.post("/api/ia", json={"prompt": "x", "livello": "rapido", "operazione": "a"}).json()["codice"] == "credito_esaurito"

@@ -218,8 +218,9 @@ class Database:
         with self.connessione() as c:
             versione = c.execute("PRAGMA user_version").fetchone()[0]
             for n, sql in enumerate(SCHEMA[versione:], start=versione + 1):
-                c.executescript(sql)
-                c.execute(f"PRAGMA user_version = {n}")
+                # migrazione e numero di versione in una sola transazione: un'interruzione a meta' non lascia uno schema
+                # a meta' (che al riavvio si rifarebbe da capo, con «duplicate column» e il sito fermo)
+                c.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {n};\nCOMMIT;")
 
     @contextmanager
     def connessione(self) -> Iterator[sqlite3.Connection]:

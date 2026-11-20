@@ -8,6 +8,14 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   };
+  /* 'AAAA-MM' -> «novembre 2026» ('' se non è un mese) */
+  var MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+  T.meseIt = function (m) {
+    var x = /^(\d{4})-(\d{2})$/.exec(m || '');
+    return x && +x[2] >= 1 && +x[2] <= 12 ? MESI[+x[2] - 1] + ' ' + x[1] : '';
+  };
+  /* la prima riga di un testo, accorciata a n caratteri con i puntini */
+  T.taglia = function (s, n) { s = String(s || '').split('\n')[0]; return s.length > n ? s.slice(0, n - 1).trim() + '…' : s; };
 
   /* Chiamata alle API del sito. Risolve con il JSON della risposta; in caso d'errore rifiuta con
      { stato, codice, errore }. Con una sessione scaduta torna alla pagina di accesso (salvo opzioni.resta). */

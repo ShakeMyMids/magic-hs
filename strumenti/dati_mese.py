@@ -26,7 +26,7 @@ def main(argv: list[str]) -> int:
         return 1
     mese, uscita = argv[0], Path(argv[1])
     with tempfile.TemporaryDirectory() as tmp:
-        cfg = carica({"TARIC_DATI": tmp, "TARIC_DATI_URL": "", "TARIC_AGGIORNAMENTI_URL": ""})   # sempre dalla fonte
+        cfg = carica({"TARIC_DATI": tmp, "TARIC_DATI_URL": ""})          # sempre dalla fonte
         dati = GestoreDati(cfg, Database(Path(tmp) / "taric.db"))
         r = dati.esegui(mese, "github")
         print(f"{r['esito']}: {r['messaggio']}")

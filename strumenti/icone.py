@@ -7,17 +7,17 @@ DEST = Path(sys.argv[2])
 MAPPA = {
     "cerca": "search", "bacchetta": "wand-sparkles", "albero": "list-tree", "utente": "circle-user-round",
     "gestione": "settings-2", "sole": "sun", "luna": "moon", "auto": "sun-moon", "esci": "log-out", "copia": "copy",
-    "stella": "star", "libro": "book-open", "spunta": "check", "chiudi": "x", "giu": "chevron-down", "destra": "chevron-right",
-    "storico": "history", "scarica": "download", "carica": "upload", "aggiorna": "refresh-cw", "posta": "mail",
-    "attenzione": "triangle-alert", "info": "info", "documento": "file-text", "percento": "percent", "globo": "globe",
+    "stella": "star", "libro": "book-open", "spunta": "check", "chiudi": "x", "giu": "chevron-down",
+    "storico": "history", "scarica": "download", "carica": "upload", "aggiorna": "refresh-cw",
+    "attenzione": "triangle-alert", "documento": "file-text", "percento": "percent", "globo": "globe",
     "pacco": "package", "importa": "arrow-down-to-line", "esporta": "arrow-up-from-line", "cestino": "trash-2",
     "chiave": "key-round", "utenti": "users", "database": "database", "registro": "scroll-text", "attesa": "loader-circle",
     "ferma": "circle-stop", "domanda": "circle-help", "timbro": "badge-check", "link": "link", "grafico": "chart-column",
     "regole": "list-checks", "lucchetto": "lock", "filtro": "funnel", "nota": "notebook-pen", "calendario": "calendar",
     "scintille": "sparkles", "indietro": "arrow-left", "piu": "plus", "matita": "pencil", "nuovo-utente": "user-plus",
-    "scudo": "shield-check", "fatto": "circle-check-big", "nave": "ship", "cartella": "folder-sync",
-    "computer": "monitor", "aereo": "plane", "treno": "train-front", "camion": "truck", "container": "container",
-    "ancora": "anchor", "installa": "monitor-smartphone", "condividi": "share", "divieto": "ban",
+    "fatto": "circle-check-big", "nave": "ship",
+    "computer": "monitor", "aereo": "plane", "camion": "truck", "container": "container",
+    "installa": "monitor-smartphone", "condividi": "share", "divieto": "ban",
 }
 out = {}
 for nome, lucide in MAPPA.items():

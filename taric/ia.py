@@ -149,7 +149,15 @@ def _codice_http(r: httpx.Response, modello: str) -> ErroreIA:
     log.error("servizio IA: HTTP %s %s", r.status_code, testo[:400])
     if "api key" in basso or "api_key" in basso or "unauthenticated" in basso or r.status_code == 401:
         return ErroreIA("server_misconfigured", 503, "chiave non valida")
-    if "billing" in basso or "credit balance" in basso or "spend limit" in basso or "insufficient_quota" in basso or "payment" in basso:
+    # credito finito: OpenAI lo dice con un 429 «insufficient_quota», Gemini con «prepayment credits are depleted»
+    credito = "insufficient_quota" in basso or "credits are depleted" in basso
+    if r.status_code == 429 and not credito:
+        # limite al minuto o al giorno. Gemini scrive sempre «check your plan and billing details»: non e' il credito.
+        # Indica nel testo se il limite superato e' quello giornaliero (tipico del piano gratuito)
+        if "perday" in basso or "per day" in basso or "daily" in basso:
+            return ErroreIA("limite_giornaliero", 429)
+        return ErroreIA("rate_limited", 429)
+    if credito or "billing" in basso or "credit balance" in basso or "spend limit" in basso or "payment" in basso:
         return ErroreIA("credito_esaurito", 503)
     if "location is not supported" in basso or "not available in your country" in basso:
         return ErroreIA("regione_non_supportata", 503)
@@ -157,11 +165,6 @@ def _codice_http(r: httpx.Response, modello: str) -> ErroreIA:
         return ErroreIA("server_misconfigured", 503, f"modello {modello} non disponibile")
     if r.status_code == 403:
         return ErroreIA("server_misconfigured", 503, "permesso negato")
-    if r.status_code == 429:
-        # Gemini indica nel testo se il limite superato e' quello giornaliero (tipico del piano gratuito)
-        if "perday" in basso or "per day" in basso or "daily" in basso:
-            return ErroreIA("limite_giornaliero", 429)
-        return ErroreIA("rate_limited", 429)
     if r.status_code in (500, 502, 503, 504, 529):
         return ErroreIA("overloaded", 503)
     if "too long" in basso or "too many tokens" in basso or "exceeds the maximum" in basso or "context length" in basso:
@@ -189,12 +192,13 @@ class ServizioIA:
 
     # ------------------------------------------------------------------ limite mensile (in classificazioni)
     def limite(self, c: sqlite3.Connection, utente: sqlite3.Row) -> int | None:
-        """Classificazioni al mese consentite; None = senza limite. Gli amministratori non hanno limite; per gli altri vale
+        """Classificazioni al mese consentite; None = senza limite. Gli amministratori non hanno limite (anche se avevano un
+        limite personale prima di diventarlo, per esempio 0 per l'approvazione automatica del dominio); per gli altri vale
         il limite personale (utenti.quota_ia, 0 = IA spenta) o quello predefinito."""
-        if utente["quota_ia"] is not None:
-            return int(utente["quota_ia"])
         if utente["ruolo"] == "amministratore":
             return None
+        if utente["quota_ia"] is not None:
+            return int(utente["quota_ia"])
         q = self.db.impostazioni(c)["quota_predefinita"]
         return None if q is None else int(q)
 
@@ -204,12 +208,13 @@ class ServizioIA:
         return tetto is not None and self.uso_mese(c)["classificazioni"] >= int(tetto)
 
     @staticmethod
-    def usate(c: sqlite3.Connection, utente_id: int, mese: str | None = None) -> int:
+    def usate(c: sqlite3.Connection, utente_id: int | None, mese: str | None = None) -> int:
         """Classificazioni del mese che hanno raggiunto il servizio (anche se la risposta non era utilizzabile).
-        Le richieste registrate prima delle classificazioni (tipo vuoto) contano una ciascuna; le traduzioni no."""
+        Le richieste registrate prima delle classificazioni (tipo vuoto) contano una ciascuna; le traduzioni no.
+        utente_id None = le richieste degli account eliminati (restano nel conto del mese per il tetto)."""
         r = c.execute("SELECT COUNT(DISTINCT CASE WHEN operazione != '' THEN operazione END) AS ops, "
                       "COALESCE(SUM(CASE WHEN operazione = '' THEN 1 ELSE 0 END), 0) AS vecchie FROM uso_ia "
-                      "WHERE utente_id = ? AND mese = ? AND tipo IN ('', 'classifica') AND (esito = 'ok' OR token_in > 0)",
+                      "WHERE utente_id IS ? AND mese = ? AND tipo IN ('', 'classifica') AND (esito = 'ok' OR token_in > 0)",
                       (utente_id, mese or mese_corrente())).fetchone()
         return int(r["ops"]) + int(r["vecchie"])
 
@@ -218,7 +223,7 @@ class ServizioIA:
         """Uso del mese di tutto il sito: classificazioni, richieste e token (per Gestione)."""
         r = c.execute("SELECT COUNT(*) AS richieste, COALESCE(SUM(token_in), 0) AS token_in, COALESCE(SUM(token_cache), 0) AS token_cache, "
                       "COALESCE(SUM(token_out), 0) AS token_out FROM uso_ia WHERE mese = ?", (mese or mese_corrente(),)).fetchone()
-        utenti = [x[0] for x in c.execute("SELECT DISTINCT utente_id FROM uso_ia WHERE mese = ? AND utente_id IS NOT NULL", (mese or mese_corrente(),))]
+        utenti = [x[0] for x in c.execute("SELECT DISTINCT utente_id FROM uso_ia WHERE mese = ?", (mese or mese_corrente(),))]
         return {"classificazioni": sum(ServizioIA.usate(c, u, mese) for u in utenti), "richieste": int(r["richieste"]),
                 "token_in": int(r["token_in"]), "token_cache": int(r["token_cache"]), "token_out": int(r["token_out"])}
 
@@ -250,6 +255,8 @@ class ServizioIA:
         if livello not in TOKEN_MASSIMI or tipo not in ("classifica", "traduzione") or (schema and schema not in SCHEMI) \
                 or not isinstance(prompt, str) or not prompt.strip():
             raise ErroreIA("bad_request", 400)
+        if tipo == "traduzione" and schema not in (None, "traduzione"):
+            raise ErroreIA("bad_request", 400)          # una «traduzione» con lo schema di una classificazione non conterebbe
         if len(prompt) + len(contesto) > MASSIMO_CARATTERI:
             raise ErroreIA("prompt_too_large", 413)
         uid = int(utente["id"])
@@ -257,15 +264,19 @@ class ServizioIA:
             lim = self.limite(c, utente)
             if lim == 0:
                 raise ErroreIA("ia_non_autorizzata", 403)
+            gia = 0
             if tipo == "classifica":
-                gia = c.execute("SELECT COUNT(*) FROM uso_ia WHERE utente_id = ? AND operazione = ? AND operazione != ''",
-                                (uid, operazione)).fetchone()[0]
+                # solo le richieste di classificazione: una traduzione con la stessa operazione non apre la strada
+                gia = c.execute("SELECT COUNT(*) FROM uso_ia WHERE utente_id = ? AND operazione = ? AND operazione != '' "
+                                "AND tipo = 'classifica'", (uid, operazione)).fetchone()[0]
                 if gia >= RICHIESTE_PER_CLASSIFICAZIONE:
                     raise ErroreIA("rate_limited", 429)
-                if not gia and lim is not None and self.usate(c, uid) >= lim:
-                    raise ErroreIA("quota_esaurita", 429)
-                if not gia and self.tetto_raggiunto(c):
-                    raise ErroreIA("tetto_raggiunto", 429)
+            # una classificazione gia' iniziata puo' finire; le traduzioni non contano, ma come nella pagina (js/app.js)
+            # a limite o tetto raggiunto non si fanno
+            if not gia and lim is not None and self.usate(c, uid) >= lim:
+                raise ErroreIA("quota_esaurita", 429)
+            if not gia and self.tetto_raggiunto(c):
+                raise ErroreIA("tetto_raggiunto", 429)
         with self._lock:
             if self._in_corso.get(uid, 0) >= 2:
                 raise ErroreIA("rate_limited", 429)
@@ -284,6 +295,9 @@ class ServizioIA:
             try:
                 valore = estrai_json(r.testo)
             except ErroreIA:
+                if r.troncata:          # finita la lunghezza massima a meta' del JSON: riprovare uguale non serve
+                    esito = "troncata"
+                    raise ErroreIA("risposta_troncata", 502) from None
                 esito = "json_non_valido"
                 raise
             esito = "ok"
@@ -302,7 +316,7 @@ class ServizioIA:
             try:
                 r = self.client.post(url, json=corpo, headers=intestazioni)
             except httpx.TimeoutException:
-                raise ErroreIA("upstream_timeout", 504)          # dopo minuti d'attesa non conviene riprovare
+                raise ErroreIA("upstream_timeout", 504) from None          # dopo minuti d'attesa non conviene riprovare
             except httpx.HTTPError as e:
                 log.error("servizio IA non raggiungibile: %s", e)
                 errore = ErroreIA("upstream_error", 502)
@@ -311,7 +325,7 @@ class ServizioIA:
                     try:
                         return r.json()
                     except ValueError:
-                        raise ErroreIA("upstream_error", 502)
+                        raise ErroreIA("upstream_error", 502) from None
                 errore = _errore_http(r, modello)
                 if errore.codice not in ("rate_limited", "overloaded"):
                     raise errore
@@ -435,13 +449,13 @@ class ServizioIA:
         try:
             r = self.client.get(url, headers=intest, timeout=20)
         except httpx.HTTPError:
-            raise ErroreIA("upstream_error", 502)
+            raise ErroreIA("upstream_error", 502) from None
         if r.status_code != 200:
             raise _errore_http(r, "")
         try:
             d = r.json()
         except ValueError:
-            raise ErroreIA("upstream_error", 502)
+            raise ErroreIA("upstream_error", 502) from None
         if f == "gemini":
             nomi = [str(m.get("name", "")).removeprefix("models/") for m in d.get("models") or []
                     if "generateContent" in (m.get("supportedGenerationMethods") or [])]

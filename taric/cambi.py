@@ -23,8 +23,20 @@ def _json_js(f: Path) -> Any:
     return json.loads(testo[inizio:testo.rindex("}") + 1])
 
 
-@lru_cache(maxsize=4)
+def _firma(f: Path) -> int:
+    """Quando e' cambiato il file (0 se non c'e'): una versione installata di nuovo non riusa i dati in memoria."""
+    try:
+        return f.stat().st_mtime_ns
+    except OSError:
+        return 0
+
+
 def _nomenclatura(cartella: str) -> dict[str, tuple[str, list[str]]]:
+    return _nomenclatura_letta(cartella, _firma(Path(cartella) / "nomenclatura.js"))
+
+
+@lru_cache(maxsize=4)
+def _nomenclatura_letta(cartella: str, _firma_file: int) -> dict[str, tuple[str, list[str]]]:
     """codice -> (descrizione, codici dei livelli superiori e del codice stesso, senza i gruppi), per una versione."""
     righe = _json_js(Path(cartella) / "nomenclatura.js").get("righe", "").split("\n")
     out: dict[str, tuple[str, list[str]]] = {}
@@ -42,8 +54,12 @@ def _nomenclatura(cartella: str) -> dict[str, tuple[str, list[str]]]:
     return out
 
 
-@lru_cache(maxsize=64)
 def _capitolo(cartella: str, cap: str) -> dict[str, Any]:
+    return _capitolo_letto(cartella, cap, _firma(Path(cartella) / "m" / f"{cap}.js"))
+
+
+@lru_cache(maxsize=64)
+def _capitolo_letto(cartella: str, cap: str, _firma_file: int) -> dict[str, Any]:
     f = Path(cartella) / "m" / f"{cap}.js"
     return _json_js(f) if f.is_file() else {"s": [], "m": {}, "x": {}}
 
@@ -61,7 +77,9 @@ def _misure(cartella: Path, codice: str) -> dict[tuple, list[tuple]] | None:
             for r in tab.get(livello, []):
                 # [tipo, origine, dazio, inizio, fine, addizionale, contingente, base, esclusi, note, condizioni, ...]
                 ident = (flusso, int(r[0]), str(r[1]), str(r[5] or ""), str(r[6] or ""), str(r[8] or ""))
-                dazio = s[r[2]] if isinstance(r[2], int) and 0 <= r[2] < len(s) and r[2] else ""
+                # come misure() di app.js: il dazio 0 e' il primo testo del capitolo (un dazio vero, per esempio «0.000 %»);
+                # per le condizioni 0 vuol dire nessuna (aggiorna.py mette prima il dazio di ogni riga, mai una condizione)
+                dazio = s[r[2]] if isinstance(r[2], int) and 0 <= r[2] < len(s) else ""
                 cond = s[r[10]] if len(r) > 10 and isinstance(r[10], int) and 0 < r[10] < len(s) else ""
                 out.setdefault(ident, []).append((dazio, cond, int(r[3] or 0), int(r[4] or 0)))
     return {k: sorted(v) for k, v in out.items()}

@@ -69,8 +69,8 @@
     if (!d) return '<p class="vuoto">Carico…</p>';
     var h = '<div class="foglio"><div class="box s8"><div class="lab">' + T.icona('database') + 'Dati in uso</div>';
     var att = d.versioni.filter(function (v) { return v.attiva; })[0];
-    if (att) h += '<p class="cosa">Situazione al ' + esc(att.data.split('-').reverse().join('/')) + '</p><p class="nota">' + (att.righe || '?') + ' righe di nomenclatura, ' + (att.dichiarabili || '?') +
-      ' codici dichiarabili, ' + (att.misure_import || '?') + ' misure all\'importazione e ' + (att.misure_export || '?') + ' all\'esportazione; ' + (att.righe_en || 0) + ' righe ancora in inglese.</p>' +
+    if (att) h += '<p class="cosa">Situazione al ' + esc(String(att.data || att.versione).split('-').reverse().join('/')) + '</p><p class="nota">' + esc(att.righe || '?') + ' righe di nomenclatura, ' + esc(att.dichiarabili || '?') +
+      ' codici dichiarabili, ' + esc(att.misure_import || '?') + ' misure all\'importazione e ' + esc(att.misure_export || '?') + ' all\'esportazione; ' + esc(att.righe_en || 0) + ' righe ancora in inglese.</p>' +
       (att.avvisi && att.avvisi.length ? '<p class="avviso">' + esc(att.avvisi.join(' · ')) + '</p>' : '');
     else h += '<p class="avviso">Nessun dato installato.</p>';
     if (d.in_corso) h += '<p class="esito-ok">Aggiornamento di ' + esc(d.in_corso.mese) + ' in corso: ' + esc(d.in_corso.fase) + '…</p>';
@@ -116,16 +116,13 @@
   function versioniDati(d) {
     return '<div class="foglio"><div class="box"><div class="lab">' + T.icona('pacco') + 'Versioni installate</div><div class="scorri"><table class="tab"><thead><tr><th>Situazione al</th><th class="n">Righe</th><th class="n">Misure import</th><th>Generata</th><th></th></tr></thead><tbody>' +
       d.versioni.map(function (v) {
-        return '<tr' + (v.attiva ? ' class="evid"' : '') + '><td>' + esc(v.versione.split('-').reverse().join('/')) + (v.attiva ? ' <span class="st ok">in uso</span>' : '') + '</td><td class="n" data-l="Righe">' + (v.righe || '') + '</td><td class="n" data-l="Misure import">' + (v.misure_import || '') +
+        return '<tr' + (v.attiva ? ' class="evid"' : '') + '><td>' + esc(v.versione.split('-').reverse().join('/')) + (v.attiva ? ' <span class="st ok">in uso</span>' : '') + '</td><td class="n" data-l="Righe">' + esc(v.righe || '') + '</td><td class="n" data-l="Misure import">' + esc(v.misure_import || '') +
           '</td><td data-l="Generata">' + esc(T.dataOra(v.generato)) + '</td><td class="azioni"><button class="btn sm" type="button" data-g="riepilogo" data-v="' + esc(v.versione) + '">Riepilogo</button>' +
           (v.attiva ? '' : '<button class="btn sm" type="button" data-g="usa" data-v="' + esc(v.versione) + '">Usa questa</button>') + '</td></tr>';
       }).join('') + '</tbody></table></div></div></div>';
   }
 
-  function meseIt(m) {
-    var nomi = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
-    var x = /^(\d{4})-(\d{2})$/.exec(m || ''); return x ? nomi[+x[2] - 1] + ' ' + x[1] : '';
-  }
+  var meseIt = T.meseIt;
 
 
   /* ---------- utenti ---------- */

@@ -117,10 +117,7 @@
     return h + '</div></div>';
   }
 
-  function meseIt(m) {
-    var nomi = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
-    var x = /^(\d{4})-(\d{2})$/.exec(m || ''); return x ? nomi[+x[2] - 1] + ' ' + x[1] : '';
-  }
+  var meseIt = T.meseIt;
   function righeStorico() {
     var f = st.filtro.toLowerCase().replace(/\s+/g, '');
     var vis = st.storico.filter(function (v) { return !f || (v.testo + v.codice).toLowerCase().replace(/\s+/g, '').indexOf(f) >= 0; });

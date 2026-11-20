@@ -2,6 +2,9 @@
 'use strict';
 var T = window.TARIC;
 var BASE_DATI = document.documentElement.getAttribute('data-dati') || 'data/';
+/* impronta dei file dei dati (il server li fa tenere a lungo al browser): cambia se la versione viene installata di nuovo */
+var V_DATI = document.documentElement.getAttribute('data-v') || '';
+function fileDati(nome) { return BASE_DATI + nome + (V_DATI ? '?v=' + encodeURIComponent(V_DATI) : ''); }
 
 /* ================================================================
    Data: official TARIC nomenclature (rows in tree order)
@@ -125,7 +128,7 @@ var ctl = null, tick = null, sampleFn = null;
    Helpers
    ================================================================ */
 function $(s) { return document.querySelector(s); }
-function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+var esc = T.esc;
 function str(x, max) { var s = (typeof x === 'string' || typeof x === 'number') ? String(x).trim() : ''; return max && s.length > max ? s.slice(0, max) : s; }
 function digits(x) { return String(x === null || x === undefined ? '' : x).replace(/\D/g, ''); }
 function resolve(raw) {
@@ -185,6 +188,7 @@ function promptScelta(heads) {
     'Ogni riga: codice a 10 cifre, trattini che indicano il livello, descrizione. L\'asterisco dopo il codice indica un codice dichiarabile. ' +
     'Le righe che iniziano con puntini sono titoli intermedi senza codice proprio.\n\n' +
     blocks.join('\n\n') + '\n\n' +
+    (skipped.length ? 'VOCI NON RIPORTATE QUI SOPRA PER MOTIVI DI SPAZIO: ' + skipped.join(', ') + '. Se la merce rientra in una di queste, indicala in "altre_voci".\n\n' : '') +
     'COMPITO\n' +
     '1. Scegli il codice dichiarabile più adatto alla merce. Usa esclusivamente codici che compaiono qui sopra con l\'asterisco, scritti con 10 cifre senza spazi. ' +
     'Se mancano informazioni, proponi comunque il codice più probabile per la merce nella sua forma più comune e abbassa la confidenza.\n' +
@@ -499,13 +503,13 @@ function chiediCapitolo(ch) {
   if (MIS[ch]) return 'ok';
   if (statoCap[ch]) return statoCap[ch];
   statoCap[ch] = 'attesa';
-  caricaScript(BASE_DATI + 'm/' + ch + '.js', function (ok) {
+  caricaScript(fileDati('m/' + ch + '.js'), function (ok) {
     statoCap[ch] = (ok && MIS[ch]) ? 'ok' : 'errore'; renderEsito();
     if (T.viste && T.viste.bolla && T.viste.bolla.capitolo) T.viste.bolla.capitolo(ch);
   });
   if (!NOTE && !noteChieste) {
     noteChieste = true;
-    caricaScript(BASE_DATI + 'note.js', function (ok) { NOTE = window.TARIC_NOTE || null; if (ok && NOTE) renderEsito(); });
+    caricaScript(fileDati('note.js'), function (ok) { NOTE = window.TARIC_NOTE || null; if (ok && NOTE) renderEsito(); });
   }
   return 'attesa';
 }
@@ -526,12 +530,14 @@ function storicoPer(g, poi) {
   var k = String(g);
   if (STORICI[k] && !STORICI[k].attesa) return STORICI[k];
   if (!STORICI[k]) {
-    STORICI[k] = { attesa: true };
+    var attesa = STORICI[k] = { attesa: true, poi: [] };
     T.api('GET', '/api/dati/storico?data=' + isoDi(g)).then(function (r) { STORICI[k] = r; }, function (e) {
       STORICI[k] = { errore: e.errore || 'Dati di quel mese non disponibili.', codice: e.codice || '' };
       if (e.codice === 'storico_non_raggiungibile') setTimeout(function () { delete STORICI[k]; }, 30000);
-    }).then(function () { if (poi) poi(); });
+    }).then(function () { attesa.poi.forEach(function (f) { f(); }); });
   }
+  // chi chiede lo stesso giorno mentre la risposta non è arrivata (la scheda e la bolla) viene avvisato anche lui
+  if (poi && STORICI[k].attesa && STORICI[k].poi.indexOf(poi) < 0) STORICI[k].poi.push(poi);
   return STORICI[k];
 }
 /* indirizzo dell'app con i dati della versione v, per il giorno g e, se c'è, il codice aperto */
@@ -544,7 +550,7 @@ function urlStorico(v, g, extra) {
 }
 /* il riquadro che rimanda ai dati del mese giusto per il giorno g (o, se non ci sono, lo dice) */
 function rimandoStorico(g, extra, vista) {
-  var s = storicoPer(g, function () { renderEsito(); });
+  var s = storicoPer(g, renderEsito);
   if (s.attesa) return '<p class="nota">Cerco i dati TARIC di quel mese…</p>';
   if (s.errore) return '<p class="nota">' + esc(s.errore) + '</p>';
   if (s.versione === DATA_ISO) return '';
@@ -766,7 +772,13 @@ function misureBolla(codice, flusso, paese, giorno) {
   righe.forEach(function (m) { if ((m.t === 109 || (m.t === 110 && flusso !== 'export')) && m.o === '1011') sup = m.duty; });
   var qta = flusso === 'export' ? '' : unitaQuantita(righe.filter(function (m) { return m.t < 200 || m.t >= 550 && m.t < 700; }).map(function (m) { return m.duty + ' ' + (m.cond || ''); }));
   return { righe: righe, unitaSupCodice: sup, unitaSup: sup ? (UNITA_SUP[sup] || sup) : '', unitaSupNome: sup ? (UNITA_IT[UNITA_SUP[sup]] || unita(sup, '')) : '',
-    unitaQta: qta, unitaQtaNome: qta ? unita(qta, '') : '', descrizione: descOf(i) };
+    unitaQta: qta, unitaQtaNome: nomeQuantitaDazio(qta), descrizione: descOf(i) };
+}
+/* l'unità in cui si scrive la quantità per un dazio per unità: per i dazi «per 1000» o «per 100 pezzi» (MIL, CEN) si
+   scrive il numero di pezzi, come vuole calcolaDazio di js/calcolo.js */
+function nomeQuantitaDazio(u) {
+  if (!u) return '';
+  return K.QUANTITA[u] ? 'numero di pezzi' : unita(u, '');
 }
 function unitaSupplementare(i) {
   var C = MIS[CODE[i].slice(0, 2)];
@@ -834,7 +846,7 @@ function boxCalcolo(D) {
   return '<div class="calcolo"><div class="lab">' + T.icona('percento') + 'Calcolo degli importi<span class="dx">stima</span></div><div class="calc-campi">' +
     '<label>Valore in dogana (EUR)<input class="campo calc" data-c="valore" inputmode="decimal" autocomplete="off" value="' + v('valore') + '" placeholder="per esempio 12.500,00"></label>' +
     '<label>Massa netta (kg)<input class="campo calc" data-c="kg" inputmode="decimal" autocomplete="off" value="' + v('kg') + '"></label>' +
-    (D.unitaQta ? '<label>Quantità (' + esc(unita(D.unitaQta, '')) + ')<input class="campo calc" data-c="qta" inputmode="decimal" autocomplete="off" value="' + v('qta') + '"></label>' : '') +
+    (D.unitaQta ? '<label>Quantità (' + esc(nomeQuantitaDazio(D.unitaQta)) + ')<input class="campo calc" data-c="qta" inputmode="decimal" autocomplete="off" value="' + v('qta') + '"></label>' : '') +
     '<label>IVA<select class="campo calc" data-c="iva">' + [22, 10, 5, 4].map(function (a) { return '<option value="' + a + '"' + (String(state.calc.iva || 22) === String(a) ? ' selected' : '') + '>' + a + ' %</option>'; }).join('') + '</select></label>' +
     '</div><div id="calc-esito"></div></div>';
 }
@@ -846,7 +858,7 @@ function fmtLegale(l) {
   return String(l || '').replace(/^Regulation /, 'Reg. ').replace(/^Decision /, 'Dec. ').replace(/^Information /, 'Informazione ')
     .replace(/^Accession act /, 'Atto di adesione ').replace(/^Draft /, 'Bozza ');
 }
-function taglia(s, n) { s = String(s || '').split('\n')[0]; return s.length > n ? s.slice(0, n - 1).trim() + '…' : s; }
+var taglia = T.taglia;
 function metaDi(m) {
   var a = [(state.flow === 'export' ? 'destinazione: ' : 'origine: ') + nomeArea(m.o)];
   if (m.fut) a.push('dal ' + dataIt(m.da));
@@ -971,9 +983,9 @@ function boxMisure(sel) {
   var i = sel.idx, code = sel.code, c = state.country, exp = state.flow === 'export';
   var paesi = elencoPaesi(), freq = FREQUENTI.filter(function (x) { return RIF.aree[x]; });
   var opt = '<option value="">Tutti i paesi</option><optgroup label="Più frequenti">' +
-    freq.map(function (x) { return '<option value="' + x + '"' + (x === c ? ' selected' : '') + '>' + esc(RIF.aree[x]) + ' (' + x + ')</option>'; }).join('') +
+    freq.map(function (x) { return '<option value="' + esc(x) + '"' + (x === c ? ' selected' : '') + '>' + esc(RIF.aree[x]) + ' (' + esc(x) + ')</option>'; }).join('') +
     '</optgroup><optgroup label="Tutti">' +
-    paesi.map(function (p) { return '<option value="' + p[1] + '"' + (p[1] === c && freq.indexOf(c) < 0 ? ' selected' : '') + '>' + esc(p[0]) + ' (' + p[1] + ')</option>'; }).join('') + '</optgroup>';
+    paesi.map(function (p) { return '<option value="' + esc(p[1]) + '"' + (p[1] === c && freq.indexOf(c) < 0 ? ' selected' : '') + '>' + esc(p[0]) + ' (' + esc(p[1]) + ')</option>'; }).join('') + '</optgroup>';
   var dichiarabile = i >= 0 && isLeaf(i);
   var iso = c === 'XS' ? 'RS' : c;
   var g = giornoMisure(), passato = primaDeiDati(g), oltre = STORICO && g >= giornoMeseDopo();
@@ -1030,9 +1042,9 @@ function boxMisure(sel) {
     if (res.righe.some(function (m) { return m.ord && catDi(m.t) !== 'ctl'; })) h47 += '<p class="nota">I contingenti valgono fino a esaurimento: il saldo residuo non è compreso in questi dati.</p>';
     if (exp && !h47) h47 = '<p class="nota">Il TARIC non prevede dazi all\'esportazione per questo codice' + (c ? ' verso ' + esc(nomeArea(c)) : '') + '.</p>';
     if (!exp && !(cat.base || []).length && !(cat.rid || []).length) h47 += '<p class="nota">Nessun dazio definito a questo livello della nomenclatura.</p>';
-    var ctl = raggruppa(cat.ctl || []);
-    n44 = ctl.length;
-    h44 = ctl.length ? '<div class="cat">' + ctl.map(function (g) { return htmlGruppo(g, gid++); }).join('') + '</div>'
+    var controlli = raggruppa(cat.ctl || []);
+    n44 = controlli.length;
+    h44 = controlli.length ? '<div class="cat">' + controlli.map(function (g) { return htmlGruppo(g, gid++); }).join('') + '</div>'
       : '<p class="nota">Nessun divieto, restrizione o controllo TARIC ' + (c ? 'per ' + esc(nomeArea(c)) : 'valido per tutti i paesi') + ' su questo codice.</p>';
     var avvisi = '';
     if (oltre) avvisi += '<p class="avviso">I dati TARIC aperti sono del ' + esc(DATA_IT) + ': per il ' + esc(dataIt(g)) + ' possono esserci misure nuove che qui mancano.</p>' + rimandoStorico(g, dove);
@@ -1438,7 +1450,10 @@ document.addEventListener('click', function (ev) {
   }
   else if (act === 'traduci') traduci();
   else if (act === 'stampa') window.print();
-  else if (act === 'in-bolla' && T.viste && T.viste.bolla) { T.viste.bolla.aggiungi(t.getAttribute('data-c'), state.country, state.flow); vista('bolla'); window.scrollTo(0, 0); }
+  else if (act === 'in-bolla' && T.viste && T.viste.bolla) {
+    if (T.viste.bolla.aggiungi(t.getAttribute('data-c'), state.country, state.flow) === false) return;   // bolla non salvata: resta com'è
+    vista('bolla'); window.scrollTo(0, 0);
+  }
   else if (act === 'preferito') {
     var pc = t.getAttribute('data-c'), cera = state.preferiti[pc];
     if (cera) delete state.preferiti[pc]; else state.preferiti[pc] = { nota: '' };
@@ -1522,11 +1537,31 @@ window.addEventListener('hashchange', function () { var v = location.hash.replac
 /* ================================================================
    Boot
    ================================================================ */
+/* un risultato salvato nello storico o nell'archivio aziendale (anche di un collega, o di una versione precedente):
+   ricostruito campo per campo nella forma e con i limiti di normResult; senza un codice proposto valido si apre come
+   scelta manuale */
+function risultatoSalvato(r) {
+  var lista = function (x) { return Array.isArray(x) ? x : []; };
+  function cand(c) {
+    if (!c || typeof c !== 'object' || !/^\d{10}$/.test(digits(c.code))) return null;
+    var n = Number(c.conf);
+    return { code: digits(c.code), it: str(c.it, 500), why: str(c.why, 900), when: str(c.when, 400), conf: isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : 0 };
+  }
+  var best = r && typeof r === 'object' ? cand(r.best) : null;
+  if (!best) return null;
+  return { merce: str(r.merce, 300), best: best, alts: lista(r.alts).map(cand).filter(Boolean).slice(0, 4),
+    domande: lista(r.domande).map(function (d) {
+      var opts = d && typeof d === 'object' ? lista(d.opts).map(function (o) { return str(o, 120); }).filter(Boolean).slice(0, 6) : [];
+      return opts.length >= 2 ? { q: str(d.q, 300), opts: opts, why: str(d.why, 300) } : null;
+    }).filter(Boolean).slice(0, 3),
+    attenzione: lista(r.attenzione).map(function (a) { return str(a, 400); }).filter(Boolean).slice(0, 4),
+    altre: lista(r.altre).map(function (h) { return digits(h).slice(0, 4); }).filter(function (c) { return c.length === 4 && headingIdx(c) >= 0; }) };
+}
 function ripristina(d) {
   $('#q').value = str(d.q, 2000); state.q = $('#q').value;
   state.answers = Array.isArray(d.answers) ? d.answers : [];
   state.heads = Array.isArray(d.heads) ? d.heads : [];
-  state.result = (d.result && typeof d.result === 'object') ? d.result : null;
+  state.result = risultatoSalvato(d.result);
   state.picks = {}; state.trad = {}; state.error = ''; state.warn = ''; state.extra = '';
   var c = state.result && state.result.best ? digits(state.result.best.code) : digits(d.sel);
   state.sel = c ? { code: c, idx: byCode.has(c) ? byCode.get(c) : -1 } : null;
@@ -1534,7 +1569,7 @@ function ripristina(d) {
   if (state.result && state.modo !== 'ia' && !$('#interruttore-ia').hidden) { state.modo = 'ia'; applicaModo(); }
 }
 function start() {
-  var m = D.meta, txt = 'Dati TARIC al ' + DATA_IT + (STORICO ? ' · archivio' : '');
+  var txt = 'Dati TARIC al ' + DATA_IT + (STORICO ? ' · archivio' : '');
   // the extraction of each month is expected within the first days: after the 9th, older data is flagged
   var ora = new Date(), att = ora.getDate() < 10 ? new Date(ora.getFullYear(), ora.getMonth() - 1, 1) : ora;
   var atteso = att.getFullYear() + '-' + ('0' + (att.getMonth() + 1)).slice(-2);

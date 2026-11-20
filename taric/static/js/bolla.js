@@ -93,6 +93,8 @@
     /* «Aggiungi alla bolla» dalla scheda del codice */
     aggiungi: function (codice, paese, flusso) {
       var tipo = flusso === 'export' ? 'export' : 'import';
+      if (st.b && st.b.tipo !== tipo && !st.salvata &&
+          !window.confirm('La bolla aperta ha modifiche non salvate: aprire una nuova ' + (tipo === 'export' ? 'esportazione' : 'importazione') + ' lo stesso?')) return false;
       if (!st.b || st.b.tipo !== tipo) { st.b = nuovaBolla(tipo); st.salvata = true; }
       var a = nuovoArticolo(paese || dati().paese);
       a.codice = codice;
@@ -101,6 +103,7 @@
       st.salvata = false;
       st.msg = 'Articolo ' + app().grp(codice) + ' aggiunto alla bolla.'; st.msgOk = true;
       if (!el.hidden) disegna();
+      return true;
     }
   };
 
@@ -147,10 +150,7 @@
     else if (r.errore) c.innerHTML = '<p class="errore">' + esc(r.errore) + ' <button class="link" type="button" data-b="riprova-cambio">Riprova</button></p>';
     else c.innerHTML = '<p class="esito-ok">1 € = ' + esc(nIt(r.tasso, 4)) + ' ' + esc(v) + ' · cambio doganale di ' + esc(meseIt(r.mese)) + ' (' + esc(r.fonte) + ')</p>';
   }
-  function meseIt(m) {
-    var nomi = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
-    return /^\d{4}-\d{2}$/.test(m || '') ? nomi[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4) : '';
-  }
+  var meseIt = T.meseIt;
 
   /* ------------------------------------------------------------------ misure e calcolo */
   // le estrazioni del TARIC hanno solo le misure valide dal loro giorno in poi: per una data precedente ai dati non si calcola
@@ -248,14 +248,14 @@
   function opzioniPaesi(scelto) {
     var fr = app().frequenti(), tutti = app().paesi();
     return '<option value="">scegli…</option><optgroup label="Più frequenti">' +
-      fr.map(function (x) { return '<option value="' + x + '"' + (x === scelto ? ' selected' : '') + '>' + esc(app().nomeArea(x)) + ' (' + x + ')</option>'; }).join('') +
+      fr.map(function (x) { return '<option value="' + esc(x) + '"' + (x === scelto ? ' selected' : '') + '>' + esc(app().nomeArea(x)) + ' (' + esc(x) + ')</option>'; }).join('') +
       '</optgroup><optgroup label="Tutti">' +
-      tutti.map(function (p) { return '<option value="' + p[1] + '"' + (p[1] === scelto && fr.indexOf(scelto) < 0 ? ' selected' : '') + '>' + esc(p[0]) + ' (' + p[1] + ')</option>'; }).join('') + '</optgroup>';
+      tutti.map(function (p) { return '<option value="' + esc(p[1]) + '"' + (p[1] === scelto && fr.indexOf(scelto) < 0 ? ' selected' : '') + '>' + esc(p[0]) + ' (' + esc(p[1]) + ')</option>'; }).join('') + '</optgroup>';
   }
   function sceltaValuta(f, x) {
     var v = dati().valuta;
     return '<select class="campo corto" data-f="' + f + '">' + (v === 'EUR' ? ['EUR'] : ['EUR', v]).map(function (c) {
-      return '<option' + ((x.valuta || 'EUR') === c ? ' selected' : '') + '>' + c + '</option>';
+      return '<option' + ((x.valuta || 'EUR') === c ? ' selected' : '') + '>' + esc(c) + '</option>';
     }).join('') + '</select>';
   }
   function intestazione() {
@@ -371,7 +371,7 @@
     if (M.unitaSup || M.unitaQta) {
       h += '<label>' + (M.unitaSup ? 'Unità supplementari: ' + esc(M.unitaSupNome) + de('quantita') : 'Quantità per il dazio: ' + esc(M.unitaQtaNome)) +
         '<input class="campo" data-a="' + k + '" data-f="quantita" value="' + esc(a.quantita || '') + '" inputmode="decimal" autocomplete="off"></label>';
-      if (M.unitaQta && M.unitaSupCodice && M.unitaQta !== M.unitaSupCodice)
+      if (K.quantitaSeparata(M))
         h += '<label>Quantità per il dazio: ' + esc(M.unitaQtaNome) + '<input class="campo" data-a="' + k + '" data-f="quantitaDazio" value="' + esc(a.quantitaDazio || '') + '" inputmode="decimal" autocomplete="off"></label>';
     }
     if (imp()) {
@@ -416,7 +416,7 @@
         return '<option value="' + esc(m.add) + '"' + (m.add === scelto ? ' selected' : '') + '>' + esc(m.add + ' · ' + taglia(app().addizionale(m.add) || '', 60) + ' · ' + dazioBreve(m.duty)) + '</option>';
       }).join('') + '</select></label>';
   }
-  function taglia(s, n) { s = String(s || '').split('\n')[0]; return s.length > n ? s.slice(0, n - 1).trim() + '…' : s; }
+  var taglia = T.taglia;
   function dazioBreve(d) {
     if (!d) return 'esente';
     if (/^Cond:/.test(d)) {
@@ -764,7 +764,11 @@
     }
     else if (azione === 'salva') salva();
     else if (azione === 'stampa') window.print();
-    else if (azione === 'duplica') { st.b = { id: null, tipo: st.b.tipo, riferimento: (st.b.riferimento ? st.b.riferimento + ' ' : '') + '(copia)', dati: JSON.parse(JSON.stringify(dati())) }; st.salvata = false; st.msg = 'Copia non ancora salvata.'; st.msgOk = true; disegna(); }
+    else if (azione === 'duplica') {
+      var rc = String(st.b.riferimento || '').trim().slice(0, 112);         // con « (copia)» resta nei 120 caratteri del server
+      st.b = { id: null, tipo: st.b.tipo, riferimento: (rc ? rc + ' ' : '') + '(copia)', dati: JSON.parse(JSON.stringify(dati())) };
+      st.salvata = false; st.msg = 'Copia non ancora salvata.'; st.msgOk = true; disegna();
+    }
     else if (azione === 'aggiungi') { dati().articoli.push(nuovoArticolo(dati().paese)); st.salvata = false; disegna(); var u = el.querySelectorAll('.articolo'); if (u.length) u[u.length - 1].querySelector('.codice').focus(); }
     else if (azione === 'togli') { dati().articoli.splice(+b.getAttribute('data-a'), 1); st.salvata = false; disegna(); }
     else if (azione === 'vai') vaiAlCampo(b.getAttribute('data-a'), b.getAttribute('data-c'));
