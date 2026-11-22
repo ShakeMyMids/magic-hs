@@ -283,6 +283,11 @@ async function accedi(p, email, password) {
   await anna.screenshot({ path: out + '/5c-ia-bloccata.png' });
   await anna.click('#interruttore-ia', { force: true });         // per il browser l'etichetta di un comando spento non si clicca
   ok(!(await anna.isChecked('#modo-ia')) && !(await anna.evaluate(() => document.querySelector('.domanda').classList.contains('modo-ia'))), '@dhl.com: l\'IA non si accende');
+  let sceltaFile = false;
+  anna.on('filechooser', () => { sceltaFile = true; });
+  await anna.click('#foto', { force: true });
+  await anna.waitForTimeout(300);
+  ok(await anna.isVisible('#foto-posto.con-divieto #divieto-foto') && !sceltaFile, '@dhl.com: tasto della foto bloccato, con il divieto');
   await anna.mouse.move(5, 5);
   await cerca(anna, 'biciclette');
   ok(await anna.isVisible('#risultati [data-act="ia-bloccata"]') && await anna.isHidden('#risultati [data-act="chiedi"]'), '@dhl.com: «Classifica con l\'IA» bloccato anche nei risultati');
@@ -303,6 +308,37 @@ async function accedi(p, email, password) {
   await capo.click('[data-act="riusa"]');
   await capo.waitForSelector('.timbro >> text=Proposta');
   ok(await usate() === prima, 'descrizione già classificata: ripresa senza una nuova richiesta all\'IA');
+
+  // classificazione da una foto (tasto con la macchina fotografica): rimpicciolita nel browser a 1280 px, mandata con ogni
+  // richiesta all'IA, che dice che cosa vede; nello storico resta il testo, non la foto
+  const fotoMerce = out + '/foto-merce.jpg';
+  const pf = await b.newPage({ viewport: { width: 1600, height: 1200 } });
+  await pf.setContent('<body style="margin:0;background:#d9d4cc"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450" width="1600" height="1200">' +
+    '<path d="M90 300Q95 215 150 200L250 180Q300 170 330 210L380 240Q470 255 505 278Q525 292 515 310L100 315Z" fill="#f4f4f2" stroke="#555" stroke-width="3"/>' +
+    '<path d="M96 310L515 308Q520 328 500 332L110 334Q92 330 96 310Z" fill="#e0453a"/>' +
+    '<text x="300" y="390" font-family="sans-serif" font-size="22" text-anchor="middle">UPPER: LEATHER · SOLE: RUBBER</text></svg></body>');
+  await pf.screenshot({ path: fotoMerce, type: 'jpeg', quality: 90 }); await pf.close();
+  const richiesteIA = [], spiaIA = r => { if (r.url().endsWith('/api/ia')) richiesteIA.push(JSON.parse(r.postData())); };
+  capo.on('request', spiaIA);
+  await capo.fill('#q', '');
+  await capo.setInputFiles('#foto-file', fotoMerce);
+  await capo.waitForSelector('#foto-merce img');
+  ok((await capo.getAttribute('#q', 'placeholder')).startsWith('Facoltativo'), 'foto: miniatura sotto la casella, descrizione facoltativa');
+  await capo.click('#vai');
+  await capo.waitForSelector('#foto-merce >> text=L\'IA vede');
+  await capo.waitForSelector('.timbro >> text=Proposta');
+  const latoFoto = await capo.evaluate(() => { const i = document.querySelector('#foto-merce img'); return Math.max(i.naturalWidth, i.naturalHeight); });
+  ok(richiesteIA.length === 2 && richiesteIA.every(x => x.immagine && x.immagine.tipo === 'image/jpeg') && latoFoto === 1280 &&
+    /foto allegata/.test(richiesteIA[0].prompt) && /dalla foto/.test(await capo.textContent('#foto-merce')),
+    'foto: rimpicciolita a 1280 px e mandata con le richieste all\'IA, che dice che cosa vede');
+  await capo.screenshot({ path: out + '/5d-foto.png' });
+  const ultima = (await capo.evaluate(() => TARIC.api('GET', '/api/storico?limite=1'))).voci[0];
+  const salvata = await capo.evaluate(id => TARIC.api('GET', '/api/storico/' + id), ultima.id);
+  ok(/^Foto: Scarpa/.test(ultima.testo) && salvata.dati.foto === true && !JSON.stringify(salvata).includes(richiesteIA[0].immagine.dati.slice(0, 60)),
+    'foto: nello storico la descrizione dell\'IA, non la foto');
+  await capo.click('[data-act="togli-foto"]');
+  ok(await capo.isHidden('#foto-merce') && (await capo.getAttribute('#q', 'placeholder')).startsWith('Descrivi'), 'foto: tolta');
+  capo.off('request', spiaIA);
   await capo.click('#interruttore-ia'); await capo.fill('#q', ''); await capo.click('#tab-gestione');
 
   // copia del database fuori dal server (finto archivio S3 di tests/finto_claude.py): la prima parte da sola all'avvio

@@ -40,7 +40,7 @@ from .config import Config
 from .copia import CopiaEsterna
 from .dati import RE_VERSIONE, GestoreDati
 from .db import Database, iso, tra
-from .ia import ErroreIA, ServizioIA, mese_corrente
+from .ia import ErroreIA, Immagine, ServizioIA, mese_corrente
 from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
 from .trasporto import MASSIMO_PDF, ErroreTariffe, Tariffe
 from .valute import CambiDoganali, ErroreCambio
@@ -72,6 +72,8 @@ MESSAGGI_IA = {
     "invalid_json": "La risposta non era leggibile. Riprova.",
     "risposta_troncata": "La risposta dell'IA era troppo lunga ed è stata interrotta: descrivi la merce in modo più preciso e riprova.",
     "prompt_too_large": "La richiesta è troppo lunga. Accorcia la descrizione e riprova.",
+    "immagine_non_valida": "La foto non è leggibile: scegline un'altra (JPEG, PNG o WebP).",
+    "immagine_non_accettata": "Il servizio di intelligenza artificiale non ha accettato la foto: provane un'altra o descrivi la merce a parole.",
     "upstream_timeout": "L'IA ha impiegato troppo tempo a rispondere. Riprova.",
     "upstream_error": "Errore temporaneo nel collegamento con il servizio di intelligenza artificiale. Riprova tra poco.",
     "bad_request": "Richiesta non valida.",
@@ -106,6 +108,11 @@ class Nota(BaseModel):
     nota: str = Field(default="", max_length=500)
 
 
+class FotoMerce(BaseModel):
+    tipo: Literal["image/jpeg", "image/png", "image/webp"]
+    dati: str = Field(min_length=16, max_length=4_200_000)        # base64: al massimo 3 MB (ia.MASSIMO_IMMAGINE)
+
+
 class RichiestaIA(BaseModel):
     prompt: str = Field(min_length=1, max_length=400_000)          # parte che cambia: merce e risposte dell'utente
     contesto: str = Field(default="", max_length=400_000)          # parte uguale tra le richieste: va nella cache del fornitore
@@ -113,6 +120,7 @@ class RichiestaIA(BaseModel):
     schema_risposta: Optional[Literal["voci", "scelta", "traduzione"]] = Field(default=None, alias="schema")
     operazione: str = Field(default="", max_length=40, pattern=r"^[A-Za-z0-9_-]*$")   # una classificazione = piu' richieste
     tipo: Literal["classifica", "traduzione"] = "classifica"
+    immagine: Optional[FotoMerce] = None          # foto della merce: va al servizio IA e non si salva da nessuna parte
 
 
 class Mese(BaseModel):
@@ -1323,8 +1331,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.post("/api/ia")
     def chiedi_ia(body: RichiestaIA, u: sqlite3.Row = Depends(richiede_utente)) -> Response:
         try:
+            foto = Immagine.da(body.immagine.tipo, body.immagine.dati) if body.immagine else None
             return JSONResponse(ia.chiedi(u, body.prompt, body.livello, contesto=body.contesto, schema=body.schema_risposta,
-                                          operazione=body.operazione, tipo=body.tipo))
+                                          operazione=body.operazione, tipo=body.tipo, immagine=foto))
         except ErroreIA as e:
             return JSONResponse({"errore": MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"]), "codice": e.codice}, status_code=e.stato_http)
 
