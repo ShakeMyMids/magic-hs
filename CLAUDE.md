@@ -60,7 +60,9 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 - `taric/ia.py`: chiamate al servizio IA (Gemini, Anthropic o compatibile OpenAI, scelto con le variabili del server).
   Limiti: `limite()` per persona (amministratori senza limite), `tetto_raggiunto()` per tutti. Ogni richiesta ha
   `contesto` (parte fissa, prima: va nella cache del fornitore, per Claude con `cache_control`) e `prompt` (la merce, in
-  fondo); la risposta segue `SCHEMI[...]` (strumento obbligato per Claude, `json_schema` per OpenAI, `responseSchema` per
+  fondo); la foto della merce (`Immagine.da`: JPEG, PNG o WebP in base64, primi byte e al massimo 3 MB, `immagine_non_valida`)
+  va tra i due, solo nelle classificazioni, e non si scrive da nessuna parte; se il servizio la rifiuta l'errore è
+  `immagine_non_accettata`; la risposta segue `SCHEMI[...]` (strumento obbligato per Claude, `json_schema` per OpenAI, `responseSchema` per
   Gemini) con ritorno al modo semplice se il servizio la rifiuta; sovraccarico e 429 si riprovano in `_post`. L'uso del
   mese conta le classificazioni: le richieste con la stessa `operazione` (la genera `app.js` a ogni Classifica o
   Riclassifica) contano una volta; le traduzioni (`tipo`) no, ma rispettano limite e tetto. Ogni fornitore ha il suo
@@ -97,7 +99,11 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   negli elementi `data-scena`: due composizioni, larga e compatta, scelte in `app.css` con una container query sulla
   larghezza del riquadro, così sul telefono niente viene tagliato; `data-scena="vivo"` la anima piano), `js/app.js` (prima pagina: ricerca per parola o codice con `cerca()`, che ignora le parole vuote e usa i sinonimi di
   `js/sinonimi.js`, e risultati in `#risultati`, oppure con
-  l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; sopra i
+  l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; anche da una
+  foto: tasto `#foto` nella casella (con `#foto-file`), immagine trascinata sulla `.domanda` o incollata in `#q`, preparata da
+  `js/foto.js` (`T.foto.prepara`: JPEG con il lato lungo di 1280 px, letta come `data:` per la CSP), in `state.foto` e
+  mandata con ogni richiesta della classificazione, miniatura in `#foto-merce` con quello che l'IA vede (`state.fotoVista`),
+  nello storico solo il testo (`Foto: …`, `dati.foto`); sopra i
   risultati l'archivio aziendale e, prima di chiedere all'IA una descrizione già classificata, la proposta di riprenderla;
   le ricerche senza risultati vanno a `/api/ricerche-vuote`; albero della nomenclatura; misure con il calcolo degli
   importi e la stampa, stili `@media print` in fondo ad `app.css`; data delle misure della scheda in `state.dataMisure` con

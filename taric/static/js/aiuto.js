@@ -66,6 +66,9 @@
           : { t: 'Cerca', d: 'Scrivi una parola, come «scarpe di cuoio», o le prime cifre di un codice e premi «Cerca». Conosco anche i sinonimi.', e: sel('.cerca-merce') },
         { t: 'Usa l\'IA', d: bloccata ? 'Con questo interruttore l\'IA propone il codice dalla tua descrizione. Per usarla chiedi l\'autorizzazione all\'amministratore.'
           : 'Accendilo per descrivere la merce a parole tue: l\'IA propone il codice, spiega perché e fa domande per essere più precisa.', e: sel('#interruttore-ia') },
+        { t: 'Da una foto', d: bloccata ? 'Con questo tasto l\'IA riconosce la merce da una foto. Per usarlo chiedi l\'autorizzazione all\'amministratore.'
+          : 'Fotografa la merce o la sua etichetta, oppure trascina o incolla un\'immagine: l\'IA la riconosce e propone il codice. ' +
+            'Scrivi accanto quello che dalla foto non si vede, come il materiale.', e: sel('#foto-posto') },
         { t: 'Codici recenti', d: 'Gli ultimi codici che hai aperto: un tocco e li riapri.', e: sel('#recenti') },
         { t: 'Risultati', d: (archivio ? 'In alto le merci già classificate in azienda, poi le voci della nomenclatura' : 'Le voci della nomenclatura che corrispondono') +
           ': tocca quella giusta per aprirne la scheda.', e: sel('#risultati .ris-box') },
@@ -133,7 +136,7 @@
     accesso: function () {
       return [
         { t: 'MAGIC HS', d: 'Il sito dell\'azienda per classificare le merci in dogana: trovi il codice TARIC a 10 cifre cercando per parola ' +
-          'o per codice, oppure descrivendo la merce all\'intelligenza artificiale.' },
+          'o per codice, oppure descrivendo o fotografando la merce per l\'intelligenza artificiale.' },
         { t: 'Tutto per la dogana', d: 'Per ogni codice: dazi, antidumping, IVA, certificati e documenti richiesti, per il paese e il giorno che scegli. ' +
           'Poi puoi simulare una bolla doganale e calcolare il costo di una spedizione con DHL Express.', e: sel('.scena') },
         { t: 'Accedi', d: 'Se hai già un account, entra con la tua email e la password.', e: function () { return q('#accedi') || q('[data-a="accedi"]'); } },

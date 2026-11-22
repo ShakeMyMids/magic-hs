@@ -88,17 +88,17 @@ def cambi_bce(percorso: str) -> tuple[int, str]:
     return 200, "\n".join(righe) + "\n"
 
 
-def rispondi(prompt: str) -> object:
+def rispondi(prompt: str, foto: bool = False) -> object:
     if prompt.startswith("Traduci dall"):
         n = prompt.count("\n") and len([r for r in prompt.split("\n") if r[:1].isdigit() and ". " in r[:5]])
         return {"traduzioni": [f"Traduzione di prova {i + 1}" for i in range(n)]}
     if "Compito: indica le voci" in prompt:
         if "asdf" in prompt:
             return {"merce": "", "voci": [], "non_classificabile": "Il testo non descrive una merce."}
-        return {"merce": "Scarpe sportive", "voci": [{"voce": "6403", "motivo": "tomaia in cuoio"}, {"voce": "6404", "motivo": "tomaia tessile"}],
-                "non_classificabile": None}
+        return {"merce": "Scarpa sportiva bianca vista nella foto" if foto else "Scarpe sportive",
+                "voci": [{"voce": "6403", "motivo": "tomaia in cuoio"}, {"voce": "6404", "motivo": "tomaia tessile"}], "non_classificabile": None}
     if "INFORMAZIONI GIÀ FORNITE" not in prompt:
-        return {"merce": "Scarpe da ginnastica con tomaia in pelle",
+        return {"merce": "Scarpa da ginnastica bianca con tomaia in pelle, dalla foto" if foto else "Scarpe da ginnastica con tomaia in pelle",
                 "migliore": {"codice": "6403 99 96 10", "descrizione_it": "Calzature per lo sport con tomaia di cuoio, da uomo.",
                              "motivazione": "Suola di gomma e tomaia di cuoio naturale: voce 6403.", "confidenza": 62},
                 "alternative": [{"codice": "6403999810", "descrizione_it": "Le stesse calzature, da donna", "quando": "Se è un modello da donna.", "confidenza": 40},
@@ -109,6 +109,22 @@ def rispondi(prompt: str) -> object:
             "migliore": {"codice": "6403999610", "descrizione_it": "Calzature per lo sport con tomaia di cuoio, da uomo.",
                          "motivazione": "Risposta: uomo.", "confidenza": 88},
             "alternative": [], "domande": [], "altre_voci": []}
+
+
+def jpeg_valido(dati: str) -> bool:
+    """La foto della merce arriva come JPEG in base64 (rimpicciolita dal browser, js/foto.js)."""
+    import base64
+    try:
+        b = base64.b64decode(dati, validate=True)
+    except ValueError:
+        return False
+    return b[:3] == b"\xff\xd8\xff" and b[-2:] == b"\xff\xd9"
+
+
+def testo_e_foto(parti: list, testo: str, immagine) -> tuple[str, bool | None]:
+    """Il testo delle parti di un messaggio e se c'è una foto (None = foto non valida)."""
+    foto = [immagine(x) for x in parti if immagine(x) is not None]
+    return "\n\n".join(x[testo] for x in parti if testo in x), (None if not all(jpeg_valido(f) for f in foto) else bool(foto))
 
 
 class Gestore(BaseHTTPRequestHandler):
@@ -164,22 +180,34 @@ class Gestore(BaseHTTPRequestHandler):
             self._json(401, {"error": {"message": "API key not valid"}})
             return
         if ":generateContent" in self.path:
-            prompt = "\n\n".join(p["text"] for p in corpo["contents"][0]["parts"])
-            testo = json.dumps(rispondi(prompt), ensure_ascii=False)
+            prompt, foto = testo_e_foto(corpo["contents"][0]["parts"], "text", lambda x: (x.get("inlineData") or {}).get("data"))
+            if foto is None:
+                self._json(400, {"error": {"code": 400, "message": "Unable to process input image."}})
+                return
+            testo = json.dumps(rispondi(prompt, foto), ensure_ascii=False)
             self._json(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": testo}]}, "finishReason": "STOP"}],
                              "usageMetadata": {"promptTokenCount": len(prompt) // 4, "candidatesTokenCount": len(testo) // 4}})
         elif self.path.endswith("/chat/completions"):
-            prompt = corpo["messages"][-1]["content"]
-            testo = json.dumps(rispondi(prompt), ensure_ascii=False)
+            contenuto = corpo["messages"][-1]["content"]
+            prompt, foto = (contenuto, False) if isinstance(contenuto, str) else testo_e_foto(
+                contenuto, "text", lambda x: (x.get("image_url") or {}).get("url", "").removeprefix("data:image/jpeg;base64,") or None)
+            if foto is None:
+                self._json(400, {"error": {"message": "Invalid image."}})
+                return
+            testo = json.dumps(rispondi(prompt, foto), ensure_ascii=False)
             self._json(200, {"choices": [{"message": {"role": "assistant", "content": testo}, "finish_reason": "stop"}],
                              "usage": {"prompt_tokens": len(prompt) // 4, "completion_tokens": len(testo) // 4}})
         else:
             contenuto = corpo["messages"][0]["content"]
-            prompt = contenuto if isinstance(contenuto, str) else "\n\n".join(b["text"] for b in contenuto)
-            risposta = rispondi(prompt)
+            prompt, foto = (contenuto, False) if isinstance(contenuto, str) else testo_e_foto(
+                contenuto, "text", lambda x: (x.get("source") or {}).get("data"))
+            if foto is None:
+                self._json(400, {"error": {"type": "invalid_request_error", "message": "Could not process image"}})
+                return
+            risposta = rispondi(prompt, foto)
             testo = json.dumps(risposta, ensure_ascii=False)
             uso = {"input_tokens": len(prompt) // 4, "output_tokens": len(testo) // 4,
-                   "cache_read_input_tokens": len(contenuto[0]["text"]) // 4 if isinstance(contenuto, list) else 0}
+                   "cache_read_input_tokens": len(contenuto[0].get("text", "")) // 4 if isinstance(contenuto, list) else 0}
             if corpo.get("tools"):
                 self._json(200, {"content": [{"type": "tool_use", "id": "toolu_1", "name": "risposta", "input": risposta}],
                                  "stop_reason": "tool_use", "model": corpo["model"], "usage": uso})

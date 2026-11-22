@@ -13,9 +13,15 @@ Così i fornitori riusano il contesto dalla loro cache (Claude con cache_control
 «Riclassifica» costa molto meno. La risposta segue uno schema JSON imposto al modello (SCHEMI): strumento obbligato per
 Claude, json_schema per i compatibili OpenAI, responseSchema per Gemini; se un servizio non lo accetta si riprova
 senza. Sovraccarico e limiti al minuto si riprovano da soli (TENTATIVI, con l'attesa che il servizio indica).
+
+Una classificazione può avere anche la foto della merce (Immagine, JPEG, PNG o WebP, già rimpicciolita dal browser): va
+tra il contesto e il prompt, così la cache del contesto resta valida. Il server la manda al servizio e la scarta: non la
+scrive né nel database né nel registro.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import copy
 import json
 import logging
@@ -41,6 +47,11 @@ ISTRUZIONI = ("Rispondi esclusivamente con un unico valore JSON valido che rispe
 TENTATIVI = 2                     # nuovi tentativi dopo sovraccarico o limite al minuto
 ATTESA_MASSIMA = 20               # secondi: oltre, meglio dirlo subito all'utente
 RICHIESTE_PER_CLASSIFICAZIONE = 6  # voci candidate, scelta, ricontrollo, con margine
+MASSIMO_IMMAGINE = 3 * 1024 * 1024  # byte: il browser la manda già rimpicciolita (di solito 150-400 KB)
+# formati che accettano tutti e tre i fornitori, riconosciuti dai primi byte
+FIRME_IMMAGINE = {"image/jpeg": lambda b: b[:3] == b"\xff\xd8\xff",
+                  "image/png": lambda b: b[:8] == b"\x89PNG\r\n\x1a\n",
+                  "image/webp": lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP"}
 
 # ------------------------------------------------------------------ schemi delle risposte
 _S, _I = {"type": "string"}, {"type": "integer"}
@@ -93,6 +104,27 @@ class ErroreIA(Exception):
         self.corpo = ""                   # inizio della risposta d'errore del servizio, se c'e'
         self.stato_servizio = 0           # codice HTTP della risposta del servizio (0 = nessuna risposta)
         self.attesa: float | None = None  # secondi suggeriti dal servizio prima di riprovare
+
+
+@dataclass(frozen=True)
+class Immagine:
+    """Foto della merce da mandare al servizio insieme al prompt (base64 senza il prefisso «data:»)."""
+    tipo: str
+    dati: str
+
+    @staticmethod
+    def da(tipo: str, dati: str) -> "Immagine":
+        """Controlla formato, base64, dimensione e primi byte; altrimenti ErroreIA «immagine_non_valida»."""
+        controllo = FIRME_IMMAGINE.get(tipo)
+        if controllo is None or not isinstance(dati, str) or len(dati) > (MASSIMO_IMMAGINE // 3 + 1) * 4:
+            raise ErroreIA("immagine_non_valida", 422)
+        try:
+            grezzi = base64.b64decode(dati, validate=True)
+        except (binascii.Error, ValueError):
+            raise ErroreIA("immagine_non_valida", 422) from None
+        if not 64 <= len(grezzi) <= MASSIMO_IMMAGINE or not controllo(grezzi):
+            raise ErroreIA("immagine_non_valida", 422)
+        return Immagine(tipo, dati)
 
 
 @dataclass
@@ -228,9 +260,16 @@ class ServizioIA:
                 "token_in": int(r["token_in"]), "token_cache": int(r["token_cache"]), "token_out": int(r["token_out"])}
 
     # ------------------------------------------------------------------ chiamate
-    def _chiama(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None) -> Risposta:
+    def _chiama(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None,
+                immagine: Immagine | None = None) -> Risposta:
         f = {"gemini": self._gemini, "anthropic": self._anthropic, "openai": self._openai}[self.cfg.ia_fornitore]
-        return f(modello, contesto, prompt, token_massimi, schema)
+        try:
+            return f(modello, contesto, prompt, token_massimi, schema, immagine)
+        except ErroreIA as e:
+            # richiesta rifiutata solo con la foto (modello senza immagini, formato o dimensione): lo si dice chiaro
+            if immagine is not None and e.codice == "upstream_error" and e.stato_servizio in (400, 413, 415, 422):
+                raise ErroreIA("immagine_non_accettata", 422) from None
+            raise
 
     def prova(self, livello: str = "rapido") -> dict[str, Any]:
         """Breve richiesta di prova al servizio configurato (pagina Impostazioni), con il modello rapido o con quello
@@ -249,14 +288,14 @@ class ServizioIA:
                 "modello": modello, "token_in": r.token_in, "token_out": r.token_out}
 
     def chiedi(self, utente: sqlite3.Row, prompt: str, livello: str, contesto: str = "", schema: str | None = None,
-               operazione: str = "", tipo: str = "classifica") -> dict[str, Any]:
+               operazione: str = "", tipo: str = "classifica", immagine: Immagine | None = None) -> dict[str, Any]:
         if not self.disponibile:
             raise ErroreIA("not_configured", 503)
         if livello not in TOKEN_MASSIMI or tipo not in ("classifica", "traduzione") or (schema and schema not in SCHEMI) \
                 or not isinstance(prompt, str) or not prompt.strip():
             raise ErroreIA("bad_request", 400)
-        if tipo == "traduzione" and schema not in (None, "traduzione"):
-            raise ErroreIA("bad_request", 400)          # una «traduzione» con lo schema di una classificazione non conterebbe
+        if tipo == "traduzione" and (schema not in (None, "traduzione") or immagine is not None):
+            raise ErroreIA("bad_request", 400)          # una «traduzione» con lo schema o la foto di una classificazione non conterebbe
         if len(prompt) + len(contesto) > MASSIMO_CARATTERI:
             raise ErroreIA("prompt_too_large", 413)
         uid = int(utente["id"])
@@ -284,7 +323,7 @@ class ServizioIA:
         modello = self.cfg.modello_rapido if livello == "rapido" else self.cfg.modello
         esito, tin, tout, tcache = "errore", 0, 0, 0
         try:
-            r = self._chiama(modello, contesto, prompt, TOKEN_MASSIMI[livello], schema)
+            r = self._chiama(modello, contesto, prompt, TOKEN_MASSIMI[livello], schema, immagine)
             tin, tout, tcache = r.token_in, r.token_out, r.token_cache
             if r.rifiutata:
                 esito = "rifiutata"
@@ -337,8 +376,10 @@ class ServizioIA:
         raise ErroreIA("upstream_error", 502)   # non si arriva qui
 
     # ------------------------------------------------------------------ Google Gemini
-    def _gemini(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None) -> Risposta:
-        parti = ([{"text": contesto}] if contesto else []) + [{"text": prompt}]
+    def _gemini(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None,
+                immagine: Immagine | None = None) -> Risposta:
+        parti = ([{"text": contesto}] if contesto else []) + \
+            ([{"inlineData": {"mimeType": immagine.tipo, "data": immagine.dati}}] if immagine else []) + [{"text": prompt}]
         corpo: dict[str, Any] = {
             "systemInstruction": {"parts": [{"text": ISTRUZIONI}]},
             "contents": [{"role": "user", "parts": parti}],
@@ -368,10 +409,13 @@ class ServizioIA:
                         troncata=motivo == "MAX_TOKENS", token_cache=tcache)
 
     # ------------------------------------------------------------------ Anthropic (Claude)
-    def _anthropic(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None) -> Risposta:
+    def _anthropic(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None,
+                   immagine: Immagine | None = None) -> Risposta:
         # il contesto (istruzioni e testo ufficiale delle voci) va in cache: le richieste successive lo rileggono a poco prezzo
-        contenuto: Any = ([{"type": "text", "text": contesto, "cache_control": {"type": "ephemeral"}}, {"type": "text", "text": prompt}]
-                          if contesto else prompt)
+        blocchi: list[dict[str, Any]] = [{"type": "text", "text": contesto, "cache_control": {"type": "ephemeral"}}] if contesto else []
+        if immagine:
+            blocchi.append({"type": "image", "source": {"type": "base64", "media_type": immagine.tipo, "data": immagine.dati}})
+        contenuto: Any = blocchi + [{"type": "text", "text": prompt}] if blocchi else prompt
         corpo: dict[str, Any] = {"model": modello, "max_tokens": token_massimi, "system": ISTRUZIONI,
                                  "messages": [{"role": "user", "content": contenuto}]}
         if schema:      # risposta obbligata nello strumento: il JSON segue lo schema
@@ -396,8 +440,12 @@ class ServizioIA:
                         troncata=d.get("stop_reason") == "max_tokens", token_cache=letti)
 
     # ------------------------------------------------------------------ compatibili OpenAI (Azure, Groq, Mistral, OpenRouter, Ollama...)
-    def _openai(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None) -> Risposta:
-        testo_utente = f"{contesto}\n\n{prompt}" if contesto else prompt      # prefisso uguale: cache automatica del servizio
+    def _openai(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None,
+                immagine: Immagine | None = None) -> Risposta:
+        testo_utente: Any = f"{contesto}\n\n{prompt}" if contesto else prompt      # prefisso uguale: cache automatica del servizio
+        if immagine:
+            testo_utente = ([{"type": "text", "text": contesto}] if contesto else []) + [
+                {"type": "image_url", "image_url": {"url": f"data:{immagine.tipo};base64,{immagine.dati}"}}, {"type": "text", "text": prompt}]
         formati: list[dict[str, Any] | None] = [{"type": "json_object"}, None]
         if schema:
             formati.insert(0, {"type": "json_schema", "json_schema": {"name": schema, "strict": True, "schema": copy.deepcopy(SCHEMI[schema])}})

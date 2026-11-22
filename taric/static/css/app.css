@@ -297,6 +297,23 @@ ul.punti{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;f
 #q::placeholder{color:var(--secondario);opacity:.75}
 .domanda .dato.tardi{color:var(--ambra);font-weight:600}
 @media (max-width:560px){#q{font-size:17px}}
+/* foto della merce (js/foto.js): tasto nella casella, a destra; miniatura sotto la casella, solo con l'IA */
+.cerca-merce .foto-posto{position:absolute;right:8px;top:9px}
+.cerca-merce.con-foto-tasto .azzera{right:50px}
+.cerca-merce.con-foto-tasto #q{padding-right:96px}
+.modo-ia #foto,.con-foto #foto{color:var(--accento)}
+#foto:disabled{opacity:.4;cursor:var(--freccia,default)}
+.foto-posto.con-divieto #foto{opacity:.5;cursor:not-allowed}
+.foto-merce{display:flex;align-items:center;gap:12px;padding:8px;border:1px solid var(--linea);border-radius:var(--r-m);background:var(--carta-2);animation:sale .3s var(--dolce)}
+.domanda:not(.modo-ia) .foto-merce{display:none}
+.foto-merce img{flex:none;width:76px;height:76px;object-fit:cover;border-radius:10px;border:1px solid var(--linea);background:var(--carta)}
+.foto-testo{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:14.5px;line-height:1.4}
+.foto-testo b{font-weight:650}
+.foto-testo span{color:var(--secondario);overflow-wrap:anywhere}
+.foto-merce .tasto-ico{flex:none;align-self:flex-start}
+.foto-attesa{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 6px;font-size:14.5px;color:var(--secondario)}
+.foto-attesa .ico{color:var(--accento);animation:gira 1s linear infinite}
+.domanda.trascina{outline:2px dashed var(--accento);outline-offset:-7px}
 /* interruttore dell'intelligenza artificiale */
 .comandi .interruttore{margin-left:auto}
 .interruttore{position:relative;display:inline-flex;align-items:center;gap:10px;min-height:40px;padding:2px 2px 2px 0;font:600 14.5px/1.2 var(--f);color:var(--secondario);cursor:var(--mano,pointer);user-select:none;-webkit-user-select:none}
@@ -1160,6 +1177,8 @@ html.con-finestra{overflow:hidden}
   .link{min-height:36px}
   input[type="checkbox"]{width:20px;height:20px}
   .modo-ia #q{resize:none}
+  .cerca-merce.con-foto-tasto .azzera{right:54px}
+  .cerca-merce.con-foto-tasto #q{padding-right:104px}
 }
 @media (hover:none){
   .trow:not(.acceso):hover,.sez:hover,.tab tbody tr:hover{background:none}

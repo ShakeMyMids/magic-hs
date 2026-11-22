@@ -16,7 +16,7 @@ MAPPA = {
     "regole": "list-checks", "lucchetto": "lock", "calendario": "calendar",
     "scintille": "sparkles", "indietro": "arrow-left", "piu": "plus", "matita": "pencil", "nuovo-utente": "user-plus",
     "nave": "ship", "container": "container",
-    "installa": "monitor-smartphone", "condividi": "share", "divieto": "ban",
+    "installa": "monitor-smartphone", "condividi": "share", "divieto": "ban", "fotocamera": "camera",
 }
 out = {}
 for nome, lucide in MAPPA.items():
