@@ -198,4 +198,6 @@ IA): `tests/sito_di_prova.sh` e `tests/e2e_sito.js`, che GitHub esegue a ogni mo
 `.github/workflows/test.yml`); vedi la sezione «Sviluppo» del README. Dopo modifiche all'interfaccia controlla anche il telefono
 (larghezza 390 px, anche in orizzontale), il tablet (810 px in verticale, 1080 in orizzontale) e il tema scuro: fino a 900 px
 le sezioni sono nella barra in basso, con `(pointer:coarse)` i pulsanti sono di almeno 40-44 px e i campi a 16 px (sotto,
-l'iPhone ingrandisce la pagina); niente elementi che compaiono o spariscono quando un campo prende o perde il fuoco.
+l'iPhone ingrandisce la pagina); niente elementi che compaiono o spariscono quando un campo prende o perde il fuoco;
+su telefono e tablet nessun campo prende il fuoco da solo all'apertura, perché si aprirebbe la tastiera (`accesso.js` lo fa
+solo con `(hover:hover) and (pointer:fine)`).
