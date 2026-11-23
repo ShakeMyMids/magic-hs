@@ -309,35 +309,76 @@ async function accedi(p, email, password) {
   await capo.waitForSelector('.timbro >> text=Proposta');
   ok(await usate() === prima, 'descrizione già classificata: ripresa senza una nuova richiesta all\'IA');
 
-  // classificazione da una foto (tasto con la macchina fotografica): rimpicciolita nel browser a 1280 px, mandata con ogni
-  // richiesta all'IA, che dice che cosa vede; nello storico resta il testo, non la foto
-  const fotoMerce = out + '/foto-merce.jpg';
+  // classificazione da foto e PDF (tasto con la macchina fotografica, fino a 3 allegati): le foto rimpicciolite nel browser a
+  // 1280 px e mandate con ogni richiesta all'IA, che dice che cosa vede e legge; nello storico resta il testo, non la foto
+  const fotoMerce = out + '/foto-merce.jpg', fotoEtichetta = out + '/foto-etichetta.jpg', schedaPdf = out + '/scheda.pdf';
   const pf = await b.newPage({ viewport: { width: 1600, height: 1200 } });
   await pf.setContent('<body style="margin:0;background:#d9d4cc"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450" width="1600" height="1200">' +
     '<path d="M90 300Q95 215 150 200L250 180Q300 170 330 210L380 240Q470 255 505 278Q525 292 515 310L100 315Z" fill="#f4f4f2" stroke="#555" stroke-width="3"/>' +
     '<path d="M96 310L515 308Q520 328 500 332L110 334Q92 330 96 310Z" fill="#e0453a"/>' +
     '<text x="300" y="390" font-family="sans-serif" font-size="22" text-anchor="middle">UPPER: LEATHER · SOLE: RUBBER</text></svg></body>');
-  await pf.screenshot({ path: fotoMerce, type: 'jpeg', quality: 90 }); await pf.close();
+  await pf.screenshot({ path: fotoMerce, type: 'jpeg', quality: 90 });
+  await pf.setViewportSize({ width: 1200, height: 900 });
+  await pf.setContent('<body style="margin:0;background:#fff;display:grid;place-items:center;height:900px;font:600 64px sans-serif">' +
+    '<div style="border:6px solid #222;padding:40px">UPPER: LEATHER<br>SOLE: RUBBER<br>MADE IN VIETNAM</div></body>');
+  await pf.screenshot({ path: fotoEtichetta, type: 'jpeg', quality: 90 });
+  await pf.setContent('<h1>Scheda tecnica</h1><p>Scarpa sportiva: tomaia in pelle pieno fiore, suola in gomma.</p>');
+  await pf.pdf({ path: schedaPdf, format: 'A4' }); await pf.close();
   const richiesteIA = [], spiaIA = r => { if (r.url().endsWith('/api/ia')) richiesteIA.push(JSON.parse(r.postData())); };
   capo.on('request', spiaIA);
   await capo.fill('#q', '');
   await capo.setInputFiles('#foto-file', fotoMerce);
   await capo.waitForSelector('#foto-merce img');
-  ok((await capo.getAttribute('#q', 'placeholder')).startsWith('Facoltativo'), 'foto: miniatura sotto la casella, descrizione facoltativa');
+  ok((await capo.getAttribute('#q', 'placeholder')).startsWith('Facoltativo') && await capo.isVisible('[data-act="altra-foto"]'),
+    'foto: miniatura sotto la casella con il «+» per un altro allegato, descrizione facoltativa');
   await capo.click('#vai');
   await capo.waitForSelector('#foto-merce >> text=L\'IA vede');
   await capo.waitForSelector('.timbro >> text=Proposta');
   const latoFoto = await capo.evaluate(() => { const i = document.querySelector('#foto-merce img'); return Math.max(i.naturalWidth, i.naturalHeight); });
-  ok(richiesteIA.length === 2 && richiesteIA.every(x => x.immagine && x.immagine.tipo === 'image/jpeg') && latoFoto === 1280 &&
-    /foto allegata/.test(richiesteIA[0].prompt) && /dalla foto/.test(await capo.textContent('#foto-merce')),
+  ok(richiesteIA.length === 2 && richiesteIA.every(x => x.allegati && x.allegati.length === 1 && x.allegati[0].tipo === 'image/jpeg') && latoFoto === 1280 &&
+    /allegati \(1 foto\)/.test(richiesteIA[0].prompt) && richiesteIA[0].schema === 'voci_foto' && /dalla foto/.test(await capo.textContent('#foto-merce')),
     'foto: rimpicciolita a 1280 px e mandata con le richieste all\'IA, che dice che cosa vede');
+  ok(/Letto negli allegati\. Upper: leather/.test(await capo.textContent('#esito .letto')), 'foto: il testo letto nel risultato');
   await capo.screenshot({ path: out + '/5d-foto.png' });
   const ultima = (await capo.evaluate(() => TARIC.api('GET', '/api/storico?limite=1'))).voci[0];
   const salvata = await capo.evaluate(id => TARIC.api('GET', '/api/storico/' + id), ultima.id);
-  ok(/^Foto: Scarpa/.test(ultima.testo) && salvata.dati.foto === true && !JSON.stringify(salvata).includes(richiesteIA[0].immagine.dati.slice(0, 60)),
-    'foto: nello storico la descrizione dell\'IA, non la foto');
-  await capo.click('[data-act="togli-foto"]');
-  ok(await capo.isHidden('#foto-merce') && (await capo.getAttribute('#q', 'placeholder')).startsWith('Descrivi'), 'foto: tolta');
+  ok(/^Foto: Scarpa/.test(ultima.testo) && salvata.dati.foto === true && /Upper/.test(salvata.dati.result.letto) &&
+    !JSON.stringify(salvata).includes(richiesteIA[0].allegati[0].dati.slice(0, 60)), 'foto: nello storico la descrizione e il testo letto, non la foto');
+  // la foto dell'etichetta in più e nessuna descrizione: l'IA vede due merci e chiede quale; poi la stessa classificazione continua
+  const usateFoto = await usate();
+  await capo.setInputFiles('#foto-file', fotoEtichetta);
+  await capo.waitForFunction(() => document.querySelectorAll('#foto-merce img').length === 2);
+  await capo.click('#vai');
+  await capo.waitForSelector('[data-act="scegli-merce"]');
+  await capo.screenshot({ path: out + '/5e-quale-merce.png' });
+  await capo.click('[data-act="scegli-merce"][data-k="1"]');
+  await capo.waitForFunction(() => document.querySelector('.timbro') && !document.querySelector('#ferma:not([hidden])'));
+  const dopo = richiesteIA.slice(2);
+  ok((await capo.inputValue('#q')) === 'Borraccia in acciaio' && dopo.length >= 3 && dopo.every(x => x.operazione === dopo[0].operazione && x.allegati.length === 2) &&
+    await usate() === usateFoto + 1, 'più merci negli allegati: si sceglie quale, e resta una classificazione sola');
+  // «Correggi»: la descrizione dell'IA nella casella; poi un PDF al posto dell'etichetta
+  await capo.click('[data-act="correggi-vista"]');
+  ok((await capo.inputValue('#q')).startsWith('Scarpa') && await capo.evaluate(() => document.activeElement.id === 'q'), 'Correggi: la descrizione dell\'IA nella casella');
+  await capo.click('[data-act="togli-foto"][data-k="1"]');
+  await capo.setInputFiles('#foto-file', schedaPdf);
+  await capo.waitForSelector('#foto-merce .foto-pdf >> text=scheda.pdf');
+  await capo.click('#vai');
+  await capo.waitForFunction(() => !document.querySelector('#ferma:not([hidden])') && /Scheda/.test((document.querySelector('#esito .letto') || {}).textContent || ''));
+  const conPdf = richiesteIA[richiesteIA.length - 1];
+  ok(conPdf.allegati.map(x => x.tipo).join() === 'image/jpeg,application/pdf' && /1 foto e 1 PDF/.test(conPdf.prompt), 'PDF: mandato con la foto, letto nel risultato');
+  // «Condividi → MAGIC HS» da un'altra app: il service worker riceve i file e li passa alla pagina
+  while (await capo.$('[data-act="togli-foto"]')) await capo.click('[data-act="togli-foto"]');
+  await capo.fill('#q', '');
+  await capo.evaluate(() => {
+    const f = document.createElement('form'); f.method = 'post'; f.enctype = 'multipart/form-data'; f.action = '/condividi'; f.id = 'condividi';
+    f.innerHTML = '<input type="file" name="allegati" multiple><input name="testo" value="Scarpe dal fornitore">'; document.body.appendChild(f);
+  });
+  await capo.setInputFiles('#condividi input[type=file]', [fotoMerce, schedaPdf]);
+  await Promise.all([capo.waitForNavigation(), capo.evaluate(() => document.getElementById('condividi').submit())]);
+  await capo.waitForFunction(() => document.querySelectorAll('#foto-merce .foto-pezzo:not(.foto-altra)').length === 2);
+  ok((await capo.inputValue('#q')) === 'Scarpe dal fornitore' && !capo.url().includes('condivisa'), 'Condividi: foto, PDF e testo arrivano da un\'altra app');
+  await capo.click('[data-act="togli-foto"]'); await capo.click('[data-act="togli-foto"]');
+  ok(await capo.isHidden('#foto-merce') && (await capo.getAttribute('#q', 'placeholder')).startsWith('Descrivi'), 'foto: tolte');
   capo.off('request', spiaIA);
   await capo.click('#interruttore-ia'); await capo.fill('#q', ''); await capo.click('#tab-gestione');
 

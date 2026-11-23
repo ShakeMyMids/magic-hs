@@ -14,9 +14,9 @@ Così i fornitori riusano il contesto dalla loro cache (Claude con cache_control
 Claude, json_schema per i compatibili OpenAI, responseSchema per Gemini; se un servizio non lo accetta si riprova
 senza. Sovraccarico e limiti al minuto si riprovano da soli (TENTATIVI, con l'attesa che il servizio indica).
 
-Una classificazione può avere anche la foto della merce (Immagine, JPEG, PNG o WebP, già rimpicciolita dal browser): va
-tra il contesto e il prompt, così la cache del contesto resta valida. Il server la manda al servizio e la scarta: non la
-scrive né nel database né nel registro.
+Una classificazione può avere fino a 3 allegati (Allegato): foto della merce o dell'etichetta (JPEG, PNG o WebP, già
+rimpicciolite dal browser) e schede tecniche in PDF. Vanno tra il contesto e il prompt, così la cache del contesto resta
+valida. Il server li manda al servizio e li scarta: non li scrive né nel database né nel registro.
 """
 from __future__ import annotations
 
@@ -47,11 +47,16 @@ ISTRUZIONI = ("Rispondi esclusivamente con un unico valore JSON valido che rispe
 TENTATIVI = 2                     # nuovi tentativi dopo sovraccarico o limite al minuto
 ATTESA_MASSIMA = 20               # secondi: oltre, meglio dirlo subito all'utente
 RICHIESTE_PER_CLASSIFICAZIONE = 6  # voci candidate, scelta, ricontrollo, con margine
-MASSIMO_IMMAGINE = 3 * 1024 * 1024  # byte: il browser la manda già rimpicciolita (di solito 150-400 KB)
-# formati che accettano tutti e tre i fornitori, riconosciuti dai primi byte
-FIRME_IMMAGINE = {"image/jpeg": lambda b: b[:3] == b"\xff\xd8\xff",
+# allegati di una classificazione: formati che accettano i fornitori, riconosciuti dai primi byte, con la dimensione massima
+# (le foto arrivano già rimpicciolite dal browser, di solito qualche decina di KB; un PDF lungo costa molti token)
+FIRME_ALLEGATO = {"image/jpeg": lambda b: b[:3] == b"\xff\xd8\xff",
                   "image/png": lambda b: b[:8] == b"\x89PNG\r\n\x1a\n",
-                  "image/webp": lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP"}
+                  "image/webp": lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP",
+                  "application/pdf": lambda b: b"%PDF-" in b[:1024]}
+MASSIMO_ALLEGATO = {"image/jpeg": 3 * 1024 * 1024, "image/png": 3 * 1024 * 1024, "image/webp": 3 * 1024 * 1024,
+                    "application/pdf": 5 * 1024 * 1024}
+MASSIMO_ALLEGATI = 3                        # per richiesta
+MASSIMO_TOTALE = 8 * 1024 * 1024            # byte, tutti gli allegati insieme
 
 # ------------------------------------------------------------------ schemi delle risposte
 _S, _I = {"type": "string"}, {"type": "integer"}
@@ -69,6 +74,15 @@ SCHEMI: dict[str, dict[str, Any]] = {
     "voci": _oggetto(merce=_S, voci=_elenco(_oggetto(voce=_S, motivo=_S)), non_classificabile={"type": ["string", "null"]}),
     "scelta": _oggetto(
         merce=_S,
+        migliore=_oggetto(codice=_S, descrizione_it=_S, motivazione=_S, confidenza=_I),
+        alternative=_elenco(_oggetto(codice=_S, descrizione_it=_S, quando=_S, confidenza=_I)),
+        domande=_elenco(_oggetto(domanda=_S, opzioni=_elenco(_S), perche=_S)),
+        altre_voci=_elenco(_S)),
+    # con foto o PDF: anche il testo letto negli allegati (etichetta, scheda) e, al primo passo, le merci diverse che si vedono
+    "voci_foto": _oggetto(merce=_S, letto=_S, merci=_elenco(_S), voci=_elenco(_oggetto(voce=_S, motivo=_S)),
+                          non_classificabile={"type": ["string", "null"]}),
+    "scelta_foto": _oggetto(
+        merce=_S, letto=_S,
         migliore=_oggetto(codice=_S, descrizione_it=_S, motivazione=_S, confidenza=_I),
         alternative=_elenco(_oggetto(codice=_S, descrizione_it=_S, quando=_S, confidenza=_I)),
         domande=_elenco(_oggetto(domanda=_S, opzioni=_elenco(_S), perche=_S)),
@@ -107,24 +121,29 @@ class ErroreIA(Exception):
 
 
 @dataclass(frozen=True)
-class Immagine:
-    """Foto della merce da mandare al servizio insieme al prompt (base64 senza il prefisso «data:»)."""
+class Allegato:
+    """Foto della merce o PDF da mandare al servizio insieme al prompt (base64 senza il prefisso «data:»)."""
     tipo: str
     dati: str
+    byte: int = 0
+
+    @property
+    def pdf(self) -> bool:
+        return self.tipo == "application/pdf"
 
     @staticmethod
-    def da(tipo: str, dati: str) -> "Immagine":
-        """Controlla formato, base64, dimensione e primi byte; altrimenti ErroreIA «immagine_non_valida»."""
-        controllo = FIRME_IMMAGINE.get(tipo)
-        if controllo is None or not isinstance(dati, str) or len(dati) > (MASSIMO_IMMAGINE // 3 + 1) * 4:
-            raise ErroreIA("immagine_non_valida", 422)
+    def da(tipo: str, dati: str) -> "Allegato":
+        """Controlla formato, base64, dimensione e primi byte; altrimenti ErroreIA «allegato_non_valido»."""
+        controllo, massimo = FIRME_ALLEGATO.get(tipo), MASSIMO_ALLEGATO.get(tipo, 0)
+        if controllo is None or not isinstance(dati, str) or len(dati) > (massimo // 3 + 1) * 4:
+            raise ErroreIA("allegato_non_valido", 422)
         try:
             grezzi = base64.b64decode(dati, validate=True)
         except (binascii.Error, ValueError):
-            raise ErroreIA("immagine_non_valida", 422) from None
-        if not 64 <= len(grezzi) <= MASSIMO_IMMAGINE or not controllo(grezzi):
-            raise ErroreIA("immagine_non_valida", 422)
-        return Immagine(tipo, dati)
+            raise ErroreIA("allegato_non_valido", 422) from None
+        if not 64 <= len(grezzi) <= massimo or not controllo(grezzi):
+            raise ErroreIA("allegato_non_valido", 422)
+        return Allegato(tipo, dati, len(grezzi))
 
 
 @dataclass
@@ -261,14 +280,16 @@ class ServizioIA:
 
     # ------------------------------------------------------------------ chiamate
     def _chiama(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None,
-                immagine: Immagine | None = None) -> Risposta:
+                allegati: tuple[Allegato, ...] = ()) -> Risposta:
         f = {"gemini": self._gemini, "anthropic": self._anthropic, "openai": self._openai}[self.cfg.ia_fornitore]
         try:
-            return f(modello, contesto, prompt, token_massimi, schema, immagine)
+            return f(modello, contesto, prompt, token_massimi, schema, allegati)
         except ErroreIA as e:
-            # richiesta rifiutata solo con la foto (modello senza immagini, formato o dimensione): lo si dice chiaro
-            if immagine is not None and e.codice == "upstream_error" and e.stato_servizio in (400, 413, 415, 422):
-                raise ErroreIA("immagine_non_accettata", 422) from None
+            # richiesta rifiutata per gli allegati (modello senza immagini o PDF, formato, troppe pagine): lo si dice chiaro
+            if allegati and e.codice == "prompt_too_large" and any(a.pdf for a in allegati):
+                raise ErroreIA("pdf_troppo_lungo", 413) from None
+            if allegati and e.codice == "upstream_error" and e.stato_servizio in (400, 413, 415, 422):
+                raise ErroreIA("allegato_non_accettato", 422) from None
             raise
 
     def prova(self, livello: str = "rapido") -> dict[str, Any]:
@@ -288,14 +309,18 @@ class ServizioIA:
                 "modello": modello, "token_in": r.token_in, "token_out": r.token_out}
 
     def chiedi(self, utente: sqlite3.Row, prompt: str, livello: str, contesto: str = "", schema: str | None = None,
-               operazione: str = "", tipo: str = "classifica", immagine: Immagine | None = None) -> dict[str, Any]:
+               operazione: str = "", tipo: str = "classifica", allegati: tuple[Allegato, ...] = ()) -> dict[str, Any]:
         if not self.disponibile:
             raise ErroreIA("not_configured", 503)
         if livello not in TOKEN_MASSIMI or tipo not in ("classifica", "traduzione") or (schema and schema not in SCHEMI) \
                 or not isinstance(prompt, str) or not prompt.strip():
             raise ErroreIA("bad_request", 400)
-        if tipo == "traduzione" and (schema not in (None, "traduzione") or immagine is not None):
+        if tipo == "traduzione" and (schema not in (None, "traduzione") or allegati):
             raise ErroreIA("bad_request", 400)          # una «traduzione» con lo schema o la foto di una classificazione non conterebbe
+        if len(allegati) > MASSIMO_ALLEGATI:
+            raise ErroreIA("bad_request", 400)
+        if sum(a.byte for a in allegati) > MASSIMO_TOTALE:
+            raise ErroreIA("allegati_troppo_grandi", 413)
         if len(prompt) + len(contesto) > MASSIMO_CARATTERI:
             raise ErroreIA("prompt_too_large", 413)
         uid = int(utente["id"])
@@ -323,7 +348,7 @@ class ServizioIA:
         modello = self.cfg.modello_rapido if livello == "rapido" else self.cfg.modello
         esito, tin, tout, tcache = "errore", 0, 0, 0
         try:
-            r = self._chiama(modello, contesto, prompt, TOKEN_MASSIMI[livello], schema, immagine)
+            r = self._chiama(modello, contesto, prompt, TOKEN_MASSIMI[livello], schema, tuple(allegati))
             tin, tout, tcache = r.token_in, r.token_out, r.token_cache
             if r.rifiutata:
                 esito = "rifiutata"
@@ -377,9 +402,9 @@ class ServizioIA:
 
     # ------------------------------------------------------------------ Google Gemini
     def _gemini(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None,
-                immagine: Immagine | None = None) -> Risposta:
+                allegati: tuple[Allegato, ...] = ()) -> Risposta:
         parti = ([{"text": contesto}] if contesto else []) + \
-            ([{"inlineData": {"mimeType": immagine.tipo, "data": immagine.dati}}] if immagine else []) + [{"text": prompt}]
+            [{"inlineData": {"mimeType": a.tipo, "data": a.dati}} for a in allegati] + [{"text": prompt}]
         corpo: dict[str, Any] = {
             "systemInstruction": {"parts": [{"text": ISTRUZIONI}]},
             "contents": [{"role": "user", "parts": parti}],
@@ -410,11 +435,11 @@ class ServizioIA:
 
     # ------------------------------------------------------------------ Anthropic (Claude)
     def _anthropic(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None,
-                   immagine: Immagine | None = None) -> Risposta:
+                   allegati: tuple[Allegato, ...] = ()) -> Risposta:
         # il contesto (istruzioni e testo ufficiale delle voci) va in cache: le richieste successive lo rileggono a poco prezzo
         blocchi: list[dict[str, Any]] = [{"type": "text", "text": contesto, "cache_control": {"type": "ephemeral"}}] if contesto else []
-        if immagine:
-            blocchi.append({"type": "image", "source": {"type": "base64", "media_type": immagine.tipo, "data": immagine.dati}})
+        for a in allegati:
+            blocchi.append({"type": "document" if a.pdf else "image", "source": {"type": "base64", "media_type": a.tipo, "data": a.dati}})
         contenuto: Any = blocchi + [{"type": "text", "text": prompt}] if blocchi else prompt
         corpo: dict[str, Any] = {"model": modello, "max_tokens": token_massimi, "system": ISTRUZIONI,
                                  "messages": [{"role": "user", "content": contenuto}]}
@@ -441,11 +466,13 @@ class ServizioIA:
 
     # ------------------------------------------------------------------ compatibili OpenAI (Azure, Groq, Mistral, OpenRouter, Ollama...)
     def _openai(self, modello: str, contesto: str, prompt: str, token_massimi: int, schema: str | None,
-                immagine: Immagine | None = None) -> Risposta:
+                allegati: tuple[Allegato, ...] = ()) -> Risposta:
         testo_utente: Any = f"{contesto}\n\n{prompt}" if contesto else prompt      # prefisso uguale: cache automatica del servizio
-        if immagine:
+        if allegati:
             testo_utente = ([{"type": "text", "text": contesto}] if contesto else []) + [
-                {"type": "image_url", "image_url": {"url": f"data:{immagine.tipo};base64,{immagine.dati}"}}, {"type": "text", "text": prompt}]
+                {"type": "file", "file": {"filename": f"allegato-{k + 1}.pdf", "file_data": f"data:{a.tipo};base64,{a.dati}"}} if a.pdf
+                else {"type": "image_url", "image_url": {"url": f"data:{a.tipo};base64,{a.dati}"}}
+                for k, a in enumerate(allegati)] + [{"type": "text", "text": prompt}]
         formati: list[dict[str, Any] | None] = [{"type": "json_object"}, None]
         if schema:
             formati.insert(0, {"type": "json_schema", "json_schema": {"name": schema, "strict": True, "schema": copy.deepcopy(SCHEMI[schema])}})

@@ -60,9 +60,10 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 - `taric/ia.py`: chiamate al servizio IA (Gemini, Anthropic o compatibile OpenAI, scelto con le variabili del server).
   Limiti: `limite()` per persona (amministratori senza limite), `tetto_raggiunto()` per tutti. Ogni richiesta ha
   `contesto` (parte fissa, prima: va nella cache del fornitore, per Claude con `cache_control`) e `prompt` (la merce, in
-  fondo); la foto della merce (`Immagine.da`: JPEG, PNG o WebP in base64, primi byte e al massimo 3 MB, `immagine_non_valida`)
-  va tra i due, solo nelle classificazioni, e non si scrive da nessuna parte; se il servizio la rifiuta l'errore è
-  `immagine_non_accettata`; la risposta segue `SCHEMI[...]` (strumento obbligato per Claude, `json_schema` per OpenAI, `responseSchema` per
+  fondo); fino a 3 allegati (`Allegato.da`: foto JPEG, PNG o WebP fino a 3 MB e PDF fino a 5 MB in base64, primi byte, 8 MB in
+  tutto; `allegato_non_valido`, `allegati_troppo_grandi`) vanno tra i due, solo nelle classificazioni, e non si scrivono da
+  nessuna parte; se il servizio li rifiuta l'errore è `allegato_non_accettato` (`pdf_troppo_lungo` per il contesto finito);
+  con gli allegati gli schemi sono `voci_foto` e `scelta_foto` (in più `letto` e, al primo passo, `merci`); la risposta segue `SCHEMI[...]` (strumento obbligato per Claude, `json_schema` per OpenAI, `responseSchema` per
   Gemini) con ritorno al modo semplice se il servizio la rifiuta; sovraccarico e 429 si riprovano in `_post`. L'uso del
   mese conta le classificazioni: le richieste con la stessa `operazione` (la genera `app.js` a ogni Classifica o
   Riclassifica) contano una volta; le traduzioni (`tipo`) no, ma rispettano limite e tetto. Ogni fornitore ha il suo
@@ -94,16 +95,21 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   `js/accesso.js` (accesso, richiesta di account, nuova password), `attesa.html` con `js/attesa.js` (dati non ancora
   pronti), `js/comune.js` (chiamate API, tema, logo, finestre `T.finestra`, mesi in parole `T.meseIt`, testi accorciati `T.taglia`), `js/installa.js` (tasto Installa: finestra
   d'installazione del browser con `beforeinstallprompt`, altrimenti i passi per iPhone/iPad, Safari, Firefox; registra
-  `sw.js`, servito come `/sw.js`, che non conserva niente e senza rete mostra solo un avviso), `js/disegni.js` (Simone, l'autore: `T.AUTORE`, busto `T.autore({esulta})` e testa `T.autoreTesta` con le variabili `--av-*`,
+  `sw.js`, servito come `/sw.js`, che non conserva niente e senza rete mostra solo un avviso; riceve anche «Condividi → MAGIC HS»
+  dallo `share_target` del manifest, POST `/condividi`: tiene i file in memoria finché la pagina `/?condivisa=1` non li chiede
+  con il messaggio `condivisa?`; senza service worker il server rimanda a `/?condivisa=0`), `js/disegni.js` (Simone, l'autore: `T.AUTORE`, busto `T.autore({esulta})` e testa `T.autoreTesta` con le variabili `--av-*`,
   firma negli elementi `data-autore` inserita da `comune.js`, figura `.t-simone` sulla banchina che saluta, cabina del gioco; scena con nave, gru, treno, camion e aereo, inserita
   negli elementi `data-scena`: due composizioni, larga e compatta, scelte in `app.css` con una container query sulla
   larghezza del riquadro, così sul telefono niente viene tagliato; `data-scena="vivo"` la anima piano), `js/app.js` (prima pagina: ricerca per parola o codice con `cerca()`, che ignora le parole vuote e usa i sinonimi di
   `js/sinonimi.js`, e risultati in `#risultati`, oppure con
-  l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; anche da una
-  foto: tasto `#foto` nella casella (con `#foto-file`), immagine trascinata sulla `.domanda` o incollata in `#q`, preparata da
-  `js/foto.js` (`T.foto.prepara`: JPEG con il lato lungo di 1280 px, letta come `data:` per la CSP), in `state.foto` e
-  mandata con ogni richiesta della classificazione, miniatura in `#foto-merce` con quello che l'IA vede (`state.fotoVista`),
-  nello storico solo il testo (`Foto: …`, `dati.foto`); sopra i
+  l'interruttore `#modo-ia` la classificazione con l'IA, scelta ricordata in `localStorage` `magic-hs.modo`; anche da foto e
+  PDF: tasto `#foto` nella casella e «+» tra gli allegati (con `#foto-file`, `multiple`), file trascinati sulla `.domanda`,
+  incollati in `#q` o condivisi da un'altra app (`riceviCondivisa`), preparati da `js/foto.js` (`T.foto.prepara`: foto in JPEG
+  con il lato lungo di 1280 px e `avviso` «scura» o «sfocata» da `misura()`, PDF interi fino a 5 MB, letti come `data:` per la
+  CSP), in `state.allegati` (al massimo `T.foto.MASSIMI`) e mandati con ogni richiesta della classificazione; in `#foto-merce`
+  miniature, quello che l'IA vede (`state.fotoVista`) con «Correggi», il testo letto (`state.fotoLetto`, nel risultato
+  `letto`) e, se negli allegati ci sono più merci (`state.fotoMerci`), la scelta, che continua la stessa operazione
+  (`state.sospesa`); nello storico solo il testo (`Foto: …` o `Scheda PDF: …`, `dati.foto`); sopra i
   risultati l'archivio aziendale e, prima di chiedere all'IA una descrizione già classificata, la proposta di riprenderla;
   le ricerche senza risultati vanno a `/api/ricerche-vuote`; albero della nomenclatura; misure con il calcolo degli
   importi e la stampa, stili `@media print` in fondo ad `app.css`; data delle misure della scheda in `state.dataMisure` con
@@ -155,6 +161,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 
 ## Regole da rispettare
 
+- **Consegna**: finito un lavoro, commit e push su un ramo nuovo, poi senza chiedere si apre la PR e, quando le prove di
+  GitHub (`test` e `browser`) sono passate, si fa il merge in `main`.
 - **CSP**: niente script in linea né da altri domini, niente gestori `onclick=`. Gli eventi si agganciano in JS
   (attributi `data-act`, `data-p`, `data-g`). Gli stili negli attributi `style` sono ammessi.
 - Ogni richiesta alle API che modifica qualcosa passa da `TARIC.api()`, che aggiunge l'intestazione `X-Taric: 1`
