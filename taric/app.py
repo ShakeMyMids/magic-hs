@@ -40,7 +40,7 @@ from .config import Config
 from .copia import CopiaEsterna
 from .dati import RE_VERSIONE, GestoreDati
 from .db import Database, iso, tra
-from .ia import ErroreIA, Immagine, ServizioIA, mese_corrente
+from .ia import Allegato, ErroreIA, ServizioIA, mese_corrente
 from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
 from .trasporto import MASSIMO_PDF, ErroreTariffe, Tariffe
 from .valute import CambiDoganali, ErroreCambio
@@ -72,8 +72,10 @@ MESSAGGI_IA = {
     "invalid_json": "La risposta non era leggibile. Riprova.",
     "risposta_troncata": "La risposta dell'IA era troppo lunga ed è stata interrotta: descrivi la merce in modo più preciso e riprova.",
     "prompt_too_large": "La richiesta è troppo lunga. Accorcia la descrizione e riprova.",
-    "immagine_non_valida": "La foto non è leggibile: scegline un'altra (JPEG, PNG o WebP).",
-    "immagine_non_accettata": "Il servizio di intelligenza artificiale non ha accettato la foto: provane un'altra o descrivi la merce a parole.",
+    "allegato_non_valido": "Un allegato non è leggibile: usa foto JPEG, PNG o WebP (al massimo 3 MB) o un PDF (al massimo 5 MB).",
+    "allegato_non_accettato": "Il servizio di intelligenza artificiale non ha accettato la foto o il PDF: provane un altro o descrivi la merce a parole.",
+    "allegati_troppo_grandi": "Gli allegati insieme sono troppo grandi (al massimo 8 MB): togline uno o carica solo le pagine utili del PDF.",
+    "pdf_troppo_lungo": "Il PDF è troppo lungo per l'IA: carica solo le pagine che descrivono la merce.",
     "upstream_timeout": "L'IA ha impiegato troppo tempo a rispondere. Riprova.",
     "upstream_error": "Errore temporaneo nel collegamento con il servizio di intelligenza artificiale. Riprova tra poco.",
     "bad_request": "Richiesta non valida.",
@@ -108,19 +110,21 @@ class Nota(BaseModel):
     nota: str = Field(default="", max_length=500)
 
 
-class FotoMerce(BaseModel):
-    tipo: Literal["image/jpeg", "image/png", "image/webp"]
-    dati: str = Field(min_length=16, max_length=4_200_000)        # base64: al massimo 3 MB (ia.MASSIMO_IMMAGINE)
+class AllegatoIA(BaseModel):
+    tipo: Literal["image/jpeg", "image/png", "image/webp", "application/pdf"]
+    dati: str = Field(min_length=16, max_length=7_000_000)        # base64: foto 3 MB, PDF 5 MB (ia.MASSIMO_ALLEGATO)
 
 
 class RichiestaIA(BaseModel):
     prompt: str = Field(min_length=1, max_length=400_000)          # parte che cambia: merce e risposte dell'utente
     contesto: str = Field(default="", max_length=400_000)          # parte uguale tra le richieste: va nella cache del fornitore
     livello: Literal["rapido", "standard"] = "standard"
-    schema_risposta: Optional[Literal["voci", "scelta", "traduzione"]] = Field(default=None, alias="schema")
+    schema_risposta: Optional[Literal["voci", "scelta", "voci_foto", "scelta_foto", "traduzione"]] = Field(default=None, alias="schema")
     operazione: str = Field(default="", max_length=40, pattern=r"^[A-Za-z0-9_-]*$")   # una classificazione = piu' richieste
     tipo: Literal["classifica", "traduzione"] = "classifica"
-    immagine: Optional[FotoMerce] = None          # foto della merce: va al servizio IA e non si salva da nessuna parte
+    # foto della merce o schede in PDF: vanno al servizio IA e non si salvano da nessuna parte («immagine»: pagine di prima)
+    allegati: list[AllegatoIA] = Field(default_factory=list, max_length=3)
+    immagine: Optional[AllegatoIA] = None
 
 
 class Mese(BaseModel):
@@ -441,6 +445,13 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
         """Service worker per installare il sito come app: alla radice, perche' valga per tutte le pagine, e sempre
         ricontrollato, cosi' una nuova versione arriva subito."""
         return FileResponse(STATIC / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+    @app.post("/condividi", include_in_schema=False)
+    def condividi() -> RedirectResponse:
+        """«Condividi → MAGIC HS» da un'altra app (share_target del manifest): di solito la riceve il service worker, che
+        passa i file alla pagina. Se arriva qui (service worker non ancora attivo) i file non si leggono: si torna alla
+        pagina, che lo dice."""
+        return RedirectResponse("/?condivisa=0#classifica", status_code=303)
 
     @app.get("/data/{versione}/{percorso:path}", include_in_schema=False)
     def file_dati(versione: str, percorso: str, request: Request) -> Response:
@@ -1331,9 +1342,9 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     @app.post("/api/ia")
     def chiedi_ia(body: RichiestaIA, u: sqlite3.Row = Depends(richiede_utente)) -> Response:
         try:
-            foto = Immagine.da(body.immagine.tipo, body.immagine.dati) if body.immagine else None
+            allegati = tuple(Allegato.da(a.tipo, a.dati) for a in ([body.immagine] if body.immagine else []) + body.allegati)
             return JSONResponse(ia.chiedi(u, body.prompt, body.livello, contesto=body.contesto, schema=body.schema_risposta,
-                                          operazione=body.operazione, tipo=body.tipo, immagine=foto))
+                                          operazione=body.operazione, tipo=body.tipo, allegati=allegati))
         except ErroreIA as e:
             return JSONResponse({"errore": MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"]), "codice": e.codice}, status_code=e.stato_http)
 

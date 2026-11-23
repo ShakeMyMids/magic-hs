@@ -66,9 +66,9 @@
           : { t: 'Cerca', d: 'Scrivi una parola, come «scarpe di cuoio», o le prime cifre di un codice e premi «Cerca». Conosco anche i sinonimi.', e: sel('.cerca-merce') },
         { t: 'Usa l\'IA', d: bloccata ? 'Con questo interruttore l\'IA propone il codice dalla tua descrizione. Per usarla chiedi l\'autorizzazione all\'amministratore.'
           : 'Accendilo per descrivere la merce a parole tue: l\'IA propone il codice, spiega perché e fa domande per essere più precisa.', e: sel('#interruttore-ia') },
-        { t: 'Da una foto', d: bloccata ? 'Con questo tasto l\'IA riconosce la merce da una foto. Per usarlo chiedi l\'autorizzazione all\'amministratore.'
-          : 'Fotografa la merce o la sua etichetta, oppure trascina o incolla un\'immagine: l\'IA la riconosce e propone il codice. ' +
-            'Scrivi accanto quello che dalla foto non si vede, come il materiale.', e: sel('#foto-posto') },
+        { t: 'Da foto o PDF', d: bloccata ? 'Con questo tasto l\'IA riconosce la merce da foto o schede tecniche. Per usarlo chiedi l\'autorizzazione all\'amministratore.'
+          : 'Fotografa la merce e la sua etichetta, o allega la scheda tecnica in PDF: fino a 3 file, anche trascinati, incollati o condivisi da un\'altra app. ' +
+            'L\'IA dice che cosa vede e legge, poi propone il codice. Scrivi accanto quello che non si vede, come il materiale.', e: sel('#foto-posto') },
         { t: 'Codici recenti', d: 'Gli ultimi codici che hai aperto: un tocco e li riapri.', e: sel('#recenti') },
         { t: 'Risultati', d: (archivio ? 'In alto le merci già classificate in azienda, poi le voci della nomenclatura' : 'Le voci della nomenclatura che corrispondono') +
           ': tocca quella giusta per aprirne la scheda.', e: sel('#risultati .ris-box') },

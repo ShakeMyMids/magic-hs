@@ -110,9 +110,12 @@ var state = {
   utente: null,        // risposta di /api/io
   preferiti: {},       // codice -> { nota }
   q: '', answers: [], heads: [],
-  foto: null,          // foto della merce per l'IA (js/foto.js): { tipo, dati, url, larghezza, altezza, peso }; mai salvata
-  fotoVista: '',       // che cosa l'IA ha riconosciuto nella foto
-  fotoPrep: false,     // foto in preparazione (lettura e rimpicciolimento)
+  allegati: [],        // foto e PDF della merce per l'IA (js/foto.js), al massimo 3: { tipo, dati, nome, peso, avviso, url... }; mai salvati
+  fotoVista: '',       // che cosa l'IA ha riconosciuto negli allegati
+  fotoLetto: '',       // il testo che l'IA ha letto negli allegati (etichetta, scheda tecnica)
+  fotoMerci: [],       // merci diverse viste negli allegati: si sceglie quale classificare
+  fotoPrep: 0,         // allegati in preparazione (lettura e rimpicciolimento)
+  sospesa: null,       // classificazione fermata per scegliere la merce: { op, allegati }, si riprende con la stessa operazione
   result: null,        // risultato dell'IA, normalizzato
   sel: null,           // codice scelto: { code, idx }
   picks: {}, extra: '',
@@ -154,14 +157,26 @@ function infoBlock() {
 }
 /* ogni richiesta ha una parte fissa (contesto: istruzioni e testo ufficiale, riusata dalla cache del fornitore)
    e una parte che cambia (prompt: la merce e le risposte dell'utente), messa in fondo */
+function soloPdf(l) { return l.length > 0 && l.every(function (a) { return a.tipo === 'application/pdf'; }); }
+function descriviAllegati(l) {
+  var d = l.filter(function (a) { return a.tipo === 'application/pdf'; }).length, f = l.length - d;
+  return [f ? f + ' foto' : '', d ? d + ' PDF' : ''].filter(Boolean).join(' e ');
+}
 function merceBlock(passo) {
-  if (!state.foto) return 'MERCE DA CLASSIFICARE:\n«' + state.q + '»\n' + infoBlock();
-  // con la foto: la merce è quella dell'immagine allegata (tra il contesto e questo testo), la descrizione è facoltativa
-  return 'MERCE DA CLASSIFICARE: quella della foto allegata' + (state.q ? ', che l\'utente descrive così:\n«' + state.q + '»\n' : ' (l\'utente non ha aggiunto una descrizione).\n') +
-    'Guarda la foto con attenzione e leggi anche etichette, scritte, marchi e simboli. Non dare per scontato ciò che la foto non mostra ' +
-    '(materiale interno, composizione, funzionamento, uso): ' + (passo === 'voci' ? 'includi le voci concorrenti. ' : 'se serve per scegliere chiedilo nelle domande e abbassa la confidenza. ') +
-    'In "merce" descrivi in italiano, in una frase, la merce che vedi.' +
-    (passo === 'voci' ? ' Se la foto non mostra una merce riconoscibile, restituisci "voci":[] e scrivi in "non_classificabile" che cosa serve (per esempio una foto più vicina o una descrizione).' : '') +
+  var l = state.allegati, voci = passo === 'voci';
+  if (!l.length) return 'MERCE DA CLASSIFICARE:\n«' + state.q + '»\n' + infoBlock();
+  // con foto o PDF: la merce è quella degli allegati (tra il contesto e questo testo), la descrizione è facoltativa
+  return 'MERCE DA CLASSIFICARE: quella mostrata negli allegati (' + descriviAllegati(l) + ')' +
+    (state.q ? ', che l\'utente descrive così:\n«' + state.q + '»\n' : '; l\'utente non ha aggiunto una descrizione.\n') +
+    'Guarda gli allegati con attenzione: leggi etichette, scritte, marchi, simboli e, nei PDF, le caratteristiche tecniche. ' +
+    'In "letto" riporta in breve il testo utile letto negli allegati (composizione, materiali, modello, dati tecnici, origine), oppure "" se non c\'è. ' +
+    'Non dare per scontato ciò che gli allegati non mostrano (materiale interno, composizione, funzionamento, uso): ' +
+    (voci ? 'includi le voci concorrenti. ' : 'se serve per scegliere chiedilo nelle domande e abbassa la confidenza. ') +
+    'In "merce" descrivi in italiano, in una frase, la merce' + (state.q ? ' indicata dall\'utente.' : '.') +
+    (voci ? ' Se gli allegati mostrano merci diverse da classificare ciascuna per conto suo (non parti della stessa merce né un assortimento ' +
+      'condizionato per la vendita al minuto), elencale in "merci" con un nome breve ciascuna e indica le voci di quella indicata dall\'utente ' +
+      'o, se non c\'è, della più evidente; altrimenti "merci": []. Se gli allegati non mostrano una merce riconoscibile, restituisci "voci":[] ' +
+      'e scrivi in "non_classificabile" che cosa serve (per esempio una foto più vicina o una descrizione).' : '') +
     '\n' + infoBlock();
 }
 function promptVoci() {
@@ -219,7 +234,7 @@ function promptScelta(heads) {
 }
 function normResult(r) {
   r = (r && typeof r === 'object') ? r : {};
-  var out = { merce: str(r.merce, 300), best: null, alts: [], domande: [], attenzione: [], altre: [] };
+  var out = { merce: str(r.merce, 300), letto: str(r.letto, 600), best: null, alts: [], domande: [], attenzione: [], altre: [] };
   var b = r.migliore || r.risultato || null;
   function cand(o) {
     if (!o || typeof o !== 'object') return null;
@@ -256,7 +271,7 @@ function errMsg(e) { return (e && e.message) || ERR[e && e.code] || ERR.upstream
 function nuovaOperazione() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function creaIA() {
   return {
-    /* p = { contesto, prompt } oppure solo il testo; opts: modelTier, schema, operazione, tipo, immagine (la foto), signal */
+    /* p = { contesto, prompt } oppure solo il testo; opts: modelTier, schema, operazione, tipo, allegati (foto e PDF), signal */
     json: function (p, opts) {
       opts = opts || {};
       var corpo = typeof p === 'string' ? { prompt: p } : { prompt: p.prompt, contesto: p.contesto || '' };
@@ -264,7 +279,7 @@ function creaIA() {
       if (opts.schema) corpo.schema = opts.schema;
       corpo.operazione = opts.operazione || '';
       corpo.tipo = opts.tipo || 'classifica';
-      if (opts.immagine) corpo.immagine = { tipo: opts.immagine.tipo, dati: opts.immagine.dati };
+      if (opts.allegati && opts.allegati.length) corpo.allegati = opts.allegati.map(function (a) { return { tipo: a.tipo, dati: a.dati }; });
       return T.api('POST', '/api/ia', corpo, { signal: opts.signal })
         .then(function (r) { return r.risultato; }, function (e) {
           if (e && e.name === 'AbortError') throw { code: 'cancelled' };
@@ -309,7 +324,7 @@ function impostaIA() {
   $('#foto').setAttribute('aria-disabled', state.iaBloccata ? 'true' : 'false');
   if (!df.firstChild) df.innerHTML = T.icona('divieto') + esc(T.IA_NON_AUTORIZZATA);
   df.hidden = !state.iaBloccata;
-  if ((fp.hidden || state.iaBloccata) && state.foto) { state.foto = null; state.fotoVista = ''; renderFoto(); }
+  if ((fp.hidden || state.iaBloccata) && state.allegati.length) togliAllegati();
   if ((!(ia && ia.configurata) || state.iaBloccata) && state.modo === 'ia') state.modo = 'parole';
   applicaModo();
 }
@@ -320,7 +335,7 @@ var MODI = {
             tasto: 'Cerca', ico: 'cerca', invio: 'search' },
   ia: { titolo: 'Che merce devi classificare?', segnaposto: 'Descrivi la merce: che cos\'è, materiale, uso', etichetta: 'Descrizione della merce (casella 31 del DAU)',
         tasto: 'Classifica', ico: 'bacchetta', invio: 'go',
-        conFoto: 'Facoltativo: ciò che la foto non mostra (materiale, uso…)' }
+        conFoto: 'Facoltativo: ciò che non si vede (materiale, uso…)' }
 };
 function applicaModo() {
   var m = MODI[state.modo], q = $('#q');
@@ -328,7 +343,7 @@ function applicaModo() {
   $('#modo-ia').checked = state.modo === 'ia';
   $('#titolo-q').textContent = m.titolo;
   $('#etichetta-q').textContent = m.etichetta;
-  q.placeholder = state.modo === 'ia' && state.foto ? m.conFoto : m.segnaposto; q.setAttribute('enterkeyhint', m.invio); q.rows = state.modo === 'ia' ? 3 : 1;
+  q.placeholder = state.modo === 'ia' && state.allegati.length ? m.conFoto : m.segnaposto; q.setAttribute('enterkeyhint', m.invio); q.rows = state.modo === 'ia' ? 3 : 1;
   $('#vai').innerHTML = T.icona(m.ico) + esc(m.tasto);
   renderRisultati(); renderMsg();
 }
@@ -394,10 +409,11 @@ function aggiornaIo() {
 function salvaStorico() {
   var r = state.result;
   if (!r || !r.best) return;
-  // con la foto (che non si salva) resta il testo: quello scritto o, se non c'è, la merce che l'IA ha visto
-  var foto = !!state.foto, q = state.q || r.merce || state.fotoVista || 'Merce della foto';
-  T.api('POST', '/api/storico', { testo: (foto && !state.q ? 'Foto: ' : '') + q, codice: r.best.code,
-    dati: { q: q, answers: state.answers, heads: state.heads, result: r, foto: foto } })
+  // con foto e PDF (che non si salvano) resta il testo: quello scritto o, se non c'è, la merce che l'IA ha visto; nel
+  // risultato anche il testo letto negli allegati
+  var l = state.allegati, q = state.q || r.merce || state.fotoVista || 'Merce degli allegati';
+  T.api('POST', '/api/storico', { testo: (l.length && !state.q ? (soloPdf(l) ? 'Scheda PDF: ' : 'Foto: ') : '') + q, codice: r.best.code,
+    dati: { q: q, answers: state.answers, heads: state.heads, result: r, foto: l.length > 0 } })
     .then(function (x) { if (T.viste && T.viste.profilo) T.viste.profilo.daRicaricare = true; caricaArchivio(); return x; }, function () { /* lo storico non è indispensabile */ });
 }
 var prefT = null;
@@ -421,7 +437,8 @@ function classifica(soloScelta) {
   if (state.busy) return;
   state.error = ''; state.warn = '';
   var qEl = $('#q'); state.q = qEl.value.trim().replace(/\s+/g, ' ');
-  var foto = state.foto;                                    // la stessa foto per tutte le richieste di questa classificazione
+  var allegati = state.allegati, foto = allegati.length > 0;   // gli stessi allegati per tutte le richieste di questa classificazione
+  if (state.fotoPrep) { state.error = 'Un momento: sto preparando gli allegati.'; renderMsg(); return; }
   if (!state.q && !foto) { state.error = 'Scrivi che cosa devi classificare' + ($('#foto-posto').hidden ? '.' : ' o aggiungi una foto.'); renderMsg(); qEl.focus(); return; }
   qEl.blur();
   // un codice scritto apre direttamente quel codice, senza l'IA
@@ -445,19 +462,27 @@ function classifica(soloScelta) {
   renderMsg();
   if (soloScelta) { var top = $('#q'); if (top.scrollIntoView) top.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 
-  var p = Promise.resolve(), op = nuovaOperazione();       // una classificazione: più richieste, conta una volta sola
+  // una classificazione: più richieste, conta una volta sola; dopo la scelta della merce tra quelle degli allegati si continua
+  var sosp = state.sospesa; state.sospesa = null; state.fotoMerci = [];
+  var p = Promise.resolve(), op = sosp && !soloScelta && sosp.allegati === allegati ? sosp.op : nuovaOperazione();
   if (!heads.length) {
-    setBusy(1, foto ? 'Guardo la foto e cerco le voci candidate' : 'Individuo le voci candidate');
-    p = sampleFn.json(promptVoci(), { modelTier: 'quick', schema: 'voci', operazione: op, immagine: foto, signal: signal }).then(function (r1) {
+    setBusy(1, !foto ? 'Individuo le voci candidate' : (allegati.length > 1 ? 'Guardo gli allegati' : soloPdf(allegati) ? 'Leggo il PDF' : 'Guardo la foto') + ' e cerco le voci candidate');
+    p = sampleFn.json(promptVoci(), { modelTier: 'quick', schema: foto ? 'voci_foto' : 'voci', operazione: op, allegati: allegati, signal: signal }).then(function (r1) {
       r1 = (r1 && typeof r1 === 'object') ? r1 : {};
-      if (foto && str(r1.merce, 300)) { state.fotoVista = str(r1.merce, 300); renderFoto(); }
+      if (foto) {
+        state.fotoVista = str(r1.merce, 300); state.fotoLetto = str(r1.letto, 600);
+        // più merci diverse e nessuna indicata: si chiede quale, poi si continua la stessa classificazione
+        var merci = (Array.isArray(r1.merci) ? r1.merci : []).map(function (m) { return str(m, 80); }).filter(Boolean).slice(0, 5);
+        if (merci.length >= 2 && !state.q) { state.fotoMerci = merci; state.sospesa = { op: op, allegati: allegati }; throw { code: 'scegli_merce' }; }
+        renderFoto();
+      }
       (Array.isArray(r1.voci) ? r1.voci : []).forEach(function (v) {
         var h = digits(v && typeof v === 'object' ? v.voce : v).slice(0, 4);
         if (h.length === 4 && headingIdx(h) >= 0 && heads.indexOf(h) < 0 && heads.length < 5) heads.push(h);
       });
       if (!heads.length) {
         var why = str(r1.non_classificabile, 300);
-        throw { code: 'no_heads', message: why || (foto ? 'Nella foto non riconosco una merce da classificare. Prova con una foto più vicina o aggiungi una descrizione.'
+        throw { code: 'no_heads', message: why || (foto ? 'Negli allegati non riconosco una merce da classificare. Prova con una foto più vicina o aggiungi una descrizione.'
           : 'Non ho trovato una voce doganale per questa descrizione. Aggiungi che cos\'è, di che materiale è fatto e a che cosa serve.') };
       }
       state.heads = heads;
@@ -465,18 +490,18 @@ function classifica(soloScelta) {
   }
   p.then(function () {
     setBusy(2, 'Confronto con il testo ufficiale delle voci ' + heads.join(', '));
-    return sampleFn.json(promptScelta(heads), { schema: 'scelta', operazione: op, immagine: foto, signal: signal });
+    return sampleFn.json(promptScelta(heads), { schema: foto ? 'scelta_foto' : 'scelta', operazione: op, allegati: allegati, signal: signal });
   }).then(function (r2) {
     var res = normResult(r2);
     var nuove = res.altre.filter(function (h) { return heads.indexOf(h) < 0; }).slice(0, 3);
     if (!nuove.length) return res;
     heads = heads.concat(nuove); state.heads = heads;
     setBusy(3, 'Aggiungo le voci ' + nuove.join(', ') + ' e ricontrollo');
-    return sampleFn.json(promptScelta(heads), { schema: 'scelta', operazione: op, immagine: foto, signal: signal }).then(normResult);
+    return sampleFn.json(promptScelta(heads), { schema: foto ? 'scelta_foto' : 'scelta', operazione: op, allegati: allegati, signal: signal }).then(normResult);
   }).then(function (res) {
     if (!res.best) throw { code: 'invalid_json' };
     state.result = res; state.picks = {}; state.extra = '';
-    if (foto && res.merce && state.foto === foto) { state.fotoVista = res.merce; renderFoto(); }
+    if (foto && state.allegati === allegati) { state.fotoVista = res.merce || state.fotoVista; state.fotoLetto = res.letto || state.fotoLetto; renderFoto(); }
     state.sel = { code: res.best.code, idx: byCode.has(res.best.code) ? byCode.get(res.best.code) : -1 };
     state.anima = true;
     salvaStorico();
@@ -486,6 +511,11 @@ function classifica(soloScelta) {
     clearBusy();
     if (e && e.code === 'cancelled') { renderAll(); return; }
     aggiornaIo();          // classificazioni usate e motivo per cui l'IA non è disponibile
+    if (e && e.code === 'scegli_merce') {                     // negli allegati più merci: si sceglie quale (renderFoto)
+      renderAll(); renderFoto();
+      var fm = $('#foto-merce'); if (fm.scrollIntoView) fm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
     state.error = (e && e.code === 'no_heads') ? e.message : errMsg(e);
     renderAll();
   });
@@ -1109,7 +1139,7 @@ function boxMisure(sel) {
 function renderStato() {
   var el = $('#stato'), b = state.busy;
   $('#vai').disabled = !!b; $('#ferma').hidden = !b; $('#foto').disabled = !!b;
-  var tf = document.querySelector('[data-act="togli-foto"]'); if (tf) tf.disabled = !!b;
+  Array.prototype.forEach.call(document.querySelectorAll('#foto-merce button'), function (x) { x.disabled = !!b; });
   $('#avanza').hidden = !b;
   if (!b) { el.innerHTML = ''; return; }
   var s = Math.round((Date.now() - b.t0) / 1000);
@@ -1140,38 +1170,78 @@ function renderFornite() {
     return '<button class="chip" type="button" data-act="togli" data-k="' + k + '" title="Togli questo dettaglio">' + esc(a.a) + ' ×</button>';
   }).join('');
 }
-/* la foto allegata sotto la casella: miniatura, che cosa ha visto l'IA (o il suggerimento) e il tasto per toglierla */
+/* gli allegati sotto la casella: miniature (o PDF) con la × e il tasto per aggiungerne, poi che cosa ha visto e letto l'IA
+   con «Correggi», la scelta della merce quando negli allegati ce n'è più d'una, gli avvisi sulle foto scure o sfocate */
 function renderFoto() {
-  var el = $('#foto-merce'), f = state.foto;
-  $('.domanda').classList.toggle('con-foto', !!f);
-  if (state.modo === 'ia') $('#q').placeholder = f ? MODI.ia.conFoto : MODI.ia.segnaposto;
-  if (!f && !state.fotoPrep) { el.hidden = true; el.innerHTML = ''; return; }
+  var el = $('#foto-merce'), l = state.allegati, n = l.length, dis = state.busy ? ' disabled' : '';
+  $('.domanda').classList.toggle('con-foto', n > 0);
+  if (state.modo === 'ia') $('#q').placeholder = n ? MODI.ia.conFoto : MODI.ia.segnaposto;
+  if (!n && !state.fotoPrep) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
-  if (!f) { el.innerHTML = '<span class="foto-attesa">' + T.icona('attesa') + 'Preparo la foto…</span>'; return; }
-  el.innerHTML = '<img alt="Foto della merce" width="' + f.larghezza + '" height="' + f.altezza + '">' +
-    '<div class="foto-testo"><b>' + (state.fotoVista ? 'L\'IA vede' : 'Foto della merce') + '</b>' +
-    '<span>' + esc(state.fotoVista || 'Scrivi sopra ciò che non si vede, come il materiale.') + '</span></div>' +
-    '<button class="tasto-ico" type="button" data-act="togli-foto" aria-label="Togli la foto" title="Togli la foto"' + (state.busy ? ' disabled' : '') + '>' + T.icona('chiudi') + '</button>';
-  el.querySelector('img').src = f.url;            // data: (ammesso dalla CSP), fuori da innerHTML
+  var h = '<div class="foto-elenco">' + l.map(function (a, k) {
+    var pdf = a.tipo === 'application/pdf', nome = pdf ? a.nome : 'foto ' + (k + 1);
+    return '<div class="foto-pezzo' + (a.avviso ? ' con-avviso' : '') + '">' +
+      (pdf ? '<span class="foto-pdf" title="' + esc(a.nome) + '">' + T.icona('documento') + '<small>' + esc(T.taglia ? T.taglia(a.nome, 14) : a.nome.slice(0, 14)) + '</small></span>'
+        : '<img alt="Foto ' + (k + 1) + ' della merce" data-k="' + k + '">') +
+      '<button class="tasto-ico" type="button" data-act="togli-foto" data-k="' + k + '" aria-label="Togli ' + esc(nome) + '" title="Togli"' + dis + '>' + T.icona('chiudi') + '</button></div>';
+  }).join('');
+  for (var k = 0; k < state.fotoPrep; k++) h += '<span class="foto-pezzo foto-attesa" role="status" aria-label="Preparo l\'allegato">' + T.icona('attesa') + '</span>';
+  if (n + state.fotoPrep < T.foto.MASSIMI) h += '<button class="foto-pezzo foto-altra" type="button" data-act="altra-foto" title="Aggiungi una foto o un PDF" ' +
+    'aria-label="Aggiungi un\'altra foto o un PDF, per esempio dell\'etichetta"' + dis + '>' + T.icona('piu') + '</button>';
+  h += '</div><div class="foto-testo">';
+  if (state.fotoMerci.length) {
+    h += '<b>Ci sono più merci: quale classifico?</b><div class="fila">' + state.fotoMerci.map(function (m, j) {
+      return '<button class="chip" type="button" data-act="scegli-merce" data-k="' + j + '"' + dis + '>' + esc(m) + '</button>';
+    }).join('') + '</div>';
+  } else if (state.fotoVista) {
+    h += '<b>L\'IA vede</b><span>' + esc(state.fotoVista) + '</span>';
+    if (state.fotoLetto && !(state.result && state.result.letto)) h += '<b>Letto</b><span>' + esc(state.fotoLetto) + '</span>';
+    h += '<button class="link" type="button" data-act="correggi-vista"' + dis + '>' + T.icona('matita') + 'Correggi</button>';
+  } else if (n) h += '<span>Scrivi sopra ciò che non si vede, come il materiale.</span>';
+  l.forEach(function (a, j) {
+    if (a.avviso === 'scura') h += '<p class="avviso">La foto ' + (j + 1) + ' è molto scura: rifalla con più luce.</p>';
+    else if (a.avviso === 'sfocata') h += '<p class="avviso">La foto ' + (j + 1) + ' sembra sfocata: se le scritte non si leggono, rifalla.</p>';
+  });
+  el.innerHTML = h + '</div>';
+  Array.prototype.forEach.call(el.querySelectorAll('img[data-k]'), function (img) { img.src = l[+img.getAttribute('data-k')].url; });   // data:, fuori da innerHTML
 }
-/* una foto scelta, trascinata o incollata: si prepara (js/foto.js) e si passa alla classificazione con l'IA */
-function usaFoto(file) {
-  if (!file || state.busy || state.fotoPrep || $('#foto-posto').hidden) return;
+/* foto e PDF scelti, trascinati, incollati o condivisi da un'altra app: si preparano (js/foto.js) uno alla volta, nell'ordine,
+   fino a 3, e si passa alla classificazione con l'IA */
+function usaFoto(files) {
+  files = Array.prototype.slice.call(files || []).filter(Boolean);
+  if (!files.length || state.busy || $('#foto-posto').hidden) return;
   if (state.iaBloccata) { mostraDivieto($('#foto-posto')); return; }
-  state.fotoPrep = true; state.error = ''; renderMsg(); renderFoto();
-  T.foto.prepara(file).then(function (f) {
-    state.foto = f; state.fotoVista = ''; state.gia = null;
-    if (state.modo !== 'ia') cambiaModo('ia');
-  }, function (e) {
-    state.error = (e && e.errore) || 'Non riesco ad aprire l\'immagine.';
-  }).then(function () {
-    state.fotoPrep = false; renderFoto(); renderMsg();
+  var posto = T.foto.MASSIMI - state.allegati.length - state.fotoPrep, avviso = '';
+  if (posto <= 0) { state.error = 'Al massimo ' + T.foto.MASSIMI + ' allegati: togline uno per aggiungerne un altro.'; renderMsg(); return; }
+  if (files.length > posto) { avviso = 'Al massimo ' + T.foto.MASSIMI + ' allegati: ho preso ' + (posto === 1 ? 'il primo.' : 'i primi ' + posto + '.'); files = files.slice(0, posto); }
+  state.error = ''; state.fotoPrep += files.length; renderMsg(); renderFoto();
+  var errori = [];
+  files.reduce(function (prima, f) {
+    return prima.then(function () {
+      return T.foto.prepara(f).then(function (a) {
+        state.allegati = state.allegati.concat([a]);           // un elenco nuovo: la classificazione sospesa non vale più
+        state.fotoVista = ''; state.fotoLetto = ''; state.fotoMerci = []; state.sospesa = null; state.gia = null;
+      }, function (e) { errori.push((e && e.errore) || 'Non riesco ad aprire il file.'); }).then(function () { state.fotoPrep--; renderFoto(); });
+    });
+  }, Promise.resolve()).then(function () {
+    state.error = errori[0] || avviso;
+    if (state.allegati.length && state.modo !== 'ia') cambiaModo('ia');
+    renderFoto(); renderMsg();
     var el = $('#foto-merce'); if (!el.hidden && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
 }
-function togliFoto() {
-  state.foto = null; state.fotoVista = '';
-  renderFoto(); $('#foto').focus();
+function togliFoto(k) {
+  state.allegati = state.allegati.filter(function (a, j) { return j !== k; });
+  state.fotoVista = ''; state.fotoLetto = ''; state.fotoMerci = []; state.sospesa = null;
+  renderFoto();
+  var b = document.querySelector('#foto-merce [data-act="togli-foto"]') || $('#foto'); b.focus();
+}
+function togliAllegati() { state.allegati = []; state.fotoVista = ''; state.fotoLetto = ''; state.fotoMerci = []; state.sospesa = null; renderFoto(); }
+function scegliFoto() {
+  if (state.iaBloccata) { mostraDivieto($('#foto-posto')); return; }
+  if (state.busy) return;
+  if (state.allegati.length + state.fotoPrep >= T.foto.MASSIMI) { state.error = 'Al massimo ' + T.foto.MASSIMI + ' allegati: togline uno per aggiungerne un altro.'; renderMsg(); return; }
+  var inp = $('#foto-file'); inp.value = ''; inp.click();
 }
 function celle(sel) {
   var i = sel.idx, c = sel.code, nc, ta, manca = false;
@@ -1241,6 +1311,7 @@ function renderEsito() {
   if (cand && cand.it) h += '<p class="cosa">' + esc(cand.it) + '</p>';
   if (cand && cand.why) h += '<p class="perche"><b>Perché.</b> ' + esc(cand.why) + '</p>';
   if (cand && !role.best && cand.when) h += '<p class="perche"><b>Quando.</b> ' + esc(cand.when) + '</p>';
+  if (r && r.letto) h += '<p class="perche letto"><b>Letto negli allegati.</b> ' + esc(r.letto) + '</p>';
   h += '<div class="fila"><button class="btn sm" type="button" data-act="copia" data-c="' + esc(sel.code) + '">' + T.icona('copia') + 'Copia codice</button>' +
     '<button class="btn sm" type="button" data-act="stampa">' + T.icona('documento') + 'Stampa o PDF</button>' +
     (i >= 0 ? '<button class="btn sm" type="button" data-act="apri" data-i="' + i + '">' + T.icona('libro') + 'Vedi nella nomenclatura</button>' : '') +
@@ -1499,7 +1570,7 @@ document.addEventListener('click', function (ev) {
   var t = ev.target.closest('[data-act]'); if (!t) return;
   var act = t.getAttribute('data-act'), i = parseInt(t.getAttribute('data-i'), 10);
   if (!act) return;
-  if ((act === 'togli' || act === 'riclassifica' || act === 'chiedi' || act === 'togli-foto') && state.busy) return;
+  if (/^(togli|riclassifica|chiedi|togli-foto|altra-foto|scegli-merce|correggi-vista)$/.test(act) && state.busy) return;
   else if (act === 'togli') { state.answers.splice(parseInt(t.getAttribute('data-k'), 10), 1); renderFornite(); classifica(true); }
   else if (act === 'copia') {
     var c = t.getAttribute('data-c'), done = function (ok) {
@@ -1539,7 +1610,13 @@ document.addEventListener('click', function (ev) {
     });
   }
   else if (act === 'chiedi') { cambiaModo('ia'); classifica(false); }
-  else if (act === 'togli-foto') togliFoto();
+  else if (act === 'togli-foto') togliFoto(parseInt(t.getAttribute('data-k'), 10));
+  else if (act === 'altra-foto') scegliFoto();
+  else if (act === 'scegli-merce') { var mm = state.fotoMerci[parseInt(t.getAttribute('data-k'), 10)]; if (mm) { $('#q').value = mm; $('#q-x').hidden = false; classifica(false); } }
+  else if (act === 'correggi-vista') {                 // la descrizione dell'IA nella casella, da sistemare prima di classificare di nuovo
+    var qc = $('#q'); qc.value = state.fotoVista; $('#q-x').hidden = false; qc.focus();
+    try { qc.setSelectionRange(qc.value.length, qc.value.length); } catch (e2) { /* campo senza selezione */ }
+  }
   else if (act === 'ia-bloccata') mostraDivieto(t.closest('.con-divieto'));
   else if (act === 'ancora-ia') { state.gia = null; state.forzaIA = true; classifica(false); }
   else if (act === 'riusa' && state.gia) {
@@ -1596,19 +1673,17 @@ $('#q').addEventListener('input', function () {
   state.risChiusi = false; state.risTutti = false; if (state.error) { state.error = ''; renderMsg(); }
   clearTimeout(qT); qT = setTimeout(renderRisultati, 140);
 });
-/* la foto della merce: tasto con la macchina fotografica (sul telefono fotocamera o galleria), immagine incollata nella
-   casella o trascinata sulla scheda della domanda */
-$('#foto').addEventListener('click', function () {
-  if (state.iaBloccata) { mostraDivieto($('#foto-posto')); return; }
-  if (state.busy) return;
-  var inp = $('#foto-file'); inp.value = ''; inp.click();
-});
-$('#foto-file').addEventListener('change', function (ev) { var f = ev.target.files && ev.target.files[0]; if (f) usaFoto(f); });
+/* foto e PDF della merce: tasto con la macchina fotografica (sul telefono fotocamera o galleria) e «+» tra gli allegati, file
+   incollati nella casella o trascinati sulla scheda della domanda */
+$('#foto').addEventListener('click', scegliFoto);
+$('#foto-file').addEventListener('change', function (ev) { usaFoto(ev.target.files); });
 $('#q').addEventListener('paste', function (ev) {
-  var cd = ev.clipboardData, f = null;
+  var cd = ev.clipboardData, f = [];
   if (!cd || $('#foto-posto').hidden) return;
-  for (var k = 0; cd.items && k < cd.items.length && !f; k++) if (cd.items[k].kind === 'file' && /^image\//.test(cd.items[k].type)) f = cd.items[k].getAsFile();
-  if (!f) return;                                        // testo: si incolla come sempre
+  for (var k = 0; cd.items && k < cd.items.length; k++) {
+    if (cd.items[k].kind === 'file' && /^(image\/|application\/pdf$)/.test(cd.items[k].type)) f.push(cd.items[k].getAsFile());
+  }
+  if (!f.length) return;                                 // testo: si incolla come sempre
   ev.preventDefault(); usaFoto(f);
 });
 (function () {
@@ -1618,8 +1693,31 @@ $('#q').addEventListener('paste', function (ev) {
   dom.addEventListener('dragenter', function (ev) { if (!conFile(ev)) return; ev.preventDefault(); dentro++; dom.classList.add('trascina'); });
   dom.addEventListener('dragover', function (ev) { if (!conFile(ev)) return; ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; });
   dom.addEventListener('dragleave', function (ev) { if (conFile(ev) && --dentro <= 0) fine(); });
-  dom.addEventListener('drop', function (ev) { if (!conFile(ev)) return; ev.preventDefault(); fine(); usaFoto(ev.dataTransfer.files[0]); });
+  dom.addEventListener('drop', function (ev) { if (!conFile(ev)) return; ev.preventDefault(); fine(); usaFoto(ev.dataTransfer.files); });
 })();
+/* «Condividi → MAGIC HS» da un'altra app (Android, app installata): il service worker (sw.js) riceve foto, PDF e testo e
+   apre /?condivisa=1; qui li si chiede e si mettono negli allegati e nella casella. Con ?condivisa=0 il service worker non
+   c'era ancora e i file non sono arrivati. */
+function riceviCondivisa() {
+  var c = QS.get('condivisa'), sw = navigator.serviceWorker;
+  if (c !== '1' && c !== '0') return;
+  try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* indirizzo che resta: niente di grave */ }
+  vista('classifica');
+  if (c === '0' || !sw) { state.error = 'I file condivisi non sono arrivati: riprova a condividerli, oppure usa il tasto della foto.'; renderMsg(); return; }
+  sw.addEventListener('message', function (ev) {
+    var d = ev.data;
+    if (!d || d.tipo !== 'condivisa') return;
+    var file = Array.prototype.slice.call(d.file || []), testo = str(d.testo, 2000);
+    if (testo && !$('#q').value.trim()) { $('#q').value = testo; $('#q-x').hidden = false; }
+    if (file.length && $('#foto-posto').hidden) { state.error = 'Per classificare da foto o PDF serve l\'IA, che qui non è attiva.'; renderMsg(); }
+    else if (file.length && state.iaBloccata) { state.error = T.IA_NON_AUTORIZZATA + '.'; renderMsg(); }
+    else if (file.length) usaFoto(file);
+    else if (testo && !$('#interruttore-ia').hidden && !state.iaBloccata) cambiaModo('ia');
+    else if (!testo) { state.error = 'I file condivisi non sono arrivati: riprova a condividerli, oppure usa il tasto della foto.'; renderMsg(); }
+    else renderRisultati();
+  });
+  sw.ready.then(function (r) { if (r.active) r.active.postMessage({ tipo: 'condivisa?' }); });
+}
 $('#q-x').addEventListener('click', function () { $('#q').value = ''; state.risChiusi = false; renderRisultati(); $('#q').focus(); });
 $('#modo-ia').addEventListener('change', function (ev) { cambiaModo(ev.target.checked ? 'ia' : 'parole'); $('#q').focus(); });
 $('#interruttore-ia').addEventListener('click', function (ev) {              // al tocco, dove non c'è il passaggio del mouse
@@ -1645,7 +1743,7 @@ function risultatoSalvato(r) {
   }
   var best = r && typeof r === 'object' ? cand(r.best) : null;
   if (!best) return null;
-  return { merce: str(r.merce, 300), best: best, alts: lista(r.alts).map(cand).filter(Boolean).slice(0, 4),
+  return { merce: str(r.merce, 300), letto: str(r.letto, 600), best: best, alts: lista(r.alts).map(cand).filter(Boolean).slice(0, 4),
     domande: lista(r.domande).map(function (d) {
       var opts = d && typeof d === 'object' ? lista(d.opts).map(function (o) { return str(o, 120); }).filter(Boolean).slice(0, 6) : [];
       return opts.length >= 2 ? { q: str(d.q, 300), opts: opts, why: str(d.why, 300) } : null;
@@ -1655,7 +1753,7 @@ function risultatoSalvato(r) {
 }
 function ripristina(d) {
   $('#q').value = str(d.q, 2000); state.q = $('#q').value;
-  state.foto = null; state.fotoVista = ''; renderFoto();
+  togliAllegati();
   state.answers = Array.isArray(d.answers) ? d.answers : [];
   state.heads = Array.isArray(d.heads) ? d.heads : [];
   state.result = risultatoSalvato(d.result);
@@ -1793,6 +1891,7 @@ function avvia() {
     state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
     try { state.modo = localStorage.getItem('magic-hs.modo') === 'ia' ? 'ia' : 'parole'; } catch (e) { /* senza archivio: ricerca per parole */ }
     impostaIA();
+    riceviCondivisa();
     caricaSinonimi(); caricaArchivio();
     return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); controllaCambi(); }, function () { /* niente preferiti */ });
   }).then(function () { start(); }, function () { /* sessione scaduta: comune.js torna alla pagina iniziale */ });
