@@ -161,6 +161,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 
 ## Regole da rispettare
 
+- **Consegna**: finito un lavoro, commit e push su un ramo nuovo, poi senza chiedere si apre la PR e, quando le prove di
+  GitHub (`test` e `browser`) sono passate, si fa il merge in `main`.
 - **CSP**: niente script in linea né da altri domini, niente gestori `onclick=`. Gli eventi si agganciano in JS
   (attributi `data-act`, `data-p`, `data-g`). Gli stili negli attributi `style` sono ammessi.
 - Ogni richiesta alle API che modifica qualcosa passa da `TARIC.api()`, che aggiunge l'intestazione `X-Taric: 1`
