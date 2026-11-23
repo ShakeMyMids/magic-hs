@@ -663,6 +663,7 @@ async function accedi(p, email, password) {
   await nuovoDispositivo.goto(B + '/accedi'); await nuovoDispositivo.waitForSelector('.aiuto.invito .aiuto-fumetto');
   ok((await nuovoDispositivo.textContent('#aiuto-testo')).startsWith('Sono il gabbiano di MAGIC HS') && await nuovoDispositivo.isVisible('#accedi input[name=email]'),
     'accesso: Marino si presenta da solo, senza coprire l\'accesso');
+  ok(await nuovoDispositivo.evaluate(() => document.activeElement && document.activeElement.name === 'email'), 'accesso dal computer: si scrive subito l\'email');
   await nuovoDispositivo.click('[data-aiuto="avanti"]');                      // «Sì, presentamela»
   await nuovoDispositivo.waitForSelector('.aiuto:not(.invito)', { state: 'attached' });
   ok((await nuovoDispositivo.textContent('#aiuto-titolo')) === 'MAGIC HS' && (await nuovoDispositivo.textContent('.aiuto-passo')) === '1 di 6', 'accesso: presenta l\'app in 6 passi');
@@ -691,9 +692,14 @@ async function accedi(p, email, password) {
   await q.screenshot({ path: out + '/9-tel-utenti.png', fullPage: true });
   ok(await senzaScorrimento(q), 'telefono: niente scorrimento di lato');
 
-  // iPhone: icona sulla schermata Home
+  // iPhone: icona sulla schermata Home. Aprendo il sito la tastiera resta chiusa: nessun campo prende il fuoco da solo
   const ci = await b.newContext({ ...devices['iPhone 13'] });
   const ip = await ci.newPage(); attenzione(ip, 'iphone');
+  const senzaFuoco = () => ip.evaluate(() => !document.activeElement || !document.activeElement.matches('input, textarea, select, [contenteditable]'));   // nessun campo: niente tastiera
+  await ip.goto(B + '/'); await ip.waitForSelector('#accedi'); await ip.waitForTimeout(300);
+  const fuocoAccedi = await senzaFuoco();
+  await ip.click('.sotto [data-a="richiedi"]'); await ip.waitForSelector('#richiedi:not([hidden])');
+  ok(fuocoAccedi && await senzaFuoco(), 'telefono: niente tastiera aperta da sola nella pagina d\'accesso, nemmeno passando a «Richiedi un account»');
   await accedi(ip, 'capo@azienda.it', 'Porto-Container-42'); await pronta(ip);
   await ip.click('#installa'); await ip.waitForSelector('.finestra.installa');
   ok(await ip.isVisible('.finestra.installa >> text=Aggiungi alla schermata Home'), 'Installa su iPhone: istruzioni per la schermata Home');

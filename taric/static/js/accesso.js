@@ -13,6 +13,8 @@
 
   /* ------------------------------------------------------------------ accedi e richiedi un account */
   var accedi = document.getElementById('accedi'), richiedi = document.getElementById('richiedi'), modulo = '';
+  // il cursore nel primo campo solo con mouse e tastiera: su telefono e tablet aprirebbe la tastiera sopra la pagina appena aperta
+  var conTastiera = !!(window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches);
   if (accedi) {
     var scheda = function (quale) {
       accedi.hidden = quale !== 'accedi'; richiedi.hidden = quale !== 'richiedi'; mostra('');
@@ -20,7 +22,7 @@
         if (b.getAttribute('data-a') === quale) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
       });
       var primo = (quale === 'accedi' ? accedi : richiedi).querySelector('input:not([type=checkbox])');
-      if (primo) primo.focus();
+      if (primo && conTastiera) primo.focus();
     };
     document.querySelector('.sotto').addEventListener('click', function (ev) {
       var b = ev.target.closest('[data-a]'); if (b) scheda(b.getAttribute('data-a'));
@@ -33,7 +35,7 @@
         richiedi.querySelector('button[type="submit"]').disabled = true;
       }
     }, function () { /* riprova all'invio */ });
-    if (location.hash === '#richiedi') scheda('richiedi'); else accedi.elements.email.focus();
+    if (location.hash === '#richiedi') scheda('richiedi'); else if (conTastiera) accedi.elements.email.focus();
     window.addEventListener('hashchange', function () { scheda(location.hash === '#richiedi' ? 'richiedi' : 'accedi'); });
 
     accedi.addEventListener('submit', function (ev) {
