@@ -7,7 +7,8 @@
   var T = window.TARIC, esc = T.esc, K = window.TARIC_CALCOLO;
   var el = document.getElementById('view-bolla');
   var vista = T.viste = T.viste || {};
-  var st = { elenco: null, b: null, cambi: {}, msg: '', msgOk: false, salvata: true, timer: 0, ultimo: null, calcolatore: null };
+  var st = { elenco: null, b: null, cambi: {}, msg: '', msgOk: false, salvata: true, timer: 0, ultimo: null, calcolatore: null,
+    pdf: null, avvisiPdf: [] };      // pdf: lettura di un PDF in corso o da confermare con l'IA; avvisiPdf: da controllare nella bolla letta
   var VALUTE = ['EUR', 'USD', 'CNY', 'GBP', 'CHF', 'JPY', 'TRY', 'INR', 'KRW', 'HKD', 'CAD', 'AUD', 'SGD', 'THB', 'MYR', 'IDR', 'PHP',
     'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'NOK', 'DKK', 'ISK', 'ILS', 'MXN', 'BRL', 'ZAR', 'NZD'];
   var IVA = [[22, '22 %'], [10, '10 %'], [5, '5 %'], [4, '4 %'], [0, 'esente o non imponibile']];
@@ -130,7 +131,69 @@
       function (e) { messaggio(e.errore || 'Bolla non salvata.', false); });
   }
   function messaggio(t, ok) { st.msg = t; st.msgOk = ok; var m = el.querySelector('#b-msg'); if (m) m.innerHTML = rigaMsg(); }
-  function rigaMsg() { return st.msg ? '<p class="' + (st.msgOk ? 'esito-ok' : 'errore') + '">' + esc(st.msg) + '</p>' : ''; }
+  function rigaMsg() {
+    var h = st.msg ? '<p class="' + (st.msgOk ? 'esito-ok' : 'errore') + '">' + esc(st.msg) + '</p>' : '';
+    if (st.b && st.avvisiPdf.length) h += '<div class="b-pdf-avvisi"><b>Dal PDF: da controllare</b><ul>' +
+      st.avvisiPdf.map(function (a) { return '<li>' + esc(a) + '</li>'; }).join('') + '</ul></div>';
+    return h;
+  }
+
+  /* ------------------------------------------------------------------ bolla nuova da un PDF (POST /api/bolle/leggi,
+     taric/bolla_pdf.py): il prospetto di sintesi H1 di AIDA si legge senza IA; per gli altri PDF si propone l'IA, che conta
+     come una classificazione. Il PDF non si salva. */
+  var MASSIMO_PDF = 5 * 1024 * 1024;
+  function esitoPdf() {
+    var p = st.pdf;
+    if (!p) return '';
+    if (/^leggo/.test(p.stato)) return '<p class="nota b-pdf-attesa">' + T.icona('attesa') + esc((p.stato === 'leggo-ia' ? 'L\'IA legge «' : 'Leggo «') + p.nome + '»…') + '</p>';
+    if (p.stato !== 'chiedi-ia') return '<p class="errore">' + esc(p.testo) + '</p>';
+    var ia = (app().utente() || {}).ia || {}, motivo = !ia.configurata ? 'Senza IA si leggono solo i prospetti di sintesi H1 di AIDA in PDF.'
+      : ia.limite === 0 ? T.IA_NON_AUTORIZZATA + '.' : !ia.disponibile ? 'Le classificazioni con l\'IA di questo mese sono finite: senza IA si leggono solo i prospetti di AIDA.' : '';
+    return '<p class="avviso">' + esc(p.testo) + '</p>' + (motivo ? '<p class="nota">' + esc(motivo) + '</p>' :
+      '<p class="nota">Con l\'IA si leggono anche gli altri formati e le scansioni: conta come una classificazione del mese.</p>' +
+      '<div class="fila"><button class="btn sm pri" type="button" data-b="pdf-ia">' + T.icona('scintille') + 'Leggi con l\'IA</button>' +
+      '<button class="btn sm" type="button" data-b="pdf-annulla">Annulla</button></div>');
+  }
+  function mostraPdf(x) { st.pdf = Object.assign(st.pdf || {}, x); if (!st.b && !st.calcolatore) disegna(); }
+  function leggiPdf(file) {
+    if (!file || (st.pdf && /^leggo/.test(st.pdf.stato))) return;
+    var errore = !(file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) ? 'Scegli un file PDF.' : file.size > MASSIMO_PDF ? 'PDF troppo grande: al massimo 5 MB.' : '';
+    if (errore && (st.b || st.calcolatore)) { T.avviso(errore, 'male'); return; }          // la bolla aperta resta com'è
+    if (st.b && !st.salvata && !window.confirm('La bolla aperta ha modifiche non salvate: aprire lo stesso una bolla nuova dal PDF?')) return;
+    st.b = null; st.calcolatore = null; st.msg = ''; st.avvisiPdf = []; st.pdf = { nome: file.name || 'PDF' };
+    if (errore) { mostraPdf({ stato: 'errore', testo: errore }); return; }
+    var lettore = new FileReader();
+    lettore.onload = function () { var u = String(lettore.result || ''); st.pdf.dati = u.slice(u.indexOf(',') + 1); inviaPdf(false); };
+    lettore.onerror = function () { mostraPdf({ stato: 'errore', testo: 'Non riesco a leggere il file.' }); };
+    lettore.readAsDataURL(file);
+    window.scrollTo(0, 0);
+  }
+  function inviaPdf(conIa) {
+    var p = st.pdf;
+    if (!p || !p.dati) return;
+    mostraPdf({ stato: conIa ? 'leggo-ia' : 'leggo', testo: '' });
+    T.api('POST', '/api/bolle/leggi', { pdf: p.dati, ia: conIa }).then(function (r) {
+      if (st.pdf !== p) return;
+      st.pdf = null; apriDaPdf(r, p.nome);
+      if (conIa && app().aggiornaIo) app().aggiornaIo();
+    }, function (e) {
+      if (st.pdf !== p) return;
+      mostraPdf({ stato: e.codice === 'serve_ia' && !conIa ? 'chiedi-ia' : 'errore', testo: e.errore || 'PDF non letto.' });
+    });
+  }
+  function apriDaPdf(r, nome) {
+    var b = nuovaBolla('import'), d = r.dati || {};
+    Object.keys(d).forEach(function (k) { if (k !== 'articoli' && k !== 'tipo' && d[k] !== '' && d[k] !== null && d[k] !== undefined) b.dati[k] = d[k]; });
+    b.dati.articoli = (d.articoli || []).map(function (a) { return Object.assign(nuovoArticolo(a.origine || d.paese || ''), a); });
+    if (!b.dati.articoli.length) b.dati.articoli.push(nuovoArticolo(''));
+    b.riferimento = (d.mrn ? 'MRN ' + d.mrn : String(nome || '').replace(/\.pdf$/i, '')).slice(0, 120);
+    b.dati = completa(b.dati);
+    st.b = b; st.salvata = false; st.msgOk = true;
+    st.msg = 'Bolla compilata dal PDF' + (r.fonte === 'ia' ? ' con l\'IA' : '') + ': ' + b.dati.articoli.length + (b.dati.articoli.length === 1 ? ' articolo' : ' articoli') +
+      '. Controlla i campi e salvala.';
+    st.avvisiPdf = r.avvisi || [];
+    disegna(); caricaCambio();
+  }
 
   /* ------------------------------------------------------------------ cambio doganale */
   function chiaveCambio() { return dati().valuta + '|' + mese(); }
@@ -232,6 +295,11 @@
       'Quello che non si può calcolare con certezza resta in evidenza, senza stime.</p>' + rigaMsg() +
       '<div class="fila"><button class="btn pri" type="button" data-b="nuova" data-tipo="import">' + T.icona('piu') + 'Nuova importazione</button>' +
       '<button class="btn" type="button" data-b="nuova" data-tipo="export">' + T.icona('piu') + 'Nuova esportazione</button></div></div></div>';
+    h += '<div class="foglio"><div class="box b-pdf"><div class="lab">' + T.icona('documento') + 'Da un PDF</div>' +
+      '<p class="nota">Il prospetto di sintesi H1 di AIDA diventa una bolla d\'importazione nuova, da controllare e salvare.</p>' +
+      '<button class="b-pdf-zona" type="button" data-b="pdf-scegli">' + T.icona('carica') + '<span class="con-mouse"><b>Trascina qui il PDF</b> o sceglilo</span><span class="con-tocco"><b>Scegli il PDF</b></span></button>' +
+      '<input type="file" id="b-pdf-file" accept="application/pdf,.pdf" hidden aria-label="PDF della dichiarazione">' +
+      '<div id="b-pdf-esito" role="status">' + esitoPdf() + '</div></div></div>';
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('nave') + 'Costo di spedizione</div>' +
       '<p class="nota">Costo indicativo di una spedizione con DHL Express, da peso e misure dei colli, anche senza una bolla.</p>' +
       '<div class="fila"><button class="btn" type="button" data-b="trasporto">' + T.icona('nave') + 'Calcola il trasporto</button></div></div></div>';
@@ -869,6 +937,7 @@
   });
   el.addEventListener('change', function (ev) {
     var t = ev.target;
+    if (t.id === 'b-pdf-file') { if (t.files && t.files[0]) leggiPdf(t.files[0]); return; }
     if (!st.b) return;
     var k = t.getAttribute('data-a'), f = t.getAttribute('data-f');
     st.salvata = false;
@@ -921,8 +990,11 @@
     var b = ev.target.closest('[data-b]');
     if (!b) return;
     var azione = b.getAttribute('data-b'), id = b.getAttribute('data-id');
-    if (azione === 'nuova') { st.b = nuovaBolla(b.getAttribute('data-tipo')); dati().articoli.push(nuovoArticolo('')); st.salvata = true; st.msg = ''; disegna(); }
-    else if (azione === 'apri') apri(id);
+    if (azione === 'nuova') { st.b = nuovaBolla(b.getAttribute('data-tipo')); dati().articoli.push(nuovoArticolo('')); st.salvata = true; st.msg = ''; st.avvisiPdf = []; disegna(); }
+    else if (azione === 'apri') { st.avvisiPdf = []; apri(id); }
+    else if (azione === 'pdf-scegli') { if (st.pdf && /^leggo/.test(st.pdf.stato)) return; var inp = el.querySelector('#b-pdf-file'); inp.value = ''; inp.click(); }
+    else if (azione === 'pdf-ia') inviaPdf(true);
+    else if (azione === 'pdf-annulla') { st.pdf = null; disegna(); }
     else if (azione === 'elimina-elenco' || azione === 'elimina') {
       var bid = azione === 'elimina' ? st.b.id : id;
       if (!window.confirm('Eliminare questa bolla?')) return;
@@ -933,7 +1005,7 @@
     }
     else if (azione === 'chiudi') {
       if (!st.salvata && !window.confirm('Ci sono modifiche non salvate: chiudere lo stesso?')) return;
-      st.b = null; st.msg = ''; disegna(); caricaElenco();
+      st.b = null; st.msg = ''; st.avvisiPdf = []; disegna(); caricaElenco();
     }
     else if (azione === 'salva') salva();
     else if (azione === 'stampa') window.print();
@@ -964,4 +1036,14 @@
   });
   window.addEventListener('beforeunload', function (ev) { if (st.b && !st.salvata) { ev.preventDefault(); ev.returnValue = ''; } });
   T.bolla = { stato: function () { return st; } };                 // per le prove nel browser
+  /* un PDF trascinato in qualunque punto della sezione: bolla nuova dal PDF */
+  (function () {
+    var dentro = 0;
+    function conFile(ev) { var t = ev.dataTransfer && ev.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; }
+    function fine() { dentro = 0; el.classList.remove('trascina'); }
+    el.addEventListener('dragenter', function (ev) { if (!conFile(ev)) return; ev.preventDefault(); dentro++; el.classList.add('trascina'); });
+    el.addEventListener('dragover', function (ev) { if (!conFile(ev)) return; ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; });
+    el.addEventListener('dragleave', function (ev) { if (conFile(ev) && --dentro <= 0) fine(); });
+    el.addEventListener('drop', function (ev) { if (!conFile(ev)) return; ev.preventDefault(); fine(); leggiPdf(ev.dataTransfer.files[0]); });
+  })();
 })();

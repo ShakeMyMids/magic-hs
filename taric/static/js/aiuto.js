@@ -128,6 +128,8 @@
       return [
         { t: 'Bolla', d: 'Qui simuli una bolla doganale con i dati TARIC del mese, e calcoli il costo di una spedizione.' },
         { t: 'Nuova bolla', d: 'Comincia una bolla d\'importazione o d\'esportazione: valore in dogana, dazi, IVA e documenti.', e: riq(/^Bolla simulata/) },
+        { t: 'Da un PDF', d: 'Trascina qui il prospetto di sintesi H1 di AIDA, o sceglilo: compilo io una bolla d\'importazione nuova, da controllare e salvare. ' +
+          'Gli altri PDF li leggo con l\'IA.', e: sel('.b-pdf-zona') },
         { t: 'Costo di spedizione', d: 'Il costo indicativo di una spedizione con DHL Express, anche senza bolla.', e: riq(/^Costo di spedizione/) },
         { t: 'Le tue bolle', d: 'Le bolle che hai salvato: riaprile o eliminale. Le vedi solo tu.', e: riq(/^Le tue bolle/) },
         FINE

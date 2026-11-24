@@ -93,6 +93,14 @@ def rispondi(prompt: str, allegati: dict | None = None) -> object:
     letto e, con due foto e nessuna descrizione, due merci diverse da scegliere."""
     foto = bool(allegati)
     letto = ("Upper: leather · Sole: rubber" + (" · Scheda: tomaia in pelle pieno fiore" if allegati.get("pdf") else "")) if foto else ""
+    if "Leggi la dichiarazione doganale allegata" in prompt:          # bolla da un PDF (taric/bolla_pdf.py)
+        return {"tipo": "H1", "mrn": "", "ufficio": "UD Genova", "data": "03/11/2026", "valuta": "EUR", "esportatore": "Fornitore cinese Ltd",
+                "importatore": "Importatore di prova Srl", "dichiarante": "IT01234567890", "rappresentante": "", "qualifica": "",
+                "consegna": "FOB SHANGHAI", "dilazione": "", "paese_spedizione": "CN", "provincia": "GE", "mezzo_arrivo": "", "natura": "11",
+                "metodo_pagamento": "A", "container": "1", "documenti": [{"codice": "N380", "identificativo": "F-42"}], "scarichi": [],
+                "articoli": [{"codice": "8712003090", "descrizione": "Biciclette", "origine": "CN", "prezzo": "10.000,00", "lordo": "300",
+                              "netto": "280", "quantita": "20", "regimi_aggiuntivi": "", "preferenza": "100", "documenti": [],
+                              "colli": [{"tipo": "CT", "numero": "20", "marchi": "B1-20"}], "aggiunte": [], "tributi": []}]}
     if prompt.startswith("Traduci dall"):
         n = prompt.count("\n") and len([r for r in prompt.split("\n") if r[:1].isdigit() and ". " in r[:5]])
         return {"traduzioni": [f"Traduzione di prova {i + 1}" for i in range(n)]}
