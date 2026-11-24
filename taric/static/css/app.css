@@ -1365,6 +1365,11 @@ input[type="checkbox"].in-conflitto{outline:2px solid var(--timbro);outline-offs
   #bolla-stampa .ps .ps-r:last-child td{border-bottom-color:var(--inchiostro)}
   #bolla-stampa .ps .n{text-align:right}
   #bolla-stampa .ps-foglio{break-before:page}
+  #bolla-stampa .ps.ps-su{margin-bottom:0}
+  #bolla-stampa .ps.ps-su + .ps{margin-top:-1px}
+  #bolla-stampa .ps .ps-codice{vertical-align:middle;text-align:center;padding:4px 6px}
+  #bolla-stampa .ps-codice svg{display:block;width:100%;height:12mm;color:var(--inchiostro)}
+  #bolla-stampa .ps-codice small{display:block;margin-top:2px;font-size:9.5px;letter-spacing:.12em}
   #bolla-stampa .ps-foglio .b-st-note{margin-top:-2px}
   #bolla-stampa .ps-filigrana{position:fixed;top:42%;left:0;right:0;z-index:0;text-align:center;transform:rotate(-28deg);
     font:800 96px/1 var(--f);letter-spacing:.06em;color:var(--timbro);opacity:.07;pointer-events:none}

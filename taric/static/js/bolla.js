@@ -14,7 +14,9 @@
   // IVA liquidata (B00) ma non pagata: si detrae con il codice (tabella dei tributi ADM; circolare ADM 22/2022)
   var IVA_NON_PAGATA = [['', 'pagata'], ['406', '406 · non pagata: dichiarazione d\'intento (art. 8, primo comma, lett. c, DPR 633/72)'],
     ['407', '407 · non pagata: oro o argento (art. 70, quinto comma, DPR 633/72; art. 3, comma 10, L. 7/2000)']];
-  var C = window.TARIC_CODICI || { imballaggi: [], natura: [], modi: [], aggiunte: [], detrazioni: [], metodi: [], qualifica: [] };
+  var C = window.TARIC_CODICI || { imballaggi: [], natura: [], modi: [], aggiunte: [], detrazioni: [], metodi: [], qualifica: [], pagamento: [] };
+  // tipi di documento precedente più usati negli scarichi (DE 12 01): si può scriverne un altro
+  var DOC_PRECEDENTI = [['337', 'Dichiarazione di custodia temporanea'], ['355', 'Dichiarazione sommaria di entrata']];
   // documenti di trasporto (codici della banca dati TARIC, DE 12 05)
   var DOC_TRASPORTO = ['N705', 'N714', 'N740', 'N741', 'N730', 'N720', 'N722', 'N703', 'N704', 'N710', 'N750', 'N760', 'N785', 'N787'];
   /* riferimenti dei campi: dato (DE) e casella del vecchio DAU. Importazione: tracciato ADM della H1 in versione EUCDM 6.2
@@ -27,7 +29,8 @@
     statSpese: 'DE 99 06 · c. 46', codice: 'DE 18 09 · c. 33', origine: 'DE 16 08 · c. 34a', originePref: 'DE 16 09 · c. 34b', descrizione: 'DE 18 05 · c. 31',
     valore: 'DE 14 08 · c. 42', netto: 'DE 18 01 · c. 38', lordo: 'DE 18 04 · c. 35', quantita: 'DE 18 02 · c. 41', colli: 'DE 18 06 · c. 31',
     regime: 'DE 14 11 · c. 36', addizionali: 'DE 18 09 059 · c. 33', iva: 'DE 14 03, codice B00 · c. 47', aggiunte: 'DE 14 04 · c. 45',
-    documenti: 'DE 12 03 · c. 44', statistico: 'DE 99 06 · c. 46', contingente: 'DE 99 01 · c. 39' };
+    documenti: 'DE 12 03 · c. 44', statistico: 'DE 99 06 · c. 46', contingente: 'DE 99 01 · c. 39',
+    dilazione: 'c. 48', mezzoArrivo: 'c. 18', metodoPagamento: 'c. 47, colonna MP', scarico: 'DE 12 01 · c. 40', regimiAggiuntivi: 'DE 11 10 · c. 37' };
   var RIF_EXP = { valuta: 'DE 4/10 · c. 22', mittente: 'DE 3/1 · c. 2', destinatario: 'DE 3/9 · c. 8', dichiarante: 'DE 3/17 · c. 14',
     rappresentante: 'DE 3/19 · c. 14', qualifica: 'DE 3/21', incoterm: 'DE 4/1 · c. 20', luogo: 'DE 4/1', modoTrasporto: 'DE 7/4 · c. 25',
     container: 'DE 7/2 · c. 19', natura: 'DE 8/5 · c. 24', ubicazione: 'DE 5/23 · c. 30', uscita: 'DE 5/12 · c. 29', fattura: 'DE 2/3 · c. 44',
@@ -48,6 +51,7 @@
   function completa(d) {                    // bolle salvate prima dei campi nuovi
     ['nolo', 'assicurazione', 'inoltro', 'trasporto', 'oltre', 'statSpese'].forEach(function (x) { d[x] = d[x] || { importo: '', valuta: 'EUR' }; });
     d.docTrasporto = d.docTrasporto || { tipo: '', numero: '' };
+    d.scarico = d.scarico || { tipo: '', riferimento: '', articolo: '', colli: '', quantita: '', unita: '' };
     d.indicatori = d.indicatori || {};
     d.metodo = d.metodo || '1';
     d.articoli = d.articoli || [];
@@ -69,7 +73,7 @@
   function nuovoArticolo(paese) {
     return { codice: '', descrizione: '', origine: paese || '', valore: '', aggiunte: '', deduzioni: '', netto: '', lordo: '', quantita: '', quantitaDazio: '',
       regime: 'base', addizionali: [], documenti: [], iva: 22, ivaMotivo: '', ivaNonPagata: '', dazioManuale: '', altriManuale: '',
-      codAggiunte: '', codDeduzioni: '', colliNumero: '', colliTipo: '', colliMarchi: '' };
+      codAggiunte: '', codDeduzioni: '', colliNumero: '', colliTipo: '', colliMarchi: '', regimiAggiuntivi: '' };
   }
   function nuovaBolla(tipo) {
     return { id: null, tipo: tipo, riferimento: '', dati: { data: oggiIso(), valuta: 'EUR', nolo: { importo: '', valuta: 'EUR' }, assicurazione: { importo: '', valuta: 'EUR' },
@@ -77,7 +81,8 @@
       statSpese: { importo: '', valuta: 'EUR' }, paese: '', mittente: '', venditore: '', destinatario: '', acquirente: '', dichiarante: '',
       rappresentante: '', qualifica: '', incoterm: '', luogo: '', cambioManuale: '', tassoContratto: '', paeseSpedizione: '', provincia: '',
       modoTrasporto: '', container: '', natura: '11', ubicazione: '', uscita: '', docTrasporto: { tipo: '', numero: '' }, fattura: '',
-      metodo: '1', indicatori: {}, articoli: [] } };
+      metodo: '1', indicatori: {}, articoli: [], ufficio: '', mrn: '', dilazione: '', metodoPagamento: '', mezzoArrivo: '',
+      scarico: { tipo: '', riferimento: '', articolo: '', colli: '', quantita: '', unita: '' } } };
   }
 
   vista.bolla = {
@@ -274,6 +279,15 @@
     if (imp() && (d.valuta !== 'EUR' || String(d.tassoContratto || '').trim()))
       h += '<div class="b-campi">' + campo('Tasso fissato dal contratto: 1 € = … ' + esc(d.valuta) + de('tassoContratto'), 'tassoContratto', d.tassoContratto,
         ' inputmode="decimal" autocomplete="off" placeholder="vuoto: cambio doganale del mese"') + '</div>';
+    // i dati del prospetto di sintesi H1 che non servono ai calcoli: ufficio, MRN (con il codice a barre nella stampa), pagamento
+    if (imp()) h += '<details class="piu b-sez" open><summary>Dichiarazione e pagamento</summary><div class="b-campi">' +
+      campo('Ufficio doganale', 'ufficio', d.ufficio, ' maxlength="120" autocomplete="off" placeholder="codice e nome dell\'ufficio"') +
+      campo('MRN, dopo l\'accettazione', 'mrn', d.mrn, ' maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="18 caratteri, nella stampa con il codice a barre"') +
+      campo('Dilazione di pagamento' + de('dilazione'), 'dilazione', d.dilazione, ' maxlength="70" autocomplete="off" placeholder="autorizzazione o conto"') +
+      '<label>Metodo di pagamento' + de('metodoPagamento') + '<input class="campo" data-f="metodoPagamento" list="b-pagamento" value="' + esc(d.metodoPagamento || '') +
+        '" maxlength="1" autocomplete="off" autocapitalize="characters" placeholder="per esempio E"></label>' +
+      '<datalist id="b-pagamento">' + (C.pagamento || []).map(function (x) { return '<option value="' + esc(x[0]) + '">' + esc(x[0] + ' · ' + x[1]) + '</option>'; }).join('') + '</datalist>' +
+      '</div></details>';
     // soggetti
     h += '<details class="piu b-sez" open><summary>Soggetti</summary><div class="b-campi">' +
       testo('Esportatore' + de('mittente'), 'mittente', d.mittente) +
@@ -299,7 +313,19 @@
       (imp() ? '<label>Documento di trasporto' + de('docTrasporto') + '<select class="campo" data-f="docTrasporto.tipo"><option value="">scegli…</option>' + DOC_TRASPORTO.map(function (c) {
         return '<option value="' + c + '"' + (d.docTrasporto.tipo === c ? ' selected' : '') + '>' + esc(c + ' · ' + (app().certificato(c) || '')) + '</option>';
       }).join('') + '</select></label>' + campo('Numero del documento di trasporto', 'docTrasporto.numero', d.docTrasporto.numero, ' maxlength="70" autocomplete="off"') : '') +
+      (imp() ? campo('Identità del mezzo all\'arrivo' + de('mezzoArrivo'), 'mezzoArrivo', d.mezzoArrivo, ' maxlength="40" autocomplete="off" placeholder="tipo e identificativo, per esempio 40 AZ610"') : '') +
       campo('Fattura commerciale N380, numero' + de('fattura'), 'fattura', d.fattura, ' maxlength="70" autocomplete="off"') + '</div></details>';
+    if (imp()) {
+      var sc = d.scarico || {};
+      h += '<details class="piu b-sez"' + (sc.tipo || sc.riferimento ? ' open' : '') + '><summary>Scarico (documento precedente)</summary><div class="b-campi">' +
+        '<label>Tipo' + de('scarico') + '<input class="campo" data-f="scarico.tipo" list="b-precedenti" value="' + esc(sc.tipo || '') + '" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="per esempio 337"></label>' +
+        '<datalist id="b-precedenti">' + DOC_PRECEDENTI.map(function (x) { return '<option value="' + x[0] + '">' + esc(x[0] + ' · ' + x[1]) + '</option>'; }).join('') + '</datalist>' +
+        campo('Riferimento', 'scarico.riferimento', sc.riferimento, ' maxlength="70" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="per esempio l\'MRN della custodia temporanea"') +
+        campo('Articolo', 'scarico.articolo', sc.articolo, ' maxlength="5" inputmode="numeric" autocomplete="off"') +
+        campo('Numero di imballaggi', 'scarico.colli', sc.colli, ' maxlength="8" inputmode="numeric" autocomplete="off"') +
+        campo('Quantità', 'scarico.quantita', sc.quantita, ' maxlength="16" inputmode="decimal" autocomplete="off"') +
+        campo('Unità', 'scarico.unita', sc.unita, ' maxlength="8" autocomplete="off" placeholder="per esempio KGM"') + '</div></details>';
+    }
     // valore
     if (!imp()) {
       h += '<details class="piu b-sez" open><summary>Valore statistico</summary><div class="b-campi">' +
@@ -342,6 +368,8 @@
       '<label>Colli: numero' + de('colli') + '<input class="campo" ' + f('colliNumero') + ' value="' + v('colliNumero') + '" inputmode="numeric" autocomplete="off"></label>' +
       '<label>Colli: tipo di imballaggio<input class="campo" ' + f('colliTipo') + ' value="' + v('colliTipo') + '" list="b-imballaggi" maxlength="2" autocomplete="off" autocapitalize="characters" placeholder="per esempio CT, PX"></label>' +
       '<label class="largo">Colli: marchi e numeri<input class="campo" ' + f('colliMarchi') + ' value="' + v('colliMarchi') + '" maxlength="512" autocomplete="off"></label>' +
+      (imp() ? '<label>Regimi aggiuntivi' + de('regimiAggiuntivi') + '<input class="campo" ' + f('regimiAggiuntivi') + ' value="' + v('regimiAggiuntivi') +
+        '" maxlength="40" autocomplete="off" autocapitalize="characters" placeholder="codici di 3 caratteri"></label>' : '') +
       '</div><div class="b-desc nota" data-desc="' + k + '"></div><div class="b-opz" data-opz="' + k + '"></div>';
     if (imp()) h += '<details class="piu"' + (a.aggiunte || a.deduzioni ? ' open' : '') + '><summary>Altri elementi del valore in dogana</summary><div class="b-campi">' +
       '<label>Da aggiungere (' + esc(dati().valuta) + ')' + de('aggiunte') + '<input class="campo" ' + f('aggiunte') + ' value="' + v('aggiunte') + '" inputmode="decimal" autocomplete="off"></label>' +
@@ -616,6 +644,8 @@
      AIDA (intestazione, poi un foglio «Dettagli Articolo» per articolo, con le stesse caselle e sezioni), senza stemma né
      codice a barre e con la scritta SIMULAZIONE su ogni pagina. I dati che esistono solo dopo l'accettazione (MRN, svincolo,
      A93, quietanza) e quelli che la simulazione non chiede restano vuoti; quelli che chiede in più vanno in «Altri dati». */
+  // MRN: anno (2 cifre), paese (2 lettere), 14 lettere o cifre; lo controlla anche js/calcolo.js
+  var RE_MRN = /^\d{2}[A-Z]{2}[A-Z0-9]{14}$/;
   function prospettoH1() {
     var R = st.ultimo, d = dati(), cb = contesto().cambi[d.valuta], c = cambioAttuale();
     if (!R) return '';
@@ -636,27 +666,34 @@
     function totale(k) { var t = 0, n = 0; arts.forEach(function (a) { var x = K.numeroIt(a[k]); if (x > 0) { t += x; n++; } }); return n ? t : null; }
     var colli = totale('colliNumero'), lordo = totale('lordo'), fattura = totale('valore'), ora = new Date();
     var rappresentante = d.qualifica === '2' ? 'Rappresentante diretto' : d.qualifica === '3' ? 'Rappresentante indiretto' : 'Rappresentante';
+    var mrn = String(d.mrn || '').replace(/\s+/g, '').toUpperCase(), c128 = window.TARIC_CODICE128;
+    var barre = RE_MRN.test(mrn) && c128 ? c128.svg(mrn, 40) : '', sc = d.scarico || {}, mp = d.metodoPagamento || '';
     var docTestata = (R.documentiTestata || []).map(function (x) { return [x.codice, x.numero, '', '', '', '', '', '']; });
     if (dt.tipo || dt.numero) docTestata.push([dt.tipo || '', dt.numero || '', '', '', '', '', '', '']);
 
     var h = '<div class="ps-filigrana" aria-hidden="true">SIMULAZIONE</div><div class="ps-testa"><p class="b-st-sim">SIMULAZIONE · non è una dichiarazione doganale</p>' +
       '<h1>Prospetto di sintesi della dichiarazione doganale di importazione H1</h1>' +
-      '<p>MRN: — &nbsp; Ver.: —</p><p>Generato il: ' + esc(dataIt(oggiIso())) + ' ' + pad(ora.getHours()) + ':' + pad(ora.getMinutes()) + ':' + pad(ora.getSeconds()) +
+      '<p>MRN: ' + (mrn ? '<b>' + esc(mrn) + '</b>' : '—') + ' &nbsp; Ver.: —</p><p>Generato il: ' + esc(dataIt(oggiIso())) + ' ' + pad(ora.getHours()) + ':' + pad(ora.getMinutes()) + ':' + pad(ora.getSeconds()) +
       ' da MAGIC HS, dati TARIC al ' + esc(app().dati().it) + (st.b.riferimento ? ' · Riferimento: <b>' + esc(st.b.riferimento) + '</b>' : '') + '</p></div>';
+    // le prime due righe con il codice a barre dell'MRN a destra, come nel prospetto di AIDA
+    h += tabella(10, [
+      tr(cella('Ufficio', d.ufficio, 3), cella('Data dichiarazione', dataIt(d.data), 2), cella('Data accettazione', '', 2),
+        '<td colspan="3" rowspan="2" class="ps-codice">' + (barre ? barre + '<small>' + esc(mrn) + '</small>' : '') + '</td>'),
+      tr(cella('Totale colli', colli === null ? '' : nIt(colli, 0), 1), cella('Totale massa lorda', lordo === null ? '' : nIt(lordo, 2), 2),
+        cella('Valore fattura', fattura === null ? '' : nIt(fattura, 2) + ' ' + d.valuta, 2), cella('Tasso di cambio', d.valuta === 'EUR' ? '' : cb ? nIt(cb.tasso, 4) : '', 2))
+    ]).replace('<table class="ps">', '<table class="ps ps-su">');
     h += tabella(8, [
-      tr(cella('Ufficio', '', 4), cella('Data dichiarazione', dataIt(d.data), 2), cella('Data accettazione', '', 2)),
-      tr(cella('Totale colli', colli === null ? '' : nIt(colli, 0), 2), cella('Totale massa lorda', lordo === null ? '' : nIt(lordo, 2), 2),
-        cella('Valore fattura', fattura === null ? '' : nIt(fattura, 2) + ' ' + d.valuta, 2), cella('Tasso di cambio', d.valuta === 'EUR' ? '' : cb ? nIt(cb.tasso, 4) : '', 2)),
       '<tr><td colspan="4" rowspan="2" class="ps-titolo">Dettagli Dichiarazione</td>' + cella('Svincolo', '') + cella('Data svincolo', '') + cella('Num. A93', '') + cella('Anno A93', '') + '</tr>',
       tr(cella('Totale Articoli', arts.length), cella('Data rilascio', ''), cella('Num. Quiet.', ''), cella('Data Quiet.', '')),
       tr(cella('Esportatore', d.mittente, 4), cella('Importatore', d.destinatario, 4)),
       tr(cella('Dichiarante', d.dichiarante, 4), cella(rappresentante, d.rappresentante, 4)),
-      tr(cella('Condizioni di consegna', d.incoterm ? d.incoterm + (d.luogo ? ' ' + d.luogo : '') : '', 4), cella('Dilazione di pagamento', '', 4)),
-      tr(cella('Paese di sped.', d.paeseSpedizione), cella('Paese di dest.', 'IT'), cella('Provincia dest.', d.provincia, 2), cella('Id. Mezzo all\'arrivo', '', 2),
+      tr(cella('Condizioni di consegna', d.incoterm ? d.incoterm + (d.luogo ? ' ' + d.luogo : '') : '', 4), cella('Dilazione di pagamento', d.dilazione, 4)),
+      tr(cella('Paese di sped.', d.paeseSpedizione), cella('Paese di dest.', 'IT'), cella('Provincia dest.', d.provincia, 2), cella('Id. Mezzo all\'arrivo', d.mezzoArrivo, 2),
         cella('Natura transazione', d.natura, 2)),
       sezione(8, 'Aggiunte / Detrazioni', [['Codice', 1], ['Descrizione', 5], ['Importo', 2, true]], []),
       sezione(8, 'Documenti', [['Codice', 1], ['Identificativo', 1], ['Autorità Emitt.', 1], ['Data Validità', 1], ['Unità di misura', 1], ['Quantità', 1], ['Codice Valuta', 1], ['Importo', 1, true]], docTestata),
-      sezione(8, 'Scarichi', [['Tipo', 1], ['Riferimento', 3], ['Art.', 1], ['Num. imb.', 1], ['Quantità', 1], ['Unità', 1]], [])
+      sezione(8, 'Scarichi', [['Tipo', 1], ['Riferimento', 3], ['Art.', 1], ['Num. imb.', 1], ['Quantità', 1, true], ['Unità', 1]],
+        sc.tipo || sc.riferimento ? [[sc.tipo, sc.riferimento, sc.articolo, sc.colli, sc.quantita, sc.unita]] : [])
     ]);
     // quello che la simulazione usa e il prospetto non ha
     var cambio = d.valuta === 'EUR' ? '' : !cb ? d.valuta + ', cambio mancante' : '1 € = ' + nIt(cb.tasso, 4) + ' ' + d.valuta +
@@ -677,16 +714,16 @@
       if (r.quotaNolo) aggiunte.push(['AK', nomeDi(C.aggiunte, 'AK').replace(/^AK · /, ''), euro(r.quotaNolo)]);
       if (K.numeroIt(a.aggiunte) > 0) aggiunte.push([a.codAggiunte || '', a.codAggiunte ? nomeDi(C.aggiunte, a.codAggiunte).replace(/^\w+ · /, '') : 'codice mancante', a.aggiunte + ' ' + d.valuta]);
       if (K.numeroIt(a.deduzioni) > 0) aggiunte.push([a.codDeduzioni || '', a.codDeduzioni ? nomeDi(C.detrazioni, a.codDeduzioni).replace(/^\w+ · /, '') : 'codice mancante', a.deduzioni + ' ' + d.valuta]);
-      var tributi = r.tributi.map(function (t) { return [nomeTributo(t), baseTributo(t, r), '', '', aliquotaTributo(t), euro(t.importo), '']; });
+      var tributi = r.tributi.map(function (t) { return [nomeTributo(t), baseTributo(t, r), '', '', aliquotaTributo(t), euro(t.importo), mp]; });
       if (r.iva !== null && r.iva !== undefined) {
-        tributi.push(['B00 IVA' + (r.aliquota === 0 && a.ivaMotivo ? ' (' + a.ivaMotivo + ')' : ''), euro(r.baseIva), '', '', (r.aliquota || 0) + ' %', euro(r.iva), '']);
-        if (r.ivaNonPagata) tributi.push([r.ivaNonPagata.codice + ' IVA non pagata, si detrae', euro(r.iva), '', '', '', '− ' + euro(r.ivaNonPagata.importo), '']);
+        tributi.push(['B00 IVA' + (r.aliquota === 0 && a.ivaMotivo ? ' (' + a.ivaMotivo + ')' : ''), euro(r.baseIva), '', '', (r.aliquota || 0) + ' %', euro(r.iva), mp]);
+        if (r.ivaNonPagata) tributi.push([r.ivaNonPagata.codice + ' IVA non pagata, si detrae', euro(r.iva), '', '', '', '− ' + euro(r.ivaNonPagata.importo), mp]);
       }
       h += '<section class="ps-foglio">' + tabella(12, [
         '<tr><td colspan="4" class="ps-titolo">Dettagli Articolo n° ' + r.n + '</td>' + cella('Regime', '4000') + cella('Cod. Svincolo', '') + cella('Data svincolo', '') +
           cella('Num. A93', '') + cella('Anno A93', '') + cella('Data rilascio', '') + cella('Num. Quietanza', '') + cella('Data quietanza', '') + '</tr>',
         tr(cella('Codice merce', r.codice ? String(r.codice).replace(/\D/g, '') : '', 3), cella('Massa lorda', numero(a.lordo, 2), 2), cella('Massa netta', numero(a.netto, 2), 2),
-          cella('Unità supplementare', r.unitaSup ? (a.quantita || '') + ' ' + r.unitaSup : '', 2), cella('Regimi aggiuntivi', '', 2), cella('Container', d.container, 1)),
+          cella('Unità supplementare', r.unitaSup ? (a.quantita || '') + ' ' + r.unitaSup : '', 2), cella('Regimi aggiuntivi', a.regimiAggiuntivi, 2), cella('Container', d.container, 1)),
         tr(cella('Descrizione merce', a.descrizione, 8), cella('Preferenze', r.preferenza || '', 2), cella('Contingente', reg.contingente ? reg.contingente.slice(0, 2) + '.' + reg.contingente.slice(2) : '', 2)),
         tr(cella('Paese di sped.', d.paeseSpedizione), cella('Paese di dest.', 'IT'), cella('Prov. dest.', d.provincia), cella('Paese di orig.', paese, 2),
           cella('Paese orig pref', pref ? paese : '', 2), cella('Natura transaz.', d.natura), cella('Prezzo art.', a.valore ? numero(a.valore, 2) + ' ' + d.valuta : '', 2),

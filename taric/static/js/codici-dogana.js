@@ -10,6 +10,7 @@
 "aggiunte":"Reg. di esecuzione (UE) 2015/2447, allegato B, codici del dato «Aggiunte e detrazioni» (artt. 70-72 del codice)",
 "metodi":"Reg. di esecuzione (UE) 2015/2447, allegato B, codici del dato «Metodo di valutazione»",
 "qualifica":"Tracciato ADM H1 EUCDM 6.2, DE 13 06 030 000 (2 = rappresentanza diretta, 3 = indiretta)",
+"pagamento":"Reg. di esecuzione (UE) 2015/2447, allegato B, titolo II, codici del dato «Metodo di pagamento» (casella 47 del DAU, colonna MP)",
 "aereo":"Reg. di esecuzione (UE) 2015/2447, allegato 23-01 (art. 138): percentuali delle spese di trasporto aereo da comprendere nel valore in dogana, per paese di spedizione"
 },
 // allegato 23-01: zona -> percentuale; paese -> zone (piu' lettere: dipende dall'aeroporto di partenza, in «aeroporti»)
@@ -1750,6 +1751,76 @@
 [
 "3",
 "Rappresentanza indiretta"
+]
+],
+"pagamento":[
+[
+"A",
+"Pagamento in contanti"
+],
+[
+"B",
+"Pagamento con carta di credito"
+],
+[
+"C",
+"Pagamento con assegno"
+],
+[
+"D",
+"Altro (per esempio addebito diretto sul conto di cassa dello spedizioniere)"
+],
+[
+"E",
+"Pagamento differito o posticipato"
+],
+[
+"G",
+"Pagamento posticipato nel sistema dell'IVA (art. 211 della direttiva 2006/112/CE)"
+],
+[
+"H",
+"Bonifico elettronico"
+],
+[
+"J",
+"Pagamento tramite l'amministrazione postale (spedizioni postali) o un altro ente pubblico"
+],
+[
+"K",
+"Credito o rimborso delle accise"
+],
+[
+"M",
+"Cauzione, compreso il deposito in contanti"
+],
+[
+"O",
+"Garanzia depositata presso l'organismo d'intervento"
+],
+[
+"P",
+"Dal conto di cassa dello spedizioniere"
+],
+[
+"R",
+"Garanzia dell'importo dovuto"
+],
+[
+"S",
+"Garanzia isolata in un conto"
+],
+[
+"T",
+"Dal conto di garanzia dello spedizioniere"
+],
+[
+"U",
+"Dal conto di garanzia dello spedizioniere, autorizzazione permanente"
+],
+[
+"V",
+"Dal conto di garanzia dello spedizioniere, autorizzazione isolata"
 ]
 ]
 };

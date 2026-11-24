@@ -611,6 +611,9 @@
     var v = bolla.valuta || 'EUR', cb = (ctx.cambi || {})[v];
     if (cb && cb.contratto) avvisi.push({ articolo: 0, testo: 'Tasso di cambio fissato dal contratto (DE 14 09): in testata va dichiarato il documento 26AO e l\'accordo va conservato per i controlli (avviso ADM del 29/07/2026).' });
     if (v === 'EUR' && !vuoto(bolla.tassoContratto)) conflitto(0, 'Con la fattura in euro il tasso di cambio del contratto non si applica.', 'tassoContratto');
+    // MRN (dopo l'accettazione, per il prospetto di sintesi con il codice a barre): anno, paese, 14 lettere o cifre
+    var mrn = String(bolla.mrn || '').replace(/\s+/g, '').toUpperCase();
+    if (mrn && !/^\d{2}[A-Z]{2}[A-Z0-9]{14}$/.test(mrn)) conflitto(0, 'MRN non valido: 18 caratteri, cioè anno (2 cifre), paese (2 lettere) e 14 lettere o cifre.', 'mrn');
     if (cb && cb.manuale) avvisi.push({ articolo: 0, testo: 'Cambio di ' + v + ' scritto a mano (la BCE non lo pubblica): per le Dogane vale il cambio giornaliero della Banca d\'Italia.' });
     if (UE.indexOf(bolla.paese) >= 0) conflitto(0, flusso === 'export' ? 'La destinazione predefinita è un paese dell\'Unione: non è un\'esportazione.'
       : 'L\'origine predefinita è un paese dell\'Unione: la merce di origine UE non si importa come merce estera, controlla l\'origine.', 'paese');

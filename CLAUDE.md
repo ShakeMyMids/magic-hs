@@ -130,8 +130,10 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   proposta dall'allegato 23-01; il carburante del servizio scelto finché non si scrive a mano), `js/bolla.js`
   (sezione Bolla: elenco, intestazione, articoli, tributi, documenti della casella 44, riferimenti DE e casella di ogni campo in
   `RIF_IMP`/`RIF_EXP`, foglio `#bolla-stampa` con `body.stampa-bolla`: all'importazione `prospettoH1()`, il prospetto di sintesi
-  H1 di AIDA con caselle `.ps` e un foglio `.ps-foglio` per articolo, senza stemma né codice a barre e con la filigrana SIMULAZIONE;
-  all'esportazione `documentoStampa()`), `js/profilo.js` (anche gli avvisi
+  H1 di AIDA con caselle `.ps` e un foglio `.ps-foglio` per articolo, senza stemma e con la filigrana SIMULAZIONE, l'MRN (`RE_MRN`,
+  controllato anche in `calcolo.js`) con il codice a barre di `js/codice128.js` (Code 128 set B, `window.TARIC_CODICE128` e modulo di
+  node, si prova con `node tests/prova_codice128.js`); campi `ufficio`, `mrn`, `dilazione`, `metodoPagamento` (codici `pagamento` di
+  `codici-dogana.js`), `mezzoArrivo`, `scarico` e per articolo `regimiAggiuntivi`; all'esportazione `documentoStampa()`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
   (Utenti con azienda e «Disconnetti», Aziende, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Trasporto,
   Segnalazioni, Registro), `js/porto.js` (la scena si tocca:
@@ -184,6 +186,7 @@ python -m pytest -q tests
 node tests/prova_calcolo.js
 node tests/prova_calendario.js
 node tests/prova_trasporto.js
+node tests/prova_codice128.js
 ```
 
 `tests/test_trasporto.py` usa la guida finta di `tests/guida_finta.py` (stessa struttura del PDF di DHL, prezzi inventati);
