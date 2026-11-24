@@ -7,6 +7,7 @@ un limite mensile di classificazioni per persona e un tetto mensile per tutti. S
 """
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import hashlib
 import json
@@ -35,6 +36,7 @@ from . import sicurezza as S
 from .backup import Backup, ErroreBackup
 from .cambi import cambi
 from . import aziende as AZ
+from . import bolla_pdf as BP
 from .carburante import Carburante, ErroreCarburante
 from .config import Config
 from .copia import CopiaEsterna
@@ -149,6 +151,11 @@ class Bolla(BaseModel):
     tipo: Literal["import", "export"]
     riferimento: str = Field(default="", max_length=120)
     dati: dict[str, Any]
+
+
+class LetturaBolla(BaseModel):
+    pdf: str = Field(min_length=16, max_length=7_000_000)        # base64: al massimo 5 MB (ia.MASSIMO_ALLEGATO)
+    ia: bool = False                                              # False: solo il prospetto H1 di AIDA, senza IA
 
 
 class BollaModificata(BaseModel):
@@ -1085,6 +1092,36 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             bolla_di(c, bid, u)
             c.execute("DELETE FROM bolle WHERE id = ?", (bid,))
         return json_ok()
+
+    @app.post("/api/bolle/leggi")
+    def leggi_bolla(body: LetturaBolla, u: sqlite3.Row = Depends(richiede_utente)) -> Response:
+        """Dati per una bolla d'importazione nuova dal PDF di una dichiarazione (taric/bolla_pdf.py), che non si salva: prima
+        senza IA (prospetto di sintesi H1 di AIDA); se non è un prospetto riconosciuto, codice «serve_ia» e la pagina propone
+        la lettura con l'IA (ia: true), che conta come una classificazione del mese."""
+        try:
+            pdf = Allegato.da("application/pdf", body.pdf)
+        except ErroreIA:
+            raise Errore(422, "Il file non è un PDF leggibile (al massimo 5 MB).", "pdf_non_valido") from None
+        if not body.ia:
+            estratto, motivo = BP.leggi_testo(base64.b64decode(pdf.dati), cfg.dati / "letture")
+            if estratto is None:
+                raise Errore(422, "Non lo riconosco come prospetto di sintesi H1 di AIDA" + (f" ({motivo})" if motivo else "") + ".", "serve_ia")
+            fonte = "testo"
+        else:
+            try:
+                r = ia.chiedi(u, BP.PROMPT, "standard", contesto=BP.CONTESTO, schema="bolla", operazione="pdf-" + secrets.token_hex(8),
+                              tipo="classifica", allegati=(pdf,))
+            except ErroreIA as e:
+                return JSONResponse({"errore": MESSAGGI_IA.get(e.codice, MESSAGGI_IA["upstream_error"]), "codice": e.codice}, status_code=e.stato_http)
+            estratto = r["risultato"] if isinstance(r.get("risultato"), dict) else {}
+            if str(estratto.get("tipo") or "").upper() != "H1":
+                raise Errore(422, "Nel PDF l'IA non trova una dichiarazione d'importazione (H1)." if str(estratto.get("tipo") or "").upper() != "EX"
+                             else "È una dichiarazione d'esportazione: per ora si leggono solo le importazioni.", "non_bolla")
+            fonte = "ia"
+        dati_letti, avvisi = BP.dati_bolla(estratto)
+        if not dati_letti["articoli"]:
+            raise Errore(422, "Nel PDF non trovo gli articoli della dichiarazione.", "non_bolla")
+        return JSONResponse(json_ok(dati=dati_letti, avvisi=avvisi, fonte=fonte))
 
     @app.get("/api/cambio")
     def cambio(valuta: str, data: str, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:

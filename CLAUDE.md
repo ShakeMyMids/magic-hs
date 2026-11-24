@@ -53,6 +53,13 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   righe «Novembre 16-22, 2026 | 50.00%»): il pianificatore lo chiama una volta al giorno se c'è una tariffa (`da_fare`,
   dopo un errore aspetta 6 ore), esito in `impostazioni` `carburante_auto`. `prezzo()` di `leggi_tariffe.py` e quello di `js/trasporto.js` devono fare lo stesso conto
   (lo prova `tests/test_trasporto.py`).
+- `taric/bolla_pdf.py` e `taric/leggi_bolla.py`: bolla da un PDF (`POST /api/bolle/leggi`, il PDF non si salva). Senza IA il
+  prospetto di sintesi H1 di AIDA: `python -I leggi_bolla.py` (pypdf, modo «layout» per i testi con posizione e larghezza; misure in
+  altezze di testo, anche con l'asse capovolto dei PDF dei browser; etichette note `TESTATA`/`ARTICOLO`, anche su due righe; sezioni
+  a righe `SEZIONI` per colonne, che finiscono a un salto, a un testo largo o di un'altra grandezza; ultima riga `CONTROLLI OK`).
+  Se non è un prospetto riconosciuto, codice `serve_ia`, e con `ia: true` lo legge l'IA (schema `bolla`, conta come una
+  classificazione). `dati_bolla()` porta i dati letti nella forma di `js/bolla.js` con gli `avvisi`. Prove con il prospetto finto di
+  `tests/prospetto_finto.py`.
 - `taric/db.py`: schema SQLite. Le migrazioni vanno aggiunte in coda alla lista `SCHEMA`; `PRAGMA user_version`
   dice quali sono già applicate. Le tabelle delle versioni precedenti restano.
 - `taric/sicurezza.py`: sessioni (cookie `magic_hs`), password argon2, tentativi limitati (tabella `tentativi`), gettoni
@@ -133,7 +140,9 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   H1 di AIDA con caselle `.ps` e un foglio `.ps-foglio` per articolo, senza stemma e con la filigrana SIMULAZIONE, l'MRN (`RE_MRN`,
   controllato anche in `calcolo.js`) con il codice a barre di `js/codice128.js` (Code 128 set B, `window.TARIC_CODICE128` e modulo di
   node, si prova con `node tests/prova_codice128.js`); campi `ufficio`, `mrn`, `dilazione`, `metodoPagamento` (codici `pagamento` di
-  `codici-dogana.js`), `mezzoArrivo`, `scarico` e per articolo `regimiAggiuntivi`; all'esportazione `documentoStampa()`), `js/profilo.js` (anche gli avvisi
+  `codici-dogana.js`), `mezzoArrivo`, `scarico` e per articolo `regimiAggiuntivi`; all'esportazione `documentoStampa()`; bolla nuova
+  da un PDF trascinato sulla sezione o scelto in «Da un PDF», `leggiPdf`/`inviaPdf`/`apriDaPdf`, con i punti da controllare in
+  `st.avvisiPdf`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
   (Utenti con azienda e «Disconnetti», Aziende, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Trasporto,
   Segnalazioni, Registro), `js/porto.js` (la scena si tocca:

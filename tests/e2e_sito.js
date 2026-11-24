@@ -402,20 +402,20 @@ async function accedi(p, email, password) {
     'aiuto: la prima volta nella Bolla Marino si presenta da solo, senza bloccare la pagina, e non lo rifà');
   await capo.click('[data-aiuto="avanti"]');                                   // «Sì, spiegami»
   await capo.waitForSelector('.aiuto:not(.invito)', { state: 'attached' });
-  ok((await capo.textContent('.aiuto-passo')) === '1 di 5' && (await capo.textContent('#aiuto-titolo')) === 'Bolla' && !(await capo.textContent('#aiuto-testo')).startsWith('Ciao'),
+  ok((await capo.textContent('.aiuto-passo')) === '1 di 6' && (await capo.textContent('#aiuto-titolo')) === 'Bolla' && !(await capo.textContent('#aiuto-testo')).startsWith('Ciao'),
     'aiuto: «Sì, spiegami» comincia la visita');
   await capo.keyboard.press('Escape'); await capo.waitForSelector('.aiuto', { state: 'detached' });
-  // aiuto: Marino, il gabbiano, spiega la sezione a passi (elenco delle bolle: 5 passi), con le frecce, Esc e il tasto ?
+  // aiuto: Marino, il gabbiano, spiega la sezione a passi (elenco delle bolle: 6 passi), con le frecce, Esc e il tasto ?
   await capo.click('#aiuto'); await capo.waitForSelector('.aiuto .aiuto-fumetto');
-  ok((await capo.textContent('#aiuto-titolo')) === 'Bolla' && (await capo.textContent('.aiuto-passo')) === '1 di 5' && await capo.isVisible('.aiuto .marino') &&
+  ok((await capo.textContent('#aiuto-titolo')) === 'Bolla' && (await capo.textContent('.aiuto-passo')) === '1 di 6' && await capo.isVisible('.aiuto .marino') &&
     (await capo.textContent('#aiuto-testo')).startsWith('Ciao, sono Marino!'), 'aiuto: Marino arriva, si presenta e spiega la Bolla');
   await capo.keyboard.press('ArrowRight');
   await capo.waitForSelector('.aiuto-luce:not(.senza)');                   // la luce si allarga sulla parte spiegata
   ok((await capo.textContent('#aiuto-titolo')) === 'Nuova bolla', 'aiuto: avanti con la freccia, la parte spiegata è illuminata');
   await capo.keyboard.press('Escape'); await capo.waitForSelector('.aiuto', { state: 'detached' });
   await capo.keyboard.press('?'); await capo.waitForSelector('.aiuto .aiuto-fumetto');
-  for (let k = 0; k < 4; k++) await capo.click('[data-aiuto="avanti"]');
-  ok((await capo.textContent('.aiuto-passo')) === '5 di 5' && (await capo.textContent('[data-aiuto="avanti"]')).includes('Fine') && await capo.isVisible('[data-aiuto="segnala"]'),
+  for (let k = 0; k < 5; k++) await capo.click('[data-aiuto="avanti"]');
+  ok((await capo.textContent('.aiuto-passo')) === '6 di 6' && (await capo.textContent('[data-aiuto="avanti"]')).includes('Fine') && await capo.isVisible('[data-aiuto="segnala"]'),
     'aiuto: l\'ultimo passo indica il tasto «?» e «Segnala un problema»');
   // segnalazione di un problema dall'ultimo passo di Marino (l'amministratore la legge più avanti, in Gestione)
   await capo.click('[data-aiuto="segnala"]'); await capo.waitForSelector('.finestra.segnala textarea');
@@ -585,6 +585,42 @@ async function accedi(p, email, password) {
   await capo.goto(B + '/#bolla'); await pronta(capo);
   await capo.waitForSelector('#view-bolla >> text=Fattura di prova');
   if (await capo.isVisible('[data-b="chiudi"]')) await capo.click('[data-b="chiudi"]');
+  // bolla nuova da un PDF: il prospetto di sintesi H1 (finto, tests/prospetto_finto.py) trascinato sulla sezione si legge senza
+  // IA; un altro PDF scelto dal riquadro si legge, dopo la conferma, con l'IA (che conta come una classificazione)
+  const prospettoPdf = require('path').join(out, 'prospetto-finto.pdf'), altroPdf = require('path').join(out, 'altro.pdf');
+  require('child_process').execFileSync(process.env.PYTHON || 'python3', [require('path').join(__dirname, 'prospetto_finto.py'), prospettoPdf]);
+  require('child_process').execFileSync(process.env.PYTHON || 'python3', [require('path').join(__dirname, 'prospetto_finto.py'), altroPdf, '--altro']);
+  await capo.waitForSelector('.b-pdf-zona');
+  const iaPrima = (await capo.evaluate(() => fetch('/api/io').then(r => r.json()))).ia.usate;
+  await capo.evaluate(b64 => {
+    const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    const dt = new DataTransfer(); dt.items.add(new File([u], 'prospetto.pdf', { type: 'application/pdf' }));
+    const v = document.getElementById('view-bolla');
+    v.dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    window.__bordo = v.classList.contains('trascina');
+    v.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, require('fs').readFileSync(prospettoPdf).toString('base64'));
+  await capo.waitForSelector('#b-msg >> text=Bolla compilata dal PDF: 2 articoli');
+  ok(await capo.evaluate(() => window.__bordo) && (await capo.inputValue('[data-f="riferimento"]')) === 'MRN 26ITQ0B44714259R61' &&
+    (await capo.inputValue('[data-f="mittente"]')).startsWith('FORNITORE DI PROVA INC') && (await capo.inputValue('[data-f="mrn"]')) === '26ITQ0B44714259R61' &&
+    (await capo.inputValue('[data-f="incoterm"]')) === 'CPT' && (await capo.inputValue('[data-f="valuta"]')) === 'USD' &&
+    (await capo.inputValue('[data-a="0"][data-f="codice"]')) === '6403999610' && (await capo.inputValue('[data-a="1"][data-f="codice"]')) === '8712003090' &&
+    (await capo.inputValue('[data-a="1"][data-f="origine"]')) === 'CN' && await capo.isVisible('.b-pdf-avvisi >> text=Documenti di testata non riportati nella bolla: Y025, Y926.'),
+    'bolla da PDF: il prospetto H1 trascinato sulla sezione compila una bolla nuova, senza IA, con i punti da controllare');
+  ok((await capo.evaluate(() => fetch('/api/io').then(r => r.json()))).ia.usate === iaPrima, 'bolla da PDF: senza IA non conta');
+  await capo.screenshot({ path: out + '/5f-bolla-da-pdf.png' });
+  await capo.click('[data-b="chiudi"]');                           // non salvata: si conferma (finestra accettata)
+  await capo.waitForSelector('.b-pdf-zona');
+  await capo.setInputFiles('#b-pdf-file', altroPdf);
+  await capo.waitForSelector('[data-b="pdf-ia"]');
+  ok(/Non lo riconosco come prospetto di sintesi H1 di AIDA/.test(await capo.textContent('#b-pdf-esito')) &&
+    /conta come una classificazione del mese/.test(await capo.textContent('#b-pdf-esito')), 'bolla da PDF: un altro PDF chiede l\'IA, e dice che conta');
+  await capo.click('[data-b="pdf-ia"]');
+  await capo.waitForSelector('#b-msg >> text=Bolla compilata dal PDF con l\'IA: 1 articolo');
+  ok((await capo.inputValue('[data-a="0"][data-f="codice"]')) === '8712003090' && (await capo.inputValue('[data-f="incoterm"]')) === 'FOB' &&
+    (await capo.evaluate(() => fetch('/api/io').then(r => r.json()))).ia.usate === iaPrima + 1, 'bolla da PDF: letto con l\'IA, conta come una classificazione');
+  await capo.click('[data-b="chiudi"]');
+  await capo.waitForSelector('[data-b="nuova"][data-tipo="export"]');
   // esportazione: niente dazi, valore statistico in euro e documenti
   await capo.click('[data-b="nuova"][data-tipo="export"]');
   // dirham degli Emirati: la BCE non lo pubblica, il cambio si scrive a mano (1 € = 4 AED)

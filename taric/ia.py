@@ -88,6 +88,17 @@ SCHEMI: dict[str, dict[str, Any]] = {
         domande=_elenco(_oggetto(domanda=_S, opzioni=_elenco(_S), perche=_S)),
         altre_voci=_elenco(_S)),
     "traduzione": _oggetto(traduzioni=_elenco(_S)),
+    # lettura di una dichiarazione doganale in PDF per compilare una bolla (taric/bolla_pdf.py): i dati come sono scritti
+    "bolla": _oggetto(
+        tipo=_S, mrn=_S, ufficio=_S, data=_S, valuta=_S, esportatore=_S, importatore=_S, dichiarante=_S, rappresentante=_S,
+        qualifica=_S, consegna=_S, dilazione=_S, paese_spedizione=_S, provincia=_S, mezzo_arrivo=_S, natura=_S,
+        metodo_pagamento=_S, container=_S,
+        documenti=_elenco(_oggetto(codice=_S, identificativo=_S)),
+        scarichi=_elenco(_oggetto(tipo=_S, riferimento=_S, articolo=_S, colli=_S, quantita=_S, unita=_S)),
+        articoli=_elenco(_oggetto(
+            codice=_S, descrizione=_S, origine=_S, prezzo=_S, lordo=_S, netto=_S, quantita=_S, regimi_aggiuntivi=_S, preferenza=_S,
+            documenti=_elenco(_oggetto(codice=_S, identificativo=_S)), colli=_elenco(_oggetto(tipo=_S, numero=_S, marchi=_S)),
+            aggiunte=_elenco(_oggetto(codice=_S, importo=_S)), tributi=_elenco(_oggetto(tributo=_S, importo=_S))))),
     "prova": _oggetto(ok={"type": "boolean"}),
 }
 
