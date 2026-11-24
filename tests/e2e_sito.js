@@ -470,9 +470,14 @@ async function accedi(p, email, password) {
   // stampa: solo il foglio della simulazione
   await capo.emulateMedia({ media: 'print' });
   await capo.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
-  ok(await capo.isVisible('#bolla-stampa >> text=SIMULAZIONE') && await capo.isHidden('#b-esito') && await capo.isVisible('#bolla-stampa >> text=Totale da pagare') &&
-    await capo.isVisible('#bolla-stampa >> text=Tipo di dichiarazione IM A') && await capo.isVisible('#bolla-stampa >> text=Esportatore (DE 13 01 · c. 2)'),
-    'bolla: foglio stampabile con la scritta «simulazione» e i dati del tracciato H1');
+  const foglio = (await capo.innerText('#bolla-stampa')).replace(/\s+/g, ' ');
+  ok(await capo.isVisible('#bolla-stampa >> text=SIMULAZIONE · non è una dichiarazione doganale') && await capo.isHidden('#b-esito') &&
+    /Prospetto di sintesi della dichiarazione doganale di importazione H1/.test(foglio) && /Totale da pagare 9\.825,00 €/.test(foglio) &&
+    /Esportatore Fornitore di prova Ltd, Shenzhen/.test(foglio) && /Valore fattura 10\.867,00 USD/.test(foglio) && /Tasso di cambio 1,0867/.test(foglio) &&
+    /Dettagli Articolo n° 1 Regime 4000/.test(foglio) && /Codice merce 8712003090/.test(foglio) && /Preferenze 100/.test(foglio) &&
+    /Liquidazione Tributo Imponibile .* A00 Dazio 10\.000,00 €.* 14 % 1\.400,00 €/.test(foglio) && /B00 IVA 16\.250,00 € 22 % 3\.575,00 €/.test(foglio) &&
+    await capo.evaluate(() => getComputedStyle(document.querySelector('#bolla-stampa .ps-foglio')).breakBefore === 'page'),
+    'bolla: stampa come il prospetto di sintesi H1 (intestazione, poi un foglio per articolo), con la scritta «simulazione»');
   await capo.screenshot({ path: out + '/5b-bolla-stampa.png', fullPage: true });
   await capo.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   await capo.emulateMedia({ media: 'screen' });
