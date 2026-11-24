@@ -581,6 +581,127 @@
     if (t.manuale || !e || /^[\d.,\s]+%$/.test(e.trim())) return euro(r.valoreDogana);
     return /%/.test(e) ? euro(r.valoreDogana) + ' e quantità' : 'quantità';
   }
+  function elencoStampa(classe, titolo, voci) {
+    return voci && voci.length ? '<div class="' + classe + '"><b>' + esc(titolo) + '</b><ul>' + voci.map(function (x) {
+      return '<li>' + (x.articolo ? 'Articolo ' + x.articolo + ': ' : '') + esc(x.testo) + '</li>'; }).join('') + '</ul></div>' : '';
+  }
+  function problemiStampa(R) {
+    return elencoStampa('b-st-conflitti', 'Conflitti da risolvere', R.conflitti) + elencoStampa('b-st-mancanti', 'Dati obbligatori ancora vuoti', R.mancanti);
+  }
+  function riepilogoStampa(R) {
+    if (imp() && R.totali) {
+      var T0 = R.totali;
+      return '<div class="b-st-art"><h2>Riepilogo</h2><table class="tab"><tbody><tr><th>Valore in dogana</th><td class="n">' + euro(T0.valoreDogana) + '</td></tr>' +
+        Object.keys(T0.dazi).map(function (k) { return '<tr><th>' + esc(prima(k)) + '</th><td class="n">' + euro(T0.dazi[k]) + '</td></tr>'; }).join('') +
+        '<tr><th>B00 IVA all\'importazione</th><td class="n">' + euro(T0.iva) + '</td></tr>' +
+        Object.keys(T0.ivaNonPagata || {}).map(function (k) { return '<tr><th>' + esc(k) + ' IVA non pagata (si detrae)</th><td class="n">− ' + euro(T0.ivaNonPagata[k]) + '</td></tr>'; }).join('') +
+        '<tr><th>Totale da pagare</th><td class="n"><b>' + euro(T0.totale) + '</b></td></tr>' +
+        '<tr><th>Valore statistico (DE 99 06 · c. 46)</th><td class="n">' + euro(T0.valoreStatistico) + '</td></tr></tbody></table></div>';
+    }
+    if (!imp() && R.totali) return '<div class="b-st-art"><h2>Riepilogo</h2><table class="tab"><tbody><tr><th>Valore statistico totale</th><td class="n"><b>' + euro(R.totali.valore) + '</b></td></tr></tbody></table></div>';
+    return '<p class="b-st-sim">Simulazione incompleta: ' + (R.blocchi.length === 1 ? '1 punto' : R.blocchi.length + ' punti') + ' da completare o verificare (vedi le note degli articoli).</p>';
+  }
+  function piedeStampa() {
+    return '<p class="b-st-piede">Calcolata da MAGIC HS il ' + esc(dataIt(oggiIso())) + ' con i dati TARIC al ' + esc(app().dati().it) + '. Riferimenti: ' +
+      (imp() ? 'dati (DE) del tracciato H1 dell\'Agenzia delle Dogane, versione EUCDM 6.2' : 'dati (DE) dell\'allegato B del Reg. delegato (UE) 2015/2446, colonna B1') +
+      '; c. = casella del DAU. Non comprende accise, misure nazionali e saldo dei contingenti; le misure cambiate dopo quella data non ci sono. Verifica sempre su AIDA prima di dichiarare.</p>';
+  }
+  function noteArticolo(r) {
+    var note = r.blocchi.concat(r.avvertenze);          // i conflitti sono già in alto
+    (r.controlli || []).forEach(function (x) { if (x.esito === 'da_verificare') note.push(app().tipoMisura(x.misura.t) + ': da verificare su AIDA'); });
+    return note.length ? '<ul class="b-st-note">' + note.map(function (t) { return '<li>' + esc(prima(t)) + '</li>'; }).join('') + '</ul>' : '';
+  }
+
+  /* importazione: il «Prospetto di sintesi della dichiarazione doganale di importazione H1» come quello che si stampa da
+     AIDA (intestazione, poi un foglio «Dettagli Articolo» per articolo, con le stesse caselle e sezioni), senza stemma né
+     codice a barre e con la scritta SIMULAZIONE su ogni pagina. I dati che esistono solo dopo l'accettazione (MRN, svincolo,
+     A93, quietanza) e quelli che la simulazione non chiede restano vuoti; quelli che chiede in più vanno in «Altri dati». */
+  function prospettoH1() {
+    var R = st.ultimo, d = dati(), cb = contesto().cambi[d.valuta], c = cambioAttuale();
+    if (!R) return '';
+    var arts = d.articoli, dt = d.docTrasporto || {};
+    function testo(v) { return v === null || v === undefined ? '' : esc(String(v)).replace(/\n/g, '<br>'); }
+    function cella(et, v, span, cls) {
+      return '<td' + (span > 1 ? ' colspan="' + span + '"' : '') + (cls ? ' class="' + cls + '"' : '') + '><span class="ps-et">' + esc(et) + '</span><span class="ps-v">' + testo(v) + '</span></td>';
+    }
+    function tabella(n, righe) { return '<table class="ps"><colgroup>' + new Array(n + 1).join('<col>') + '</colgroup><tbody>' + righe.join('') + '</tbody></table>'; }
+    function tr() { return '<tr>' + Array.prototype.join.call(arguments, '') + '</tr>'; }
+    /* una sezione a righe (Aggiunte / Detrazioni, Documenti, Scarichi, Liquidazione, Colli): colonne [etichetta, larghezza, numero?] */
+    function sezione(n, titolo, colonne, righe) {
+      var td = function (k, v) { var x = colonne[k]; return '<td' + (x[1] > 1 ? ' colspan="' + x[1] + '"' : '') + (x[2] ? ' class="n"' : '') + '>' + testo(v) + '</td>'; };
+      return '<tr class="ps-sez"><td colspan="' + n + '">' + esc(titolo) + '</td></tr><tr class="ps-th">' + colonne.map(function (x, k) { return td(k, x[0]); }).join('') + '</tr>' +
+        (righe.length ? righe : [colonne.map(function () { return ''; })]).map(function (r) { return '<tr class="ps-r">' + r.map(function (v, k) { return td(k, v); }).join('') + '</tr>'; }).join('');
+    }
+    function numero(v, min) { var x = K.numeroIt(v); return v === '' || v === undefined || isNaN(x) ? (v || '') : x.toLocaleString('it-IT', { minimumFractionDigits: min, maximumFractionDigits: Math.max(min, 3) }); }
+    function totale(k) { var t = 0, n = 0; arts.forEach(function (a) { var x = K.numeroIt(a[k]); if (x > 0) { t += x; n++; } }); return n ? t : null; }
+    var colli = totale('colliNumero'), lordo = totale('lordo'), fattura = totale('valore'), ora = new Date();
+    var rappresentante = d.qualifica === '2' ? 'Rappresentante diretto' : d.qualifica === '3' ? 'Rappresentante indiretto' : 'Rappresentante';
+    var docTestata = (R.documentiTestata || []).map(function (x) { return [x.codice, x.numero, '', '', '', '', '', '']; });
+    if (dt.tipo || dt.numero) docTestata.push([dt.tipo || '', dt.numero || '', '', '', '', '', '', '']);
+
+    var h = '<div class="ps-filigrana" aria-hidden="true">SIMULAZIONE</div><div class="ps-testa"><p class="b-st-sim">SIMULAZIONE · non è una dichiarazione doganale</p>' +
+      '<h1>Prospetto di sintesi della dichiarazione doganale di importazione H1</h1>' +
+      '<p>MRN: — &nbsp; Ver.: —</p><p>Generato il: ' + esc(dataIt(oggiIso())) + ' ' + pad(ora.getHours()) + ':' + pad(ora.getMinutes()) + ':' + pad(ora.getSeconds()) +
+      ' da MAGIC HS, dati TARIC al ' + esc(app().dati().it) + (st.b.riferimento ? ' · Riferimento: <b>' + esc(st.b.riferimento) + '</b>' : '') + '</p></div>';
+    h += tabella(8, [
+      tr(cella('Ufficio', '', 4), cella('Data dichiarazione', dataIt(d.data), 2), cella('Data accettazione', '', 2)),
+      tr(cella('Totale colli', colli === null ? '' : nIt(colli, 0), 2), cella('Totale massa lorda', lordo === null ? '' : nIt(lordo, 2), 2),
+        cella('Valore fattura', fattura === null ? '' : nIt(fattura, 2) + ' ' + d.valuta, 2), cella('Tasso di cambio', d.valuta === 'EUR' ? '' : cb ? nIt(cb.tasso, 4) : '', 2)),
+      '<tr><td colspan="4" rowspan="2" class="ps-titolo">Dettagli Dichiarazione</td>' + cella('Svincolo', '') + cella('Data svincolo', '') + cella('Num. A93', '') + cella('Anno A93', '') + '</tr>',
+      tr(cella('Totale Articoli', arts.length), cella('Data rilascio', ''), cella('Num. Quiet.', ''), cella('Data Quiet.', '')),
+      tr(cella('Esportatore', d.mittente, 4), cella('Importatore', d.destinatario, 4)),
+      tr(cella('Dichiarante', d.dichiarante, 4), cella(rappresentante, d.rappresentante, 4)),
+      tr(cella('Condizioni di consegna', d.incoterm ? d.incoterm + (d.luogo ? ' ' + d.luogo : '') : '', 4), cella('Dilazione di pagamento', '', 4)),
+      tr(cella('Paese di sped.', d.paeseSpedizione), cella('Paese di dest.', 'IT'), cella('Provincia dest.', d.provincia, 2), cella('Id. Mezzo all\'arrivo', '', 2),
+        cella('Natura transazione', d.natura, 2)),
+      sezione(8, 'Aggiunte / Detrazioni', [['Codice', 1], ['Descrizione', 5], ['Importo', 2, true]], []),
+      sezione(8, 'Documenti', [['Codice', 1], ['Identificativo', 1], ['Autorità Emitt.', 1], ['Data Validità', 1], ['Unità di misura', 1], ['Quantità', 1], ['Codice Valuta', 1], ['Importo', 1, true]], docTestata),
+      sezione(8, 'Scarichi', [['Tipo', 1], ['Riferimento', 3], ['Art.', 1], ['Num. imb.', 1], ['Quantità', 1], ['Unità', 1]], [])
+    ]);
+    // quello che la simulazione usa e il prospetto non ha
+    var cambio = d.valuta === 'EUR' ? '' : !cb ? d.valuta + ', cambio mancante' : '1 € = ' + nIt(cb.tasso, 4) + ' ' + d.valuta +
+      (cb.contratto ? ', tasso del contratto (DE 14 09, documento 26AO)' : cb.manuale ? ', scritto a mano' : c && c.fonte ? ', cambio doganale (' + c.fonte + ')' : '');
+    var altri = [['Venditore', d.venditore], ['Acquirente', d.acquirente], ['Qualifica del rappresentante', d.qualifica ? nomeDi(C.qualifica, d.qualifica) : ''],
+      ['Modo di trasporto alla frontiera', d.modoTrasporto ? nomeDi(C.modi, d.modoTrasporto) : ''], ['Ubicazione delle merci', d.ubicazione], ['Cambio', cambio],
+      ['Metodo di valutazione', nomeDi(C.metodi, R.metodo)], ['Indicatori di valutazione', R.indicatori],
+      ['Trasporto e assicurazione fino al confine UE', euro(R.noloEur) + ' (ripartiti in base ' + (d.ripartizione === 'massa' ? 'alla massa lorda' : 'al valore') + ')'],
+      ['Spese dal confine UE a destinazione (base IVA)', euro(R.inoltroEur)], ['Spese fino al confine italiano (valore statistico)', R.statEur ? euro(R.statEur) : '']]
+      .filter(function (x) { return x[1]; });
+    h += '<div class="b-st-art"><h2>Altri dati della simulazione</h2><table class="tab"><tbody>' +
+      altri.map(function (x) { return '<tr><th>' + esc(x[0]) + '</th><td>' + testo(x[1]) + '</td></tr>'; }).join('') + '</tbody></table></div>' + problemiStampa(R) +
+      riepilogoStampa(R) + piedeStampa();
+
+    R.articoli.forEach(function (r) {
+      var a = arts[r.n - 1] || {}, paese = a.origine || d.paese, pref = r.preferenza && /^[23]/.test(r.preferenza);
+      var reg = r.regime || {}, aggiunte = [];
+      if (r.quotaNolo) aggiunte.push(['AK', nomeDi(C.aggiunte, 'AK').replace(/^AK · /, ''), euro(r.quotaNolo)]);
+      if (K.numeroIt(a.aggiunte) > 0) aggiunte.push([a.codAggiunte || '', a.codAggiunte ? nomeDi(C.aggiunte, a.codAggiunte).replace(/^\w+ · /, '') : 'codice mancante', a.aggiunte + ' ' + d.valuta]);
+      if (K.numeroIt(a.deduzioni) > 0) aggiunte.push([a.codDeduzioni || '', a.codDeduzioni ? nomeDi(C.detrazioni, a.codDeduzioni).replace(/^\w+ · /, '') : 'codice mancante', a.deduzioni + ' ' + d.valuta]);
+      var tributi = r.tributi.map(function (t) { return [nomeTributo(t), baseTributo(t, r), '', '', aliquotaTributo(t), euro(t.importo), '']; });
+      if (r.iva !== null && r.iva !== undefined) {
+        tributi.push(['B00 IVA' + (r.aliquota === 0 && a.ivaMotivo ? ' (' + a.ivaMotivo + ')' : ''), euro(r.baseIva), '', '', (r.aliquota || 0) + ' %', euro(r.iva), '']);
+        if (r.ivaNonPagata) tributi.push([r.ivaNonPagata.codice + ' IVA non pagata, si detrae', euro(r.iva), '', '', '', '− ' + euro(r.ivaNonPagata.importo), '']);
+      }
+      h += '<section class="ps-foglio">' + tabella(12, [
+        '<tr><td colspan="4" class="ps-titolo">Dettagli Articolo n° ' + r.n + '</td>' + cella('Regime', '4000') + cella('Cod. Svincolo', '') + cella('Data svincolo', '') +
+          cella('Num. A93', '') + cella('Anno A93', '') + cella('Data rilascio', '') + cella('Num. Quietanza', '') + cella('Data quietanza', '') + '</tr>',
+        tr(cella('Codice merce', r.codice ? String(r.codice).replace(/\D/g, '') : '', 3), cella('Massa lorda', numero(a.lordo, 2), 2), cella('Massa netta', numero(a.netto, 2), 2),
+          cella('Unità supplementare', r.unitaSup ? (a.quantita || '') + ' ' + r.unitaSup : '', 2), cella('Regimi aggiuntivi', '', 2), cella('Container', d.container, 1)),
+        tr(cella('Descrizione merce', a.descrizione, 8), cella('Preferenze', r.preferenza || '', 2), cella('Contingente', reg.contingente ? reg.contingente.slice(0, 2) + '.' + reg.contingente.slice(2) : '', 2)),
+        tr(cella('Paese di sped.', d.paeseSpedizione), cella('Paese di dest.', 'IT'), cella('Prov. dest.', d.provincia), cella('Paese di orig.', paese, 2),
+          cella('Paese orig pref', pref ? paese : '', 2), cella('Natura transaz.', d.natura), cella('Prezzo art.', a.valore ? numero(a.valore, 2) + ' ' + d.valuta : '', 2),
+          cella('Valore stat.', r.valoreStatistico === null || r.valoreStatistico === undefined ? '' : euro(r.valoreStatistico), 2)),
+        sezione(12, 'Aggiunte / Detrazioni', [['Codice', 2], ['Descrizione', 7], ['Importo', 3, true]], aggiunte),
+        sezione(12, 'Liquidazione', [['Tributo', 2], ['Imponibile', 2, true], ['Quantità', 1, true], ['Unità di misura', 2], ['Aliquota', 2], ['Importo', 2, true], ['Metodo pag.', 1]], tributi),
+        sezione(12, 'Scarichi', [['Tipo', 2], ['Riferimento', 4], ['Art.', 1], ['Num. imb.', 2], ['Quantità', 2, true], ['Unità', 1]], []),
+        sezione(12, 'Documenti', [['Codice', 2], ['Identificativo', 3], ['Data', 1], ['Uni. Mis.', 1], ['Quantità', 2, true], ['Codice valuta', 2], ['Importo', 1, true]],
+          (a.documenti || []).map(function (x) { return [x, '', '', '', '', '', '']; })),
+        sezione(12, 'Colli', [['Tipo imb.', 2], ['Numero imb.', 2], ['Marchi spedizione', 8]],
+          a.colliTipo || a.colliNumero || a.colliMarchi ? [[a.colliTipo || '', a.colliNumero || '', a.colliMarchi || '']] : [])
+      ]) + noteArticolo(r) + '</section>';
+    });
+    return h;
+  }
   function documentoStampa() {
     var R = st.ultimo, d = dati(), c = cambioAttuale();
     if (!R) return '';
@@ -623,11 +744,7 @@
       ['Spese dal confine UE a destinazione (base IVA)', euro(R.inoltroEur)],
       R.statEur ? riga('statSpese', 'Spese fino al confine italiano (valore statistico)', euro(R.statEur)) : null);
     else if (R.aggiuntaEur || R.toltaEur) righe.push(riga('trasporto', 'Trasporto fino al confine aggiunto / spese oltre il confine tolte', euro(R.aggiuntaEur) + ' / ' + euro(R.toltaEur)));
-    h += '<div class="b-st-art"><h2>Intestazione</h2>' + tabella(righe) + '</div>';
-    if (R.conflitti && R.conflitti.length) h += '<div class="b-st-conflitti"><b>Conflitti da risolvere</b><ul>' + R.conflitti.map(function (x) {
-      return '<li>' + (x.articolo ? 'Articolo ' + x.articolo + ': ' : '') + esc(x.testo) + '</li>'; }).join('') + '</ul></div>';
-    if (R.mancanti && R.mancanti.length) h += '<div class="b-st-mancanti"><b>Dati obbligatori ancora vuoti</b><ul>' + R.mancanti.map(function (x) {
-      return '<li>' + (x.articolo ? 'Articolo ' + x.articolo + ': ' : '') + esc(x.testo) + '</li>'; }).join('') + '</ul></div>';
+    h += '<div class="b-st-art"><h2>Intestazione</h2>' + tabella(righe) + '</div>' + problemiStampa(R);
     R.articoli.forEach(function (r) {
       var a = d.articoli[r.n - 1] || {}, paese = a.origine || d.paese;
       var pref = imp() && r.preferenza && /^[23]/.test(r.preferenza);
@@ -661,32 +778,16 @@
         }
         h += '</tbody></table>';
       }
-      var note = r.blocchi.concat(r.avvertenze);          // i conflitti sono già in alto
-      (r.controlli || []).forEach(function (x) { if (x.esito === 'da_verificare') note.push(app().tipoMisura(x.misura.t) + ': da verificare su AIDA'); });
-      if (note.length) h += '<ul class="b-st-note">' + note.map(function (t) { return '<li>' + esc(prima(t)) + '</li>'; }).join('') + '</ul>';
-      h += '</div>';
+      h += noteArticolo(r) + '</div>';
     });
-    if (imp() && R.totali) {
-      var T0 = R.totali;
-      h += '<div class="b-st-art"><h2>Riepilogo</h2><table class="tab"><tbody><tr><th>Valore in dogana</th><td class="n">' + euro(T0.valoreDogana) + '</td></tr>' +
-        Object.keys(T0.dazi).map(function (k) { return '<tr><th>' + esc(prima(k)) + '</th><td class="n">' + euro(T0.dazi[k]) + '</td></tr>'; }).join('') +
-        '<tr><th>B00 IVA all\'importazione</th><td class="n">' + euro(T0.iva) + '</td></tr>' +
-        Object.keys(T0.ivaNonPagata || {}).map(function (k) { return '<tr><th>' + esc(k) + ' IVA non pagata (si detrae)</th><td class="n">− ' + euro(T0.ivaNonPagata[k]) + '</td></tr>'; }).join('') +
-        '<tr><th>Totale da pagare</th><td class="n"><b>' + euro(T0.totale) + '</b></td></tr>' +
-        '<tr><th>Valore statistico (DE 99 06 · c. 46)</th><td class="n">' + euro(T0.valoreStatistico) + '</td></tr></tbody></table></div>';
-    }
-    else if (!imp() && R.totali) h += '<div class="b-st-art"><h2>Riepilogo</h2><table class="tab"><tbody><tr><th>Valore statistico totale</th><td class="n"><b>' + euro(R.totali.valore) + '</b></td></tr></tbody></table></div>';
-    else h += '<p class="b-st-sim">Simulazione incompleta: ' + R.blocchi.length + ' punti da completare o verificare (vedi le note degli articoli).</p>';
-    h += '<p class="b-st-piede">Calcolata da MAGIC HS il ' + esc(dataIt(oggiIso())) + ' con i dati TARIC al ' + esc(app().dati().it) + '. Riferimenti: ' +
-      (imp() ? 'dati (DE) del tracciato H1 dell\'Agenzia delle Dogane, versione EUCDM 6.2' : 'dati (DE) dell\'allegato B del Reg. delegato (UE) 2015/2446, colonna B1') +
-      '; c. = casella del DAU. Non comprende accise, misure nazionali e saldo dei contingenti; le misure cambiate dopo quella data non ci sono. Verifica sempre su AIDA prima di dichiarare.</p>';
+    h += riepilogoStampa(R) + piedeStampa();
     return h;
   }
   window.addEventListener('beforeprint', function () {
     if (el.hidden || !st.b || st.calcolatore) return;
     calcola();
     var s = el.querySelector('#bolla-stampa');
-    if (s) s.innerHTML = documentoStampa();
+    if (s) s.innerHTML = imp() ? prospettoH1() : documentoStampa();
     document.body.classList.add('stampa-bolla');
   });
   window.addEventListener('afterprint', function () { document.body.classList.remove('stampa-bolla'); });

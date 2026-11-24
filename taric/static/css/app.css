@@ -1347,4 +1347,25 @@ input[type="checkbox"].in-conflitto{outline:2px solid var(--timbro);outline-offs
   #bolla-stampa .b-st-conflitti ul{margin:3px 0 0;padding-left:16px}
   #bolla-stampa .b-st-mancanti{margin:6px 0;padding:6px 8px;border:1px solid var(--linea-forte);border-radius:4px}
   #bolla-stampa .b-st-mancanti ul{margin:3px 0 0;padding-left:16px;columns:2;column-gap:24px}
+  /* importazione: il prospetto di sintesi H1 (prospettoH1 di js/bolla.js), caselle con l'etichetta in corsivo come in AIDA */
+  #bolla-stampa .ps-testa{text-align:center;margin-bottom:6px}
+  #bolla-stampa .ps-testa h1{font-size:14.5px;margin:6px 0 4px}
+  #bolla-stampa .ps-testa p{font-size:10.5px}
+  #bolla-stampa .ps{width:100%;border-collapse:collapse;table-layout:fixed;margin:4px 0 8px}
+  #bolla-stampa .ps td{border:1px solid var(--inchiostro);padding:2px 4px 3px;vertical-align:top;font-size:10px;line-height:1.25;overflow-wrap:anywhere}
+  #bolla-stampa .ps .ps-et{display:block;font-style:italic;font-size:8.5px;color:var(--secondario)}
+  #bolla-stampa .ps .ps-v{display:block;min-height:1.25em;font-size:10.5px}
+  #bolla-stampa .ps .ps-titolo{vertical-align:middle;font-weight:700;font-size:12px}
+  #bolla-stampa .ps .ps-sez td,#bolla-stampa .ps .ps-th td,#bolla-stampa .ps .ps-r td{border-left-width:0;border-right-width:0}
+  #bolla-stampa .ps tr > td:first-child{border-left-width:1px}
+  #bolla-stampa .ps tr > td:last-child{border-right-width:1px}
+  #bolla-stampa .ps .ps-sez td{border-bottom-width:0;padding-top:3px;font-style:italic;font-size:9.5px}
+  #bolla-stampa .ps .ps-th td{border-top-width:0;border-bottom-color:var(--linea);font-style:italic;font-size:8.5px;color:var(--secondario)}
+  #bolla-stampa .ps .ps-r td{border-top-width:0;border-bottom-color:var(--linea);height:1.7em}
+  #bolla-stampa .ps .ps-r:last-child td{border-bottom-color:var(--inchiostro)}
+  #bolla-stampa .ps .n{text-align:right}
+  #bolla-stampa .ps-foglio{break-before:page}
+  #bolla-stampa .ps-foglio .b-st-note{margin-top:-2px}
+  #bolla-stampa .ps-filigrana{position:fixed;top:42%;left:0;right:0;z-index:0;text-align:center;transform:rotate(-28deg);
+    font:800 96px/1 var(--f);letter-spacing:.06em;color:var(--timbro);opacity:.07;pointer-events:none}
 }

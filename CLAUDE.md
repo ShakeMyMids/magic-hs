@@ -129,7 +129,9 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   nella sezione Bolla, `T.spedizione.apri`: da solo o dalla bolla d'importazione con «Usa nella bolla» e la quota
   proposta dall'allegato 23-01; il carburante del servizio scelto finché non si scrive a mano), `js/bolla.js`
   (sezione Bolla: elenco, intestazione, articoli, tributi, documenti della casella 44, riferimenti DE e casella di ogni campo in
-  `RIF_IMP`/`RIF_EXP`, foglio `#bolla-stampa` con `body.stampa-bolla`), `js/profilo.js` (anche gli avvisi
+  `RIF_IMP`/`RIF_EXP`, foglio `#bolla-stampa` con `body.stampa-bolla`: all'importazione `prospettoH1()`, il prospetto di sintesi
+  H1 di AIDA con caselle `.ps` e un foglio `.ps-foglio` per articolo, senza stemma né codice a barre e con la filigrana SIMULAZIONE;
+  all'esportazione `documentoStampa()`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
   (Utenti con azienda e «Disconnetti», Aziende, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Trasporto,
   Segnalazioni, Registro), `js/porto.js` (la scena si tocca:
