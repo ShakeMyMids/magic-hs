@@ -466,6 +466,19 @@ async function accedi(p, email, password) {
     await capo.evaluate(() => document.querySelector('[data-f="nolo.importo"]').classList.contains('in-conflitto')), 'bolla: conflitto tra resa (FOB) e trasporto, con il campo evidenziato');
   await capo.selectOption('[data-f="incoterm"]', '');
   await capo.fill('[data-f="mittente"]', 'Fornitore di prova Ltd, Shenzhen');
+  // i dati del prospetto di sintesi che non servono ai calcoli: un MRN sbagliato è un conflitto, quello giusto va nella stampa con il codice a barre
+  await capo.fill('[data-f="mrn"]', '26ITQ0B4471'); await capo.press('[data-f="mrn"]', 'Tab');
+  await capo.waitForSelector('#b-esito >> text=MRN non valido');
+  ok(await capo.evaluate(() => document.querySelector('[data-f="mrn"]').classList.contains('in-conflitto')), 'bolla: MRN sbagliato evidenziato');
+  await capo.fill('[data-f="mrn"]', '26itq0b44714259r61'); await capo.press('[data-f="mrn"]', 'Tab');
+  await capo.waitForFunction(() => !/MRN non valido/.test(document.querySelector('#b-esito').innerText));
+  await capo.fill('[data-f="ufficio"]', '279100 UD Malpensa');
+  await capo.fill('[data-f="metodoPagamento"]', 'E');
+  await capo.fill('[data-f="dilazione"]', 'Conto di prova 123');
+  await capo.click('summary:has-text("Scarico (documento precedente)")');
+  await capo.fill('[data-f="scarico.tipo"]', '337'); await capo.fill('[data-f="scarico.riferimento"]', '26ITQ0B32378457U90');
+  await capo.fill('[data-a="0"][data-f="regimiAggiuntivi"]', 'F15');
+  await capo.waitForTimeout(400);
   await capo.click('[data-b="salva"]'); await capo.waitForSelector('#b-msg >> text=Bolla salvata.');
   // stampa: solo il foglio della simulazione
   await capo.emulateMedia({ media: 'print' });
@@ -478,6 +491,10 @@ async function accedi(p, email, password) {
     /Liquidazione Tributo Imponibile .* A00 Dazio 10\.000,00 €.* 14 % 1\.400,00 €/.test(foglio) && /B00 IVA 16\.250,00 € 22 % 3\.575,00 €/.test(foglio) &&
     await capo.evaluate(() => getComputedStyle(document.querySelector('#bolla-stampa .ps-foglio')).breakBefore === 'page'),
     'bolla: stampa come il prospetto di sintesi H1 (intestazione, poi un foglio per articolo), con la scritta «simulazione»');
+  ok(/MRN: 26ITQ0B44714259R61/.test(foglio) && /Ufficio 279100 UD Malpensa/.test(foglio) && /Dilazione di pagamento Conto di prova 123/.test(foglio) &&
+    /Scarichi .* 337 26ITQ0B32378457U90/.test(foglio) && /Regimi aggiuntivi F15/.test(foglio) && /3\.575,00 € E/.test(foglio) &&
+    await capo.evaluate(() => { const c = document.querySelector('#bolla-stampa .ps-codice svg.codice128'); return !!c && c.querySelectorAll('rect').length === 64 && /26ITQ0B44714259R61/.test(c.getAttribute('aria-label')); }),
+    'bolla: nel prospetto ufficio, dilazione, scarico, regimi aggiuntivi, metodo di pagamento e l\'MRN con il codice a barre');
   await capo.screenshot({ path: out + '/5b-bolla-stampa.png', fullPage: true });
   await capo.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   await capo.emulateMedia({ media: 'screen' });

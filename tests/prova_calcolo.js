@@ -398,6 +398,14 @@ prova('tasso di cambio del contratto: avviso e documento 26AO in testata (avviso
   uguale(r.conflitti.map(x => x.campo), ['tassoContratto']);
 });
 
+prova('MRN per il prospetto di sintesi: 18 caratteri (anno, paese, 14 lettere o cifre), anche con spazi e minuscole; altrimenti conflitto', () => {
+  for (const mrn of ['26ITQ0B44714259R61', '26it q0b4 4714 259r61', '']) uguale(K.calcolaImport(bolla([BICI_B999], Object.assign({ mrn }, SENZA_SPESE)), ctx).conflitti, []);
+  for (const mrn of ['26ITQ0B44714259R6', 'XXITQ0B44714259R61', '26ITQ0B44714259R61Z', '26IT-0B44714259R61']) {
+    const r = K.calcolaImport(bolla([BICI_B999], Object.assign({ mrn }, SENZA_SPESE)), ctx);
+    uguale(r.conflitti.map(x => x.campo), ['mrn']);
+  }
+});
+
 prova('dazi addizionali con il codice A00', () => {
   const r = K.calcolaImport(bolla([{ codice: '0805102200', origine: 'MA', valore: '1100', netto: '900', iva: 4 }], SENZA_SPESE), ctx);
   uguale(r.articoli[0].tributi.map(t => [t.tipo, t.codice]), [['dazio', 'A00'], ['dazio addizionale', 'A00']]);

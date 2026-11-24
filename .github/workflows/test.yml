@@ -22,6 +22,8 @@ jobs:
         run: node tests/prova_calendario.js
       - name: Costo del trasporto (js/trasporto.js)
         run: node tests/prova_trasporto.js
+      - name: Codice a barre dell'MRN (js/codice128.js)
+        run: node tests/prova_codice128.js
 
   # prova nel browser (tests/e2e_sito.js): il sito con un finto servizio IA e i dati veri dell'ultimo mese pubblicato
   browser:
