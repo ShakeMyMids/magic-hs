@@ -257,6 +257,11 @@ async function accedi(p, email, password) {
   await accedi(luca, 'luca@azienda.it', 'Spedizioni-2026!');
   await pronta(luca);
   ok(await luca.isHidden('#tab-gestione'), 'niente Gestione per i colleghi');
+  // chi è online: il riquadro di Gestione › Utenti si aggiorna da solo (ogni 15 secondi) quando il collega entra
+  await capo.waitForFunction(() => /Luca Bianchi/.test(document.getElementById('g-online').textContent), null, { timeout: 25000 });
+  const online = await capo.textContent('#g-online');
+  ok(/Mario Capo \(tu\)/.test(online) && /Chrome su \w+/.test(online) && (await capo.$$eval('td[data-uid]', t => t.map(x => x.textContent))).every(x => x === 'online'),
+    'online ora: il collega compare da solo, con il browser, e nella tabella è «online»');
   for (const t of ['trapano a percussione elettrico', 'scarpe sportive di pelle']) {
     await classifica(luca, t);
     await luca.waitForFunction(() => document.querySelector('.timbro') && document.querySelector('.timbro').textContent.includes('Proposta'), null, { timeout: 30000 });

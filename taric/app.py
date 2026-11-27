@@ -43,6 +43,7 @@ from .copia import CopiaEsterna
 from .dati import RE_VERSIONE, GestoreDati
 from .db import Database, iso, tra
 from .ia import Allegato, ErroreIA, ServizioIA, mese_corrente
+from .presenze import ORDINE, Presenze
 from .ricerca import RE_PAROLA, piano, presente, testi_nomenclatura
 from .trasporto import MASSIMO_PDF, ErroreTariffe, Tariffe
 from .valute import CambiDoganali, ErroreCambio
@@ -93,6 +94,14 @@ class Errore(HTTPException):
 # ------------------------------------------------------------------ modelli delle richieste
 class Profilo(BaseModel):
     nome: str = Field(min_length=2, max_length=100)        # l'azienda la cambia l'amministratore (fa da gruppo)
+
+
+class Segnale(BaseModel):
+    """Segnale di presenza delle pagine dell'app (taric/presenze.py)."""
+    scheda: str = Field(default="", max_length=40)   # a caso per ogni pagina aperta: più schede dello stesso browser
+    visibile: bool = True                       # la scheda si vede
+    fermo: float = Field(default=0, ge=0)       # secondi dall'ultimo tocco, clic o tasto
+    tocco: bool = False                         # schermo a sfioramento (l'iPad si presenta come un Mac)
 
 
 class Preferenze(BaseModel):
@@ -312,6 +321,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
     cambi_doganali = CambiDoganali(db, cfg.bce_url, client_bce)
     tariffe = Tariffe(db, cfg.dati / "tariffe")
     carburante = Carburante(cfg, db, client_carburante)
+    presenze = Presenze()
     if fuori.problema():
         log.warning("copia esterna del database spenta: %s", fuori.problema())
     for resto in (cfg.dati / "backup-scaricati").glob("*.zip"):          # copie scaricate rimaste da un invio interrotto
@@ -337,6 +347,7 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     app = FastAPI(title="MAGIC HS", docs_url=None, redoc_url=None, openapi_url=None, lifespan=vita)
     app.state.cfg, app.state.db, app.state.dati, app.state.ia, app.state.carburante = cfg, db, dati, ia, carburante
+    app.state.presenze = presenze
     # file compressi (la nomenclatura del mese pesa circa 2 MB, compressa un quarto)
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
@@ -603,8 +614,11 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
 
     @app.post("/api/esci")
     def esci(request: Request) -> Response:
+        gettone = request.cookies.get(COOKIE)
         with db.transazione() as c:
-            S.chiudi_sessione(c, request.cookies.get(COOKIE))
+            S.chiudi_sessione(c, gettone)
+        if gettone:
+            presenze.togli(S.impronta(gettone))
         resp = JSONResponse(json_ok())
         resp.delete_cookie(COOKIE, path="/")
         return resp
@@ -628,6 +642,13 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
             S.chiudi_tutte(c, u["id"], tranne=request.cookies.get(COOKIE))
             S.azzera(c, chiave)
             db.evento(c, "password_cambiata", u["id"], u["id"])
+        return json_ok()
+
+    @app.post("/api/io/presenza")
+    def presenza(body: Segnale, request: Request, u: sqlite3.Row = Depends(richiede_utente)) -> dict[str, Any]:
+        """Segnale delle pagine aperte, ogni minuto: chi è online lo vede l'amministratore (/api/admin/online)."""
+        presenze.segnala(u["id_hash"], u["id"], scheda=body.scheda, visibile=body.visibile, fermo=body.fermo,
+                         agente=request.headers.get("user-agent", ""), tocco=body.tocco)
         return json_ok()
 
     @app.post("/api/io/esci-ovunque")
@@ -684,6 +705,32 @@ def crea_app(cfg: Config, client_ia: httpx.Client | None = None, pianificatore: 
                 d["fisso"] = r["email"] in cfg.amministratori            # amministratore da MAGIC_HS_AMMINISTRATORI
                 out.append(d)
         return {"utenti": out, "mese": mese, "io": a["id"]}
+
+    @app.get("/api/admin/online")
+    def admin_online(a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:
+        """Chi ha MAGIC HS aperto adesso, per persona, con i dispositivi: solo le sessioni ancora valide di account attivi."""
+        ora, voci = presenze.attive()
+        persone: dict[int, dict[str, Any]] = {}
+        if voci:
+            with db.connessione() as c:
+                segni = ",".join("?" * len(voci))
+                valide = {r["id_hash"]: r for r in c.execute(
+                    f"SELECT s.id_hash, u.id, u.nome, u.email, u.azienda, u.ruolo FROM sessioni s JOIN utenti u ON u.id = s.utente_id "
+                    f"WHERE s.id_hash IN ({segni}) AND s.scade > ? AND u.stato = 'attivo'", (*voci, iso()))}
+            for sessione, p in voci.items():
+                r = valide.get(sessione)
+                if r is None or r["id"] != p.utente_id:
+                    continue
+                d = {"tipo": p.tipo, "descrizione": p.descrizione, "stato": p.stato(ora), "da": round(ora - p.da),
+                     "fermo": round(max(0.0, ora - p.gesto))}
+                x = persone.setdefault(r["id"], {"id": r["id"], "nome": r["nome"], "email": r["email"], "azienda": r["azienda"],
+                                                 "ruolo": r["ruolo"], "dispositivi": []})
+                x["dispositivi"].append(d)
+            for x in persone.values():
+                x["dispositivi"].sort(key=lambda d: (ORDINE[d["stato"]], -d["da"]))
+                x["stato"], x["da"] = x["dispositivi"][0]["stato"], max(d["da"] for d in x["dispositivi"])
+        elenco = sorted(persone.values(), key=lambda x: (ORDINE[x["stato"]], x["nome"].lower()))
+        return {"persone": elenco, "io": a["id"]}
 
     @app.patch("/api/admin/utenti/{uid}")
     def admin_modifica(uid: int, body: ModificaUtente, a: sqlite3.Row = Depends(richiede_admin)) -> dict[str, Any]:

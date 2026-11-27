@@ -1,4 +1,4 @@
-/* MAGIC HS - vista Gestione, per l'amministratore: utenti (richieste da approvare, limiti, link per la password),
+/* MAGIC HS - vista Gestione, per l'amministratore: utenti (richieste da approvare, chi è online, limiti, link per la password),
    intelligenza artificiale unica (stato, prova, limiti, uso per persona), dati TARIC con la copia del database, ricerca
    (parole cercate senza risultati e sinonimi aggiunti), registro. */
 (function () {
@@ -7,7 +7,7 @@
   var el = document.getElementById('view-gestione');
   var vista = T.viste = T.viste || {};
   var st = { aziende: null, azienda: '', sotto: 'utenti', riep: null, dati: null, eventi: [], msg: {}, registro: null, timer: null, modelli: [], utenti: null, iaS: null,
-             aperto: 0, link: null, ricerca: null, sinonimoPer: '', bozza: null, trasporto: null };
+             aperto: 0, link: null, ricerca: null, sinonimoPer: '', bozza: null, trasporto: null, online: null, timerOnline: null };
 
   var ESITI = { ok: 'riuscito', errore: 'errore', non_disponibile: 'non ancora disponibile', in_corso: 'in corso', interrotto: 'interrotto' };
   var EVENTI = {
@@ -37,6 +37,7 @@
   function carica() {
     var chiamate = [T.api('GET', '/api/admin/riepilogo').then(function (r) { st.riep = r; segnaRichieste(r); })];
     if (st.sotto === 'utenti' || st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/utenti').then(function (r) { st.utenti = r; }));
+    if (st.sotto === 'utenti') chiamate.push(T.api('GET', '/api/admin/online').then(function (r) { st.online = r; }, function () { /* al prossimo giro */ }));
     if (st.sotto === 'aziende') chiamate.push(T.api('GET', '/api/admin/aziende').then(function (r) { st.aziende = r; }));
     if (st.sotto === 'ia') chiamate.push(T.api('GET', '/api/admin/ia').then(function (r) { st.iaS = r; }));
     if (st.sotto === 'dati') chiamate.push(T.api('GET', '/api/admin/dati').then(function (r) { st.dati = r; }));
@@ -58,6 +59,7 @@
     h += { dati: dati, registro: registro, ia: ia, utenti: utenti, aziende: aziende, ricerca: ricerca, trasporto: trasporto, segnalazioni: segnalazioni }[st.sotto]();
     el.innerHTML = h;
     pianificaRinfresco();
+    giroOnline();
   }
 
   function avvisi(r) {
@@ -158,6 +160,7 @@
             '<button class="btn sm" type="button" data-g="u-rifiuta" data-id="' + x.id + '">Rifiuta</button></div></div>';
         }).join('') + '</div></div></div>';
     }
+    h += '<div class="foglio"><div class="box" id="g-online" aria-live="polite">' + online() + '</div></div>';
     h += '<div class="foglio"><div class="box"><div class="lab">' + T.icona('utenti') + 'Persone<span class="dx">' + altri.length + '</span></div>' + riga('utenti');
     if (!altri.length) h += '<p class="vuoto">Ancora nessuno: chi si registra compare qui da approvare.</p>';
     else {
@@ -166,7 +169,7 @@
           var s = STATI[x.stato] || [x.stato, ''], aperto = st.aperto === x.id;
           var r = '<tr' + (aperto ? ' class="evid"' : '') + '><td>' + persona(x) + '</td><td data-l="Stato"><span class="st ' + s[1] + '">' + esc(s[0]) + '</span></td>' +
             '<td class="n" data-l="IA">' + (x.limite === 0 && !x.uso.classificazioni ? '<span class="nota">spenta</span>' : numero(x.uso.classificazioni) + (x.limite !== null ? ' / ' + numero(x.limite) : '')) + '</td>' +
-            '<td data-l="Ultimo accesso">' + esc(x.ultimo_accesso ? T.dataOra(x.ultimo_accesso) : 'mai') + '</td>' +
+            '<td data-l="Ultimo accesso" data-uid="' + x.id + '">' + ultimoAccesso(x) + '</td>' +
             '<td class="azioni"><button class="btn sm" type="button" data-g="u-apri" data-id="' + x.id + '" aria-expanded="' + aperto + '">' + (aperto ? 'Chiudi' : 'Modifica') + '</button></td></tr>';
           if (aperto) r += '<tr class="dettaglio"><td colspan="5">' + dettaglioUtente(x, U.io) + '</td></tr>';
           return r;
@@ -241,6 +244,60 @@
       }).join('') + '</tbody></table></div>';
     return h + '</div></div>';
   }
+
+  /* ---------- chi è online adesso: si aggiorna da solo ogni 15 secondi (solo il riquadro e la colonna «Ultimo accesso») ---------- */
+  var STATI_ONLINE = {
+    attivo: ['attivo', 'ok', 'Ha la pagina davanti e l\'ha usata negli ultimi minuti'],
+    fermo: ['fermo', 'ambra', 'Ha la pagina davanti ma non la tocca da un po\''],
+    sfondo: ['in secondo piano', '', 'MAGIC HS è aperto in un\'altra scheda o dietro un\'altra app']
+  };
+  function durata(s) {
+    var m = Math.floor((s || 0) / 60), o = Math.floor(m / 60);
+    if (m < 1) return 'poco';
+    if (m < 60) return m + ' min';
+    return (o === 1 ? '1 ora' : o + ' ore') + (m % 60 ? ' e ' + (m % 60) + ' min' : '');
+  }
+  function statoOnline(d) {
+    var s = STATI_ONLINE[d.stato] || STATI_ONLINE.sfondo;
+    return '<span class="st ' + s[1] + '" title="' + esc(s[2]) + '">' + esc(s[0] + (d.stato === 'fermo' ? ' da ' + durata(d.fermo) : '')) + '</span>';
+  }
+  function online() {
+    var O = st.online, h = '<div class="lab">' + T.icona('online') + 'Online ora' + (O ? '<span class="dx">' + O.persone.length + '</span>' : '') + '</div>';
+    if (!O) return h + '<p class="vuoto">Carico…</p>';
+    if (!O.persone.length) return h + '<p class="vuoto">Nessuno in questo momento.</p>';
+    return h + '<div class="elenco">' + O.persone.map(function (x) {
+      var piu = x.dispositivi.length > 1;
+      return '<div class="voce online"><div><b>' + esc(x.nome) + '</b>' + (x.id === O.io ? ' <span class="nota">(tu)</span>' : '') +
+        '<div class="nota">' + esc(x.email) + (x.azienda ? ' · ' + esc(x.azienda) : '') + '</div>' +
+        '<ul class="dispositivi">' + x.dispositivi.map(function (d) {
+          return '<li>' + T.icona(d.tipo) + '<span>' + esc(d.descrizione) + (piu ? ' · ' + esc((STATI_ONLINE[d.stato] || STATI_ONLINE.sfondo)[0]) : '') +
+            ' · da ' + esc(durata(d.da)) + '</span></li>';
+        }).join('') + '</ul></div><div class="azioni">' + statoOnline(x.dispositivi[0]) + '</div></div>';
+    }).join('') + '</div>';
+  }
+  function ultimoAccesso(x) {
+    var on = st.online && st.online.persone.some(function (p) { return p.id === x.id; });
+    return on ? '<span class="st ok">online</span>' : esc(x.ultimo_accesso ? T.dataOra(x.ultimo_accesso) : 'mai');
+  }
+  function mostraOnline() {
+    var box = document.getElementById('g-online');
+    if (box) box.innerHTML = online();
+    Array.prototype.forEach.call(el.querySelectorAll('td[data-uid]'), function (td) {
+      var x = st.utenti && st.utenti.utenti.filter(function (u) { return String(u.id) === td.getAttribute('data-uid'); })[0];
+      if (x) td.innerHTML = ultimoAccesso(x);
+    });
+  }
+  function aggiornaOnline() {
+    return T.api('GET', '/api/admin/online', null, { resta: true }).then(function (r) { st.online = r; mostraOnline(); }, function () { /* al prossimo giro */ });
+  }
+  function giroOnline() {          // finché si vede Gestione › Utenti
+    clearTimeout(st.timerOnline);
+    if (el.hidden || st.sotto !== 'utenti' || document.visibilityState === 'hidden') return;
+    st.timerOnline = setTimeout(function () { if (!el.hidden && st.sotto === 'utenti') aggiornaOnline().then(giroOnline); }, 15000);
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && !el.hidden && st.sotto === 'utenti') aggiornaOnline().then(giroOnline);
+  });
 
   /* puntino sulla scheda Gestione quando ci sono richieste da approvare o segnalazioni da leggere */
   function segnaRichieste(r) {

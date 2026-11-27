@@ -1875,6 +1875,22 @@ $('#esci').addEventListener('click', function () {
 });
 function vaiAllAccesso() { location.href = '/accedi'; }
 
+/* segnale di presenza per l'amministratore (Gestione › Utenti, «Online ora»): all'apertura, ogni minuto e quando la
+   scheda passa in primo o in secondo piano; dice solo se la pagina si vede e da quanto non si tocca, non cosa si guarda */
+var ultimoGesto = Date.now(), scheda = Math.random().toString(36).slice(2, 12);
+function segnalaPresenza() {
+  T.api('POST', '/api/io/presenza', { scheda: scheda, visibile: document.visibilityState !== 'hidden', fermo: Math.round((Date.now() - ultimoGesto) / 1000),
+    tocco: navigator.maxTouchPoints > 1 }, { resta: true }).catch(function () { /* senza rete: al prossimo giro */ });
+}
+function avviaPresenza() {
+  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(function (t) {
+    document.addEventListener(t, function () { ultimoGesto = Date.now(); }, { capture: true, passive: true });
+  });
+  document.addEventListener('visibilitychange', segnalaPresenza);
+  setInterval(segnalaPresenza, 60000);
+  segnalaPresenza();
+}
+
 /* si parte quando tutta la pagina è caricata (anche profilo.js e gestione.js) */
 function avvia() {
   T.api('GET', '/api/io').then(function (u) {
@@ -1891,6 +1907,7 @@ function avvia() {
     state.flow = u.preferenze.flusso === 'export' ? 'export' : 'import';
     try { state.modo = localStorage.getItem('magic-hs.modo') === 'ia' ? 'ia' : 'parole'; } catch (e) { /* senza archivio: ricerca per parole */ }
     impostaIA();
+    avviaPresenza();
     riceviCondivisa();
     caricaSinonimi(); caricaArchivio();
     return T.api('GET', '/api/preferiti').then(function (r) { r.voci.forEach(function (v) { state.preferiti[v.codice] = { nota: v.nota }; }); controllaCambi(); }, function () { /* niente preferiti */ });
