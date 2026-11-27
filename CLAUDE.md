@@ -20,7 +20,8 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   precedente dei dati, da `taric/cambi.py`), archivio aziendale (`/api/archivio`), sinonimi (`/api/sinonimi`), parole senza
   risultati (`/api/ricerche-vuote`, anonime), bolle simulate (`/api/bolle`, personali) e cambio doganale del mese
   (`/api/cambio`), tariffa del trasporto (`/api/trasporto`), segnalazioni di problemi (`/api/segnalazioni`, le proprie con la
-  risposta, `lette`; `risposte` di `/api/io` conta quelle nuove), IA, esporta/importa. Gestione sotto `/api/admin/`: `utenti`,
+  risposta, `lette`; `risposte` di `/api/io` conta quelle nuove), presenza (`/api/io/presenza`, il segnale delle pagine aperte), IA,
+  esporta/importa. Gestione sotto `/api/admin/`: `utenti`, `online` (chi è online adesso, da `taric/presenze.py`),
   `aziende` (`regole`, `azione` disconnetti/sospendi/riattiva, `nome` per rinominare o unire), `ia`, `impostazioni`, `backup`,
   `copia-esterna`, dati TARIC (con lo stato della copia esterna), `ricerca` e `sinonimi`,
   `trasporto` (PDF delle tariffe, versioni, `trasporto/carburante` a mano, `trasporto/carburante/aggiorna`), `segnalazioni`
@@ -37,6 +38,12 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
 - `taric/aziende.py`: il campo `azienda` degli utenti fa da gruppo (`chiave`: minuscole, spazi ridotti); le regole nella tabella
   `aziende` (`quota_ia`, `ia`) si scrivono in `utenti.quota_ia` di chi c'è (`applica`, non gli amministratori) e di chi entra dopo
   (approvazione, cambio di azienda in Gestione); `/api/io` non cambia più l'azienda (la cambia l'amministratore).
+- `taric/presenze.py`: chi è online. `app.js` manda `POST /api/io/presenza` all'apertura, ogni minuto e a ogni
+  `visibilitychange` (`scheda` a caso per pagina, `visibile`, `fermo` = secondi dall'ultimo tocco o tasto, `tocco` per l'iPad);
+  in memoria per sessione e scheda, ogni scheda vale `FINESTRA` (150 s); stato `attivo`, `fermo` (dopo `FERMO`, 300 s) o
+  `sfondo`; dispositivo dall'user agent (`dispositivo()`). Niente nel database e niente sulla pagina guardata.
+  `/api/admin/online` tiene solo le sessioni valide di account attivi; Gestione › Utenti, riquadro `#g-online`, lo richiede ogni
+  15 s (`giroOnline` di `gestione.js`, solo con la vista e la pagina visibili) e aggiorna solo il riquadro e le celle `data-uid`.
 - `taric/copia.py`: copia settimanale del database in un archivio compatibile S3 (firma AWS Signature V4 con httpx, senza
   librerie in più; nomi a rotazione su 8 settimane; dopo un errore si riprova dopo 6 ore; esito in `impostazioni`
   `copia_esterna`). Il pianificatore la chiama tra i suoi `compiti`; il backup si scrive con `Backup.scrivi` in un file a
@@ -144,7 +151,7 @@ Tutti i testi per l'utente, i commenti e i nomi sono in **italiano**.
   da un PDF trascinato sulla sezione o scelto in «Da un PDF», `leggiPdf`/`inviaPdf`/`apriDaPdf`, con i punti da controllare in
   `st.avvisiPdf`), `js/profilo.js` (anche gli avvisi
   sui preferiti cambiati), `js/gestione.js`
-  (Utenti con azienda e «Disconnetti», Aziende, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Trasporto,
+  (Utenti con «Online ora», azienda e «Disconnetti», Aziende, Intelligenza artificiale, Dati TARIC con la copia del database, Ricerca, Trasporto,
   Segnalazioni, Registro), `js/porto.js` (la scena si tocca:
   gruppi `.t-*` di `disegni.js` animati per la durata di una classe; tre tocchi sulla gru o «gioca» scritto fuori dai campi aprono
   il gioco; «nave», «festa», «magic» e cinque tocchi sul logo; l'albero si scuote e fa cadere quello della stagione; `[data-gioca]`

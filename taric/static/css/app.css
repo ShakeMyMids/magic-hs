@@ -567,6 +567,12 @@ details.piu[open] > summary::before{transform:rotate(45deg) translate(-2px,-1px)
 .voce.segnalazione .risposta p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .voce.segnalazione .risposta .iniziali{flex:none}
 .voce.segnalazione .modulo{margin-top:10px}
+/* Gestione › Utenti, «Online ora»: lo stato resta in alto a destra anche sul telefono */
+.voce.online{grid-template-columns:minmax(0,1fr) auto}
+.voce.online .azioni{grid-row:1;grid-column:2;align-self:start}
+.voce.online .dispositivi{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--secondario)}
+.voce.online .dispositivi li{display:flex;align-items:center;gap:6px;min-width:0}
+.voce.online .dispositivi span{overflow-wrap:anywhere}
 .piede .link{font-size:13px}
 .modulo{display:grid;gap:14px;max-width:640px}
 .modulo label{display:flex;flex-direction:column;gap:6px;font-size:13.5px;font-weight:550;color:var(--secondario)}
